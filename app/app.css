@@ -1,0 +1,483 @@
+/* The editor: a light, quiet page.
+   A sidebar (outline, problems, TODOs), a top bar, one content column; the
+   chrome is system sans, the blocks are TeX's own type (the viewer's SVG). */
+:root {
+  /* the colours (--bg, --text …, --cm-*, --latex-*): aliases of the theme tokens (src/design/theme.ts) */
+  --shadow: 0 0 0 1px rgba(15, 15, 15, 0.05), 0 3px 6px rgba(15, 15, 15, 0.08), 0 9px 24px rgba(15, 15, 15, 0.12);
+  --col: 44rem;
+  --sidebar-w: 256px;
+  color-scheme: light;
+}
+html { color: var(--text); }   /* its ground is a plain value: index.html's head and setTheme (workbench/src/themes.ts) */
+body { margin: 0; font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; background: var(--bg, var(--rfed-page, Canvas)); color: var(--text); }   /* (until the bundle defines --bg: the head's token, else the scheme's Canvas: never transparent) */
+button { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+
+/* ── Shell: sidebar + main ── */
+.shell { margin-left: var(--sidebar-w); transition: margin-left 0.18s ease; min-width: 0; }
+.rtx-editor[data-sidebar-closed] .shell, .rtx-editor[data-route="home"] .shell { margin-left: 0; }
+.sidebar { position: fixed; z-index: 30; top: 0; bottom: 0; left: 0; width: var(--sidebar-w); box-sizing: border-box; display: flex; flex-direction: column;
+  background: var(--sidebar-bg); border-right: 1px solid rgba(55, 53, 47, 0.07); color: var(--sidebar-text); font-size: 13.5px;
+  transition: transform 0.18s ease, visibility 0.18s; }
+.rtx-editor[data-sidebar-closed] .sidebar, .rtx-editor[data-route="home"] .sidebar { transform: translateX(-100%); visibility: hidden; }
+.sb-top { display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 8px 0 14px; flex: 0 0 auto; }
+.sb-top .brand { color: var(--text); text-decoration: none; }
+.sb-tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 2px 8px 8px; flex: 0 0 auto; }   /* a fifth tab (Files) goes to a second row, never clipped */
+.sb-tabs button { border: 0; background: none; min-height: var(--ui-ctl-md); padding: 0 var(--ui-2); border-radius: var(--ui-r-sm); font-size: var(--ui-text-sm); color: var(--ui-ink-2); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.sb-tabs button:hover { background: var(--ui-hover); color: var(--ui-ink); }
+.sb-tabs button:focus-visible { outline: none; box-shadow: var(--ui-ring); }
+.sb-tabs button.on { background: var(--ui-on); color: var(--ui-ink); font-weight: var(--ui-medium); }
+.sb-tabs .count, .pb-head .count, .td-chip .count { font-size: 11px; min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--ui-on); color: var(--ui-ink-2); text-align: center; line-height: 16px; }
+.sb-tabs button.has-errors .count { background: var(--error-bg); color: var(--error); }
+.sb-panel { flex: 1 1 auto; overflow-y: auto; padding: 0 8px 12px; overscroll-behavior: contain; }
+.sb-empty { margin: 8px 8px; font-size: var(--ui-text-sm); color: var(--muted); line-height: 1.45; }
+.sb-foot { flex: 0 0 auto; padding: 8px 16px 10px; font-size: var(--ui-text-sm); color: var(--ui-ink-2); border-top: 1px solid var(--ui-border-soft); cursor: default; }
+.sb-foot .wc-main { color: var(--ui-ink); }
+
+/* outline: a tab-stop list (the workbench kit's, workbench/src/kit/tabstops.ts: .wb-ts, the section menu's too): one
+   tab per level, each level's numbers right-aligned to end at it, the names from it, a bullet where a row has none.
+   A row is its jump button and its buttons, the pin (section focus) and, where the container has tabs, "Open … in a new
+   tab": no room at rest; on hover or focus they overlay the end of the name, which then ellipsises before them */
+.outline { list-style: none; margin: 0; padding: 0; }
+.ol-item { position: relative; border-radius: var(--ui-r-sm); --wb-btn-h: var(--ui-row); }
+.ol-item:hover { background: var(--hover); }
+.ol-item.active { background: rgba(55, 53, 47, 0.06); }
+.ol-link { display: flex; align-items: center; gap: 7px; width: 100%; min-height: var(--ui-row); border: 0; background: none; text-align: left; padding: 2px var(--ui-2); border-radius: var(--ui-r-sm); cursor: pointer;
+  font-size: var(--ui-text-md); line-height: 1.35; color: var(--sidebar-text); }
+.ol-link:hover, .ol-item:hover > .ol-link { color: var(--text); }
+.ol-pre:hover { background: var(--hover); }
+.ol-item.active > .ol-link { color: var(--text); font-weight: 500; }
+.ol-item > .ol-link { display: grid; gap: 0; padding-left: 0; padding-right: 0; }   /* a subgrid of the list (.wb-ts-sub), whichever sheet comes first */
+.ol-item.lv2 .ol-link { font-size: var(--ui-text-sm); }
+.ol-item.lv3 .ol-link { font-size: var(--ui-text-sm); color: var(--muted); }
+.ol-item.special .ol-link { font-style: italic; }
+.ol-item .wb-row-btn { opacity: 0; border-radius: var(--ui-r-sm); }
+.ol-item:hover .wb-row-btn, .ol-item:focus-within .wb-row-btn { opacity: 1; }
+.ol-item:hover .wb-ts-name, .ol-item:focus-within .wb-ts-name { padding-right: var(--wb-ts-room); }
+@media (hover: none) { .ol-item .wb-row-btn { opacity: 1; } .ol-item .wb-ts-name { padding-right: var(--wb-ts-room); } }
+.ol-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ol-item.dragging { opacity: 0.4; }
+.ol-drop { position: absolute; display: none; height: 2px; border-radius: 1px; background: rgba(35, 131, 226, 0.6); pointer-events: none; z-index: 40; }
+
+/* problems and todos */
+.pb-group { margin: 0 0 8px; }
+.pb-head { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; min-height: var(--ui-ctl-sm); padding: 0 var(--ui-2); font-size: var(--ui-text-xs); font-weight: var(--ui-medium);
+  color: var(--muted); text-transform: none; letter-spacing: 0.01em; cursor: pointer; border-radius: var(--ui-r-sm); }
+.pb-head:hover { background: var(--hover); }
+.pb-head::before { content: '›'; display: inline-block; width: 8px; transition: transform 0.12s; }
+.pb-head[aria-expanded="true"]::before { transform: rotate(90deg); }
+.pb-error .pb-head .count { background: var(--error-bg); color: var(--error); }
+.pb-list, .td-list { list-style: none; margin: 0; padding: 0; }
+.pb-row, .td-row { display: flex; gap: 8px; width: 100%; min-height: var(--ui-row); box-sizing: border-box; border: 0; background: none; text-align: left; padding: var(--ui-1) var(--ui-2); border-radius: var(--ui-r-sm); cursor: pointer; color: var(--sidebar-text); }
+.pb-row { flex-direction: column; gap: 1px; }
+.pb-row:hover, .td-row:hover { background: var(--hover); color: var(--text); }
+.pb-msg { font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-word; }
+.pb-row[data-kind="error"] .pb-msg { font-family: inherit; font-size: var(--ui-text-sm); color: var(--error); }
+.pb-where { display: block; font-size: var(--ui-text-xs); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.td-chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 4px 8px; }
+.td-chip { display: inline-flex; align-items: center; gap: 5px; min-height: var(--ui-ctl-sm); box-sizing: border-box; border: 1px solid var(--ui-border-pill); background: var(--ui-surface); border-radius: var(--ui-r-pill); padding: 0 var(--ui-2); font-size: var(--ui-text-sm); cursor: pointer; color: var(--sidebar-text); }
+.td-chip.on { border-color: rgba(35, 131, 226, 0.5); background: var(--sel); color: var(--text); }
+.dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; margin-top: 6px; }
+.td-chip .dot { margin-top: 0; }
+.td-text { display: flex; flex-direction: column; min-width: 0; }
+.td-author { font-size: var(--ui-text-xs); color: var(--muted); }
+.td-msg { font-size: var(--ui-text-md); line-height: 1.35; color: var(--text); }
+
+/* ── Top bar ── */
+.topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: var(--ui-2);
+  height: 44px; padding: 0 var(--ui-2); background: rgba(255, 255, 255, 0.92); backdrop-filter: saturate(180%) blur(8px); }
+.crumbs { display: flex; align-items: center; gap: var(--ui-1); min-width: 0; flex: 0 1 auto; font-size: var(--ui-text-md); }
+.crumb-home { color: var(--ui-ink-2); text-decoration: none; display: inline-flex; align-items: center; height: var(--ui-ctl-md); padding: 0 var(--ui-2);
+  border-radius: var(--ui-r-sm); white-space: nowrap; }
+.crumb-home:hover { background: var(--hover); color: var(--text); }
+.crumb-sep { color: #d3d2cf; }
+/* the title is the kit's quiet Input (28 px, 13 px); only its width and weight are the bar's */
+.doc-title.ui-input { font-weight: var(--ui-medium); color: var(--text); min-width: 6ch; width: 32ch; max-width: 40vw; text-overflow: ellipsis; }
+.rtx-editor:not([data-sidebar-closed]) .sb-open { display: none; }
+.topbar-slot { display: contents; }   /* no empty slot: the crumbs line up with the ⋯ button */
+.brand { font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.logo { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; background: #2f2e2b; color: #fff;
+  font: italic 13px/1 Georgia, serif; }
+.status { flex: 1; min-width: 0; font-size: var(--ui-text-sm); color: var(--ui-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.status[data-kind="busy"]::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%;
+  background: var(--accent); animation: pulse 1s ease-in-out infinite; vertical-align: 1px; }
+.status[data-kind="error"] { color: var(--error); }
+.status[data-kind="warn"] { color: color-mix(in srgb, var(--ui-warn) 70%, var(--ui-ink)); }
+@keyframes pulse { 50% { opacity: 0.25; } }
+.actions { display: flex; gap: 2px; }
+.ghost { border: 0; background: none; padding: 4px 8px; border-radius: 4px; font-size: 13.5px; color: #55534e; cursor: pointer; white-space: nowrap; }
+.ghost:hover { background: var(--hover); }
+.ghost.icon { font-size: 17px; line-height: 1; padding: 3px 8px 5px; }
+
+/* ── The page ── */
+.rtx-editor:not(.rtx-wb) [data-part="page"] { max-width: var(--col); margin: 0 auto; padding: 28px 24px 60vh; }   /* (the mounted editor's page: the workbench's panes are styled in wb/css.ts) */
+
+.chev { display: inline-block; width: 12px; transition: transform 0.12s; font-size: 15px; }
+.hint-text { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }
+
+/* ── Blocks ── */
+.blocks { position: relative; }
+.blk { position: relative; margin: 0 -8px; padding: 1px 8px; border-radius: 4px; scroll-margin-top: 64px; }
+.rtx-editor[data-finding] .blk { scroll-margin-top: 136px; }
+.blk + .blk { margin-top: 6px; }
+/* space between blocks by kind (when the engine gives no spacing data: V5) */
+.blk[data-kind="heading"]:not(:first-child):not([data-tex]), .blk[data-kind="appendix"] + .blk:not([data-tex]) { margin-top: 26px; }
+.blk[data-kind="subheading"]:not(:first-child):not([data-tex]), .blk[data-kind="subsubheading"]:not(:first-child):not([data-tex]) { margin-top: 16px; }
+.blk[data-kind="title"] + .blk:not([data-tex]) { margin-top: 18px; }
+.blk.selected:not(.editing) > .blk-main { background: var(--sel); border-radius: 4px; box-shadow: 0 0 0 4px var(--sel); }
+/* the block whose handle is hovered or focused (handle-mark.js); lower specificity than the selection */
+.handle-mark:not(.editing) > .blk-main { background: var(--sel-soft); border-radius: 4px; box-shadow: 0 0 0 4px var(--sel-soft); }
+.blk.flash > .blk-main { animation: flash 1.2s ease-out; }
+@keyframes flash { 0% { box-shadow: 0 0 0 4px rgba(255, 212, 0, 0.55); background: rgba(255, 212, 0, 0.18); } 100% { box-shadow: 0 0 0 4px transparent; background: transparent; } }
+/* margin marks: a find match, a problem, a todo */
+.blk::after { content: ''; position: absolute; right: -14px; top: 8px; width: 4px; height: calc(100% - 16px); max-height: 24px; border-radius: 2px; }
+.blk.has-todo::after { background: rgba(255, 190, 0, 0.8); }
+.blk.has-problem::after { background: rgba(212, 76, 71, 0.75); }
+.blk.has-match::after { background: rgba(35, 131, 226, 0.8); }
+.blk[data-state="source"] .blk-preview { color: #6d6b66; }
+.blk-main { position: relative; min-height: 24px; }
+.blk-render { position: relative; cursor: text; outline: none; border-radius: 3px; padding: 4px 0; }
+.blk-render:focus-visible { outline: none; }
+/* (panes/widths.js) a block pinned at its width while the column changes: narrower than the column, it is centred in
+   it (as the column in its pane: the text keeps its centre, and its re-broken lines fill the column about it); wider,
+   it starts at the column's left edge (auto margins are 0 then) and is clipped at its right edge, with a soft fade
+   there; the old lines of a cross-fade sit over the new ones */
+.blk-render.rtx-w-pin { overflow-x: clip; }
+.blk-render.rtx-w-pin > .latex-block { margin-inline: auto; }
+.blk-render.rtx-w-tall { overflow: clip; }   /* re-broken out of view, its old height kept until the last idle slice (panes/widths.js) */
+.blk-render > .latex-block.rtx-w-skip { content-visibility: auto; }
+/* (panes/lazy-views.js) a view a newly opened pane has not made yet: skipped while out of view, at its reserved height */
+.blk.rtx-lazy { content-visibility: auto; contain-intrinsic-size: auto none; }
+.blk-render.rtx-w-over { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-clip: no-clip; }
+.blk-render > .latex-block.rtx-w-ghost { z-index: 1; }
+.blk-preview:focus-visible { outline: none; }
+/* waiting / typesetting: the content stays at full strength; a thin accent line at
+   the block's left edge (right of the gutter's handle) breathes until the result lands, then fades out */
+.blk-render.stale > .latex-block:not(.incoming) { opacity: 1; }
+.blk-main::before { content: ''; position: absolute; left: calc(-1 * (var(--rtx-side-gap, 12px) + 2px)); top: 2px; bottom: 2px; width: 2px; border-radius: 1px; background: var(--accent);
+  opacity: 0; pointer-events: none; }
+.blk[data-state="pending"]:not(.editing) > .blk-main::before { animation: rtx-breathe 1.2s ease-in-out infinite; }
+.blk.landed:not(.editing) > .blk-main::before { animation: rtx-landed 0.35s ease-out; }
+@keyframes rtx-breathe { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.8; } }
+@keyframes rtx-landed { from { opacity: 0.6; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .blk[data-state="pending"]:not(.editing) > .blk-main::before { animation: none; opacity: 0.6; }
+  .blk.landed > .blk-main::before { animation: none; }
+}
+.blk-render > .latex-block.incoming { position: absolute; top: 4px; left: 0; right: 0; visibility: hidden; pointer-events: none; }
+
+.blk-preview { margin: 0; padding: 6px 0; font: 13.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #8b8a86;
+  white-space: pre-wrap; word-break: break-word; cursor: text; }
+.blk-preview.pending { color: #b4b3af; }            /* not typeset yet: the source, light (the side line breathes) */
+.blk-preview.error { color: #6d6b66; }
+.blk-preview.placeholder { font: 15px/1.5 inherit; font-family: inherit; color: #c7c6c3; }
+.blk[data-state="error"] .blk-main { box-shadow: inset 2px 0 0 var(--error); padding-left: 12px; margin-left: -12px; }   /* as wide as the column: the edge sits in the margin */
+
+/* hover gutter: + and the drag handle, left of the column */
+/* the + and the handle stand clear of the column (the side line is 11 px left of the text,
+   the buttons 22 px and more), 24 px targets with 16 px icons, the app's muted colour, a tinted hover */
+.gutter { position: absolute; left: -64px; top: 4px; display: flex; gap: 2px; opacity: 0; transition: opacity 0.15s ease; }
+/* shown for the hot block (docview/controls.js: one block at a time, its zone, the grace, the aim);
+   :hover only where there is no hovering pointer to follow */
+.blk.g-hot > .gutter, .blk:focus-within > .gutter, .gutter:focus-within { opacity: 1; }
+@media (hover: none) { .blk:hover > .gutter { opacity: 1; } }
+/* above the block's own content where they meet (the floating bar) */
+.gutter { z-index: 1; }
+.rtx-editor[data-dragging] .gutter { opacity: 0 !important; }
+.gutter button { width: 24px; height: 24px; border: 0; padding: 0; background: none; border-radius: 6px; color: #b3b2ae; cursor: pointer;
+  display: grid; place-items: center; transition: background-color 0.12s, color 0.12s; }
+.gutter button svg { width: 16px; height: 16px; }
+.gutter button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 1px; }
+.gutter button:active { background: color-mix(in srgb, currentColor 14%, transparent); }
+@media (pointer: coarse) { .gutter button { width: 44px; height: 44px; } }
+.gutter .g-handle { cursor: grab; touch-action: none; }
+.gutter .g-handle svg { fill: currentColor; }
+.gutter button:hover { background: color-mix(in srgb, currentColor 8%, transparent); color: #6f6e69; }
+.blk.dragging { opacity: 0.35; }
+#drop-line { position: absolute; display: none; height: 3px; border-radius: 2px; background: rgba(35, 131, 226, 0.55); pointer-events: none; z-index: 30; }
+
+/* editing: the source, in a quiet box */
+.blk.editing .blk-main { background: var(--editor-bg); border-radius: 5px; margin: 0 -10px; padding: 4px 10px; }
+.cm-host .cm-editor { background: transparent; font-size: 13.5px; }
+.cm-host .cm-editor.cm-focused { outline: none; }
+.cm-host .cm-scroller { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.6; }
+.cm-host .cm-content { padding: 4px 0; caret-color: var(--text); }
+.cm-host .cm-line { padding: 0; }
+.cm-host .cm-placeholder { color: #bbbab6; }
+.cm-host .cm-matchingBracket { background: rgba(35, 131, 226, 0.14); outline: none; }
+.cm-host .cm-selectionBackground, .cm-host .cm-focused .cm-selectionBackground { background: var(--rtx-sel) !important; }   /* one shade with the preview */
+.cm-host .cm-find-match { background: var(--match); border-radius: 2px; }
+.cm-host .cm-bad-ref { text-decoration: underline wavy var(--error); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+/* completion and hover cards (CodeMirror's tooltips). on the kit's tokens: the surface, ink and
+   selection follow the theme (no literal white); rows are menu rows; secondary text is --ui-ink-2 (readable) */
+.cm-tooltip { border: 0 !important; border-radius: var(--ui-r-md); box-shadow: var(--ui-shadow-pop); background: var(--ui-surface) !important;
+  color: var(--ui-ink) !important; font: var(--ui-text-md)/var(--ui-leading) var(--ui-font); overflow: hidden; }
+.cm-tooltip-autocomplete > ul { font-family: inherit !important; max-height: 260px !important; min-width: 260px; padding: var(--ui-1) 0 !important; }
+.cm-tooltip-autocomplete > ul > li { padding: 0 var(--ui-3) !important; min-height: var(--ui-row); box-sizing: border-box; display: flex; gap: var(--ui-2); align-items: center; color: var(--ui-ink); }
+.cm-tooltip-autocomplete > ul > li[aria-selected] { background: var(--ui-selected) !important; color: var(--ui-ink) !important; }
+.cm-completionLabel { font: var(--ui-text-sm) var(--ui-mono); }
+.cm-completionMatchedText { text-decoration: none !important; font-weight: var(--ui-semibold); }
+.cm-completionDetail { margin-left: auto !important; font-style: normal !important; color: var(--ui-ink-2); font-size: var(--ui-text-sm); white-space: nowrap; }
+.cm-completionInfo { padding: 0 !important; background: var(--ui-surface) !important; color: var(--ui-ink) !important; }
+.hover-card { max-width: 340px; padding: var(--ui-2) var(--ui-3); }
+.hc-head { font-weight: var(--ui-medium); font-size: var(--ui-text-md); }
+.hc-head.bad { color: var(--ui-danger); }
+.hc-body { margin-top: 3px; color: var(--ui-ink-2); font-size: var(--ui-text-sm); }
+.hc-foot { margin-top: var(--ui-1); font: var(--ui-text-xs) var(--ui-mono); color: var(--ui-ink-2); }
+
+/* errors under a block */
+.errors { display: flex; flex-direction: column; gap: 2px; }
+.errors:empty { display: none; }
+.errors { margin: 2px 0 6px; }
+.err-row { display: flex; gap: 8px; align-items: baseline; text-align: left; border: 0; background: var(--error-bg); color: var(--error);
+  border-radius: 4px; padding: 3px 8px; font-size: 12.5px; cursor: pointer; }
+.err-row:hover { filter: brightness(0.98); }
+.err-line { font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: #b0605c; white-space: nowrap; }
+
+/* "+ Add a block" (chrome/sidebar-chrome.js): quiet, but readable */
+main[data-pane] .add-end { display: flex; align-items: center; gap: var(--ui-2); min-height: var(--ui-ctl-md); margin: 14px 0 0 -6px; border: 0; background: none; padding: 0 var(--ui-2);
+  border-radius: var(--ui-r-sm); color: var(--ui-ink-2); font: var(--ui-text-lg)/1 var(--ui-font); cursor: pointer; }
+main[data-pane] .add-end:hover { background: var(--ui-hover); color: var(--ui-ink); }
+main[data-pane] .add-end:focus-visible { outline: none; box-shadow: var(--ui-ring); }
+
+/* ── Menus ── */
+.menu { position: absolute; min-width: 220px; max-width: 320px; padding: var(--ui-1) 0; background: #fff; border-radius: var(--ui-r-md); box-shadow: var(--ui-shadow-pop);
+  font-size: var(--ui-text-md); }
+.menu-title { padding: 2px 12px 4px; font-size: var(--ui-text-xs); font-weight: 500; color: var(--muted); }
+.menu-filter { display: block; box-sizing: border-box; width: calc(100% - 16px); margin: 0 8px 4px; border: 0; outline: 0; background: var(--editor-bg);
+  border-radius: var(--ui-r-sm); min-height: var(--ui-ctl-md); padding: 0 var(--ui-2); font: inherit; font-size: var(--ui-input-text); }
+.menu-list { max-height: 330px; overflow-y: auto; }
+.menu-item { display: flex; gap: 10px; align-items: center; width: calc(100% - 8px); min-height: var(--ui-row); margin: 0 4px; border: 0; background: none; text-align: left;
+  padding: var(--ui-1) var(--ui-2); border-radius: var(--ui-r-sm); cursor: pointer; font: inherit; }
+.menu-item.sel, .block-menu .menu-item:hover, .block-menu .menu-item:focus-visible { background: var(--hover); outline: none; }
+.menu-item:disabled { color: #c7c6c3; cursor: default; background: none !important; }
+.mi-icon { flex: 0 0 auto; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--faint); border-radius: var(--ui-r-sm);
+  background: #fff; font: 13px/1 Georgia, "Times New Roman", serif; color: #55534e; }
+.mi-text { display: flex; flex-direction: column; min-width: 0; }
+.mi-label { font-size: var(--ui-text-md); }
+.mi-hint { font-size: var(--ui-text-xs); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.menu-empty { padding: 6px 12px; color: var(--muted); font-size: var(--ui-text-md); }
+.menu-sep { height: 1px; background: var(--faint); margin: var(--ui-1) 0; }
+.block-menu { min-width: 170px; }
+.block-menu [data-action="delete"] { color: var(--error); }
+.mi-key { margin-left: auto; padding-left: 16px; font-size: var(--ui-text-sm); color: var(--muted); }
+.block-menu .menu-item { justify-content: space-between; }
+.slash .menu-title { padding-top: 6px; }
+.slash .menu-title:first-child { padding-top: 2px; }
+
+/* ── Find and replace ── */
+[data-part="find"] { position: sticky; top: 44px; z-index: 19; }
+/* the bar is built from the kit: its ground is the page's own (--ui-page), the fields are
+   kit Inputs (mono), the options and arrows kit icon buttons, Replace ghost buttons; no literal colours */
+.find-bar { max-width: calc(var(--col) + 48px); margin: 0 auto; padding: var(--ui-2) var(--ui-6); box-sizing: border-box;
+  background: color-mix(in srgb, var(--ui-page) 95%, transparent); color: var(--ui-ink);
+  display: flex; flex-direction: column; gap: var(--ui-1); border-bottom: 1px solid var(--ui-border-soft); }
+.find-row { display: flex; align-items: center; gap: var(--ui-1); }
+.find-input.ui-input { flex: 1 1 auto; min-width: 0; }
+.find-opt.ui-icon-btn .ui-glyph { font-family: var(--ui-mono); font-size: var(--ui-text-sm); font-weight: var(--ui-medium); }
+.find-opt[aria-pressed="true"] { background: var(--ui-selected); color: var(--ui-accent); }
+.find-btn.wide { white-space: nowrap; }
+.find-count { font-size: var(--ui-text-sm); color: var(--ui-ink-2); white-space: nowrap; padding: 0 var(--ui-2); min-width: 7em; text-align: right; font-variant-numeric: tabular-nums; }
+.find-count[data-kind="none"], .find-count[data-kind="error"] { color: var(--ui-danger); }
+
+/* ── Focus mode ── */
+.rtx-editor[data-focus-mode] .sidebar { transform: translateX(-100%); visibility: hidden; }
+.rtx-editor[data-focus-mode] .shell { margin-left: 0; }
+.rtx-editor[data-focus-mode] .topbar { opacity: 0; transition: opacity 0.2s; }
+.rtx-editor[data-focus-mode] .topbar:hover, .rtx-editor[data-focus-mode] .topbar:focus-within { opacity: 1; }
+.rtx-editor[data-focus-mode] main[data-pane] .add-end { display: none; }
+.rtx-editor[data-focus-mode] .blk { transition: opacity 0.25s; }
+.rtx-editor[data-focus-mode][data-editing] .blk:not(.editing), .rtx-editor[data-focus-mode] .blocks.has-selected .blk:not(.selected):not(.editing) { opacity: 0.28; }   /* (has-selected: panes/pane-state.js, no :has()) */
+.rtx-editor[data-focus-mode] .blk::after { display: none; }
+
+/* ── Dialog, fatal ── */
+/* the kit's Dialog (chrome/shortcuts.js); only its list here */
+dialog.shortcuts { max-width: min(520px, calc(100vw - 32px)); }
+dialog.shortcuts dl { display: grid; grid-template-columns: max-content 1fr; gap: var(--ui-1) var(--ui-4); margin: 0; font-size: var(--ui-text-md); }
+dialog.shortcuts dt { font: var(--ui-text-sm) var(--ui-mono); color: var(--ui-ink-2); }
+dialog.shortcuts dd { margin: 0; }
+.home-view:empty { display: none; }
+.fatal { margin: 40px; color: var(--error); }
+
+/* ── The viewer's surface (as in the page templates) ── */
+.latex-block { margin: 0; overflow: visible; }
+.latex-block svg { display: block; max-width: 100%; overflow: visible; font-weight: normal !important; font-style: normal !important; }
+.latex-block svg text, .latex-block svg tspan { font-weight: normal !important; font-style: normal !important; fill: currentColor; }
+.latex-display { --latex-display-peek: clamp(0px, calc(50vw - 50%), 100px); box-sizing: border-box;
+  margin-inline: calc(0px - var(--latex-display-peek)); display: flex; align-items: flex-start;
+  padding: 4px 0 4px var(--latex-display-peek); overflow-x: auto; }
+.latex-display::after { content: ''; align-self: stretch; flex: 0 0 var(--latex-display-peek); }
+.latex-display.latex-overflow-right:not(.latex-overflow-left) {
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - var(--latex-display-peek)), transparent 100%);
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - var(--latex-display-peek)), transparent 100%); }
+.latex-display.latex-overflow-left:not(.latex-overflow-right) {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--latex-display-peek), #000 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--latex-display-peek), #000 100%); }
+.latex-display.latex-overflow-left.latex-overflow-right {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--latex-display-peek), #000 calc(100% - var(--latex-display-peek)), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--latex-display-peek), #000 calc(100% - var(--latex-display-peek)), transparent 100%); }
+.latex-display > svg { max-width: none; flex: 0 0 auto; }
+.latex-block svg .latex-link { fill: var(--latex-link, #2f6fb3) !important; cursor: pointer; }
+.latex-anchor { height: 0; overflow: hidden; }
+.blk-render .latex-block { color: #111; }
+
+@media (max-width: 900px) {
+  .shell { margin-left: 0; }
+  .sidebar { box-shadow: var(--shadow); }
+}
+@media (max-width: 720px) {
+  .rtx-editor:not(.rtx-wb) [data-part="page"] { padding: 20px 16px 30vh; }
+  .status { display: none; }
+  .doc-title, .doc-switch { width: auto; max-width: 50vw; }
+  .crumb-home, .crumb-sep { display: none; }
+}
+
+/* a heading's space below (TeX's own is dropped between blocks) */
+.blk[data-kind="heading"] + .blk:not([data-tex]), .blk[data-kind="subheading"] + .blk:not([data-tex]), .blk[data-kind="subsubheading"] + .blk:not([data-tex]) { margin-top: 10px; }
+
+/* morph (src/motion.js): the box clips while its height eases; the old
+   content's copy fades out over the new */
+.blk-main.morphing { overflow-x: visible; overflow-y: clip; box-sizing: border-box; }  /* heights are border-box: the editing padding counts */
+.morph-ghost { position: absolute; left: 0; top: 0; right: 0; pointer-events: none; }
+.blk-main { transition: background-color 0.18s ease; }
+@media (prefers-reduced-motion: reduce) { .blk-main { transition: none; } }
+
+/* blocks TeX typesets nothing for (app.js markerOf) */
+.blk-preview.marker.appendix { display: flex; align-items: center; gap: 12px; font: 500 11.5px/1 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding: 14px 0 6px; }
+.blk-preview.marker.appendix::before, .blk-preview.marker.appendix::after { content: ''; flex: 1; height: 1px; background: var(--faint); }
+.blk-preview.marker.macros, .blk-preview.marker.comment { font-size: 12px; color: #a3a29e; max-height: 4.8em; overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
+@media (prefers-reduced-motion: reduce) { .sidebar, .shell, .rtx-editor[data-focus-mode] .topbar, .rtx-editor[data-focus-mode] .blk { transition: none; } }
+
+/* a figure the figure editor can open */
+.fig-edit { position: absolute; z-index: 2; top: 6px; right: 0; border: 0; border-radius: 5px; padding: 3px 9px; font-size: 12px; cursor: pointer;
+  background: rgba(255, 255, 255, 0.92); color: #55534e; box-shadow: 0 0 0 1px rgba(15, 15, 15, 0.08), 0 2px 4px rgba(15, 15, 15, 0.06);
+  opacity: 0; transition: opacity 0.12s; }
+.blk:hover > .fig-edit, .fig-edit:focus-visible { opacity: 1; }
+.fig-edit:hover { background: #fff; color: var(--text); }
+/* a thm-restate recall (\name*): the original's render, shown again */
+.blk[data-recall] > .blk-main { box-shadow: inset 2px 0 0 rgba(35, 131, 226, 0.22); padding-left: 12px; margin-left: -12px; }   /* as wide as the column: the edge sits in the margin */
+.blk[data-recall]::before { content: 'restated'; position: absolute; left: calc(100% + 18px); top: 8px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+@media (max-width: 1100px) { .blk[data-recall]::before { display: none; } }
+/* versions in a dialog */
+/* the kit's Dialog (chrome/versions.js) */
+dialog.versions-dialog { width: min(560px, calc(100vw - 32px)) !important; max-height: 80vh; }
+.dlg-close:not(.ui-icon-btn) { position: absolute; top: 8px; right: 8px; }
+
+/* the preview pill (top bar, home footer) and the About / Licence panel */
+.rtx-preview-pill { font: inherit; font-size: var(--ui-text-xs); color: var(--ui-ink-2); background: none; cursor: pointer; white-space: nowrap;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent); border-radius: 999px; padding: 2px 9px; margin: 0 6px; }
+.rtx-preview-pill:hover { color: inherit; }
+.rtx-editor[data-focus-mode] .topbar .rtx-preview-pill { visibility: hidden; }
+/* About is the kit's wide Dialog; only its content is styled here */
+.rtx-about .ui-dialog-body { font-size: var(--ui-text-md); line-height: var(--ui-leading); }
+.rtx-about h3 { font-size: var(--ui-text-md); font-weight: var(--ui-semibold); margin: var(--ui-4) 0 var(--ui-1); }
+.rtx-about .muted { color: var(--ui-ink-2); }
+.rtx-about-notice { font-weight: var(--ui-medium); margin-top: 0; }
+.rtx-about-list { margin: var(--ui-1) 0; padding-left: var(--ui-5); }
+.rtx-about summary { cursor: pointer; border-radius: var(--ui-r-sm); }
+.rtx-about-texts { white-space: pre-wrap; font: var(--ui-text-xs) var(--ui-mono); max-height: 50vh; overflow: auto; }
+
+/* ── split view: two equal panes of the document, each its own scroller (panes/index.js) ── */
+/* the first pane's width, set on the [data-part=view] while the split is dragged: not inherited, so a change restyles
+   the view alone (inherited, it restyled every glyph of both panes each frame) */
+@property --split-a { syntax: '*'; inherits: false; }
+[data-part="view"].scrolls { display: grid; grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr); height: 100vh; height: 100dvh; }
+[data-part="view"].split { grid-template-columns: minmax(260px, var(--split-a, 1fr)) 7px minmax(260px, 1fr); }
+/* an embedded editor (app/editor-root.ts): its container holds it; the panes scroll themselves, alone too */
+.rtx-editor[data-embedded] { position: relative; contain: layout paint; overflow: hidden; }
+.rtx-editor[data-embedded] .shell, .rtx-editor[data-embedded] [data-part="view"].scrolls { height: 100%; }
+[data-part="view"].scrolls > .topbar, [data-part="view"].scrolls > [data-part="find"] { grid-column: 1 / -1; }
+[data-part="view"].scrolls main[data-pane] { grid-row: 4; min-width: 0; max-width: none; margin: 0; overflow: auto;
+  padding: 24px 16px 0; box-sizing: border-box; overscroll-behavior: contain; overflow-x: hidden; }
+/* the room to scroll the last block up is content, not the scroller's padding: a sticky element (the floating
+   editing popover, bottom: 10px) keeps its distance from the scroller's padding edge, so 40vh of padding held it
+   40vh above the pane's bottom */
+[data-part="view"].scrolls main[data-pane]::after { content: ''; display: block; height: 40vh; }
+/* the column centred in its pane, at most the pane's width less small margins (no horizontal scroll);
+   the controls' mode (docview/controls.js) decides whether the gutter is beside it or a floating bar over it */
+/* no [data-part] here: with * as the subject, a data-part change (doc-tabs moves it with the focus) restyled
+   every element below the element that changed */
+.scrolls main[data-pane] > * { max-width: var(--col); margin-left: max(4px, calc((100% - var(--col)) / 2)); margin-right: max(4px, calc((100% - var(--col)) / 2)); }
+[data-part="view"].scrolls .blk-render .latex-display { --latex-display-peek: 16px; }
+[data-part="view"].scrolls > [data-ctl="narrow"] .blk-render .latex-display { --latex-display-peek: 8px; }
+[data-part="view"].split > [data-part="page"] { grid-column: 1; }
+[data-part="view"].split main.pane-b { grid-column: 3; }
+.split-divider { grid-row: 3 / span 2; grid-column: 2; cursor: col-resize; position: relative; touch-action: none; }
+.split-divider::before { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: var(--ui-border-soft); transition: background var(--ui-fast) var(--ui-ease-out); }
+.split-divider:hover::before, .split-divider.dragging::before { background: var(--ui-border-strong); }
+.split-divider:focus-visible { outline: none; box-shadow: var(--ui-ring); border-radius: var(--ui-r-sm); }
+/* section focus: the heading's focus icon (left of the + and the handle), the pane's chip */
+.gutter .g-focus { position: absolute; left: -30px; top: 0; }
+.g-focus .g-unfocus, .g-focus[data-on="1"] .ui-icon:not(.g-unfocus) { display: none; }
+.g-focus[data-on="1"] .g-unfocus { display: inline; }
+.blk:not([data-kind="heading"]):not([data-kind="subheading"]):not([data-kind="subsubheading"]) > .gutter .g-focus { display: none; }
+.blk.sf-out { display: none !important; }
+
+/* narrow mode (docview/controls.js: the pane cannot give the gutter on both sides): equal small margins,
+   the controls a floating bar at the block's top-left corner, on hover / focus / selection; out of the flow.
+   It sits just above the block's first line (over the gap and the end of the block before), so it never covers
+   the text the pointer is on, and it takes no clicks while hidden (it covered the first words, invisibly) */
+main[data-pane][data-ctl="narrow"] .blk > .gutter { left: 4px; top: auto; bottom: calc(100% - 3px); z-index: 4; pointer-events: none; padding: 2px; gap: 0; border-radius: var(--ui-r-pill);
+  background: var(--ui-surface); box-shadow: var(--ui-shadow-pop); }
+main[data-pane][data-ctl="narrow"] .blk.selected > .gutter { opacity: 1; }
+main[data-pane][data-ctl="narrow"] .blk:is(.g-hot, .selected, :focus-within, .nest-active) > .gutter, main[data-pane][data-ctl="narrow"] .gutter:focus-within { pointer-events: auto; }
+main[data-pane][data-ctl="narrow"] .blk::after { right: -6px; }   /* the margin marks (TODO, problem) inside the pane */
+main[data-pane][data-ctl="narrow"] .gutter .g-focus { position: static; }
+main[data-pane][data-ctl="narrow"] .blk.nest-head > .gutter { left: auto; right: 4px; }
+main[data-pane][data-ctl="narrow"] .nest-bracket { left: -10px; }
+main[data-pane][data-ctl="narrow"] .nest-toggle { left: auto; right: 64px; top: -10px; }
+
+/* the panes' breadcrumb bars (docview/pane-bar.js): Documents / title ▾ / section ▾ [focus].
+   One pane: in the top bar. Split: a row above each pane, out of the text */
+.pane-bar .pb-title { display: inline-flex; align-items: center; min-width: 0; flex: 0 1 auto; }
+/* the title as wide as its text (up to a limit), the arrow right after it */
+.pane-bar .doc-title.ui-input { field-sizing: content; width: auto; min-width: 6ch; max-width: min(40ch, 40vw); flex: 0 1 auto; }
+/* the document switcher (chrome/doc-header.js): the name and its chevron are one button; the rename pencil after it */
+.pane-bar .doc-switch { display: inline-flex; align-items: center; gap: 2px; min-width: 0; max-width: min(40ch, 40vw); height: var(--ui-ctl-md); padding: 0 var(--ui-1) 0 var(--ui-2);
+  border: 0; border-radius: var(--ui-r-sm); background: none; color: var(--ui-ink); font: var(--ui-medium) var(--ui-text-md)/1 var(--ui-font); cursor: pointer; }
+.pane-bar .doc-switch:hover, .pane-bar .doc-switch[aria-expanded="true"] { background: var(--ui-hover); }
+.pane-bar .doc-switch:focus-visible { outline: none; box-shadow: var(--ui-ring); }
+.pane-bar .doc-switch > svg { flex: none; color: var(--ui-ink-2); }
+.pane-bar .doc-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane-bar .doc-name.is-empty { color: var(--ui-ink-2); font-weight: normal; }
+.pane-bar .doc-rename { color: var(--ui-ink-2); }
+.pane-bar .doc-header.is-renaming .doc-rename { color: var(--ui-accent); }
+.pane-bar .pb-section { display: inline-flex; align-items: center; gap: 2px; min-width: 0; max-width: 40ch; height: var(--ui-ctl-md); padding: 0 var(--ui-1) 0 var(--ui-2);
+  border: 0; border-radius: var(--ui-r-sm); background: none; color: var(--text); font: inherit; cursor: pointer; }
+.pane-bar .pb-section:hover, .pane-bar .pb-section[aria-expanded="true"] { background: var(--hover); }
+.pane-bar .pb-section:focus-visible { outline: none; box-shadow: var(--ui-ring); }
+.pane-bar .pb-section > svg { flex: none; color: var(--ui-ink-3); }
+.pane-bar .pb-section-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane-bar .pb-focus[aria-pressed="true"] { color: var(--ui-accent); background: var(--ui-selected, var(--hover)); }
+.pane-bar .crumb-sep { flex: none; }
+[data-part="view"].split > .pane-bar-host { grid-row: 3; min-width: 0; display: flex; align-items: center; height: 36px; padding: 0 var(--ui-2); box-sizing: border-box;
+  border-bottom: 1px solid var(--ui-border-soft); background: var(--bg); overflow: hidden; }
+[data-part="view"].split > .pane-bar-host[data-pane="a"] { grid-column: 1; }
+[data-part="view"].split > .pane-bar-host[data-pane="b"] { grid-column: 3; }
+.pane-bar-host .pane-bar { flex: 1 1 auto; min-width: 0; font-size: var(--ui-text-sm); }
+.pane-bar-host .doc-title.ui-input, .pane-bar-host .doc-switch { max-width: 22ch; }
+.pane-bar-host .doc-switch { font-size: var(--ui-text-sm); }
+.pane-bar-host .crumb-home { padding: 0 var(--ui-1); }
+.topbar .pane-bar { flex: 0 1 auto; min-width: 0; }
+.menu.pb-menu { max-height: 60vh; overflow: auto; }
+.menu.pb-menu .mi-label { white-space: pre; }
+
+/* the preamble: the outline's first entry (it opens the Document settings sheet, settings/) */
+.ol-pre-row { margin: 0 0 var(--ui-1); }
+/* the mark: the preamble icon (Lucide braces), the kit's icon size */
+.ol-pre .ol-pre-icon { flex: 0 0 auto; display: inline-grid; place-items: center; width: var(--ui-icon-md); height: var(--ui-icon-md); color: var(--muted); }
+.ol-pre .ol-pre-icon svg { width: 100%; height: 100%; }
+/* on the list's tab stops (.wb-ts, outline/index.ts): the icon in the level-1 number column, ending at the tab; the
+   count in the action column */
+.ol-pre-row > .ol-pre { display: grid; gap: 0; padding-left: 0; padding-right: 0; }
+.ol-pre-row .ol-pre-icon { grid-column: n0; justify-self: end; }
+.ol-pre-row .ol-badge { grid-column: -2 / -1; justify-self: end; margin: 0; }
+.ol-badge { margin-left: auto; flex: none; display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box;
+  border-radius: 9px; background: var(--error); color: #fff; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* iOS Safari zooms on focus under 16 px: on touch devices every text input is at least 16 px (the code editor: view/style.js) */
+@media (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([type=color]), textarea, select, [contenteditable="true"], [contenteditable=""] { font-size: max(16px, 1em) !important; }
+}

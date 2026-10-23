@@ -1,0 +1,14 @@
+Proof. Alpha one.
+Proof of Lemma 3. Bravo two.
+Proof sketch. Charlie three.
+Proof. Delta four.
+Proof of the claim. Echo five.
+Theorem 1 (Main). Foxtrot six.
+Remark 2 (Smith et al.). Golf seven.
+Remark 3. Hotel eight.
+Definition 4 (Graph). India nine.
+Lemma 5. Juliett ten.
+
+1
+
+

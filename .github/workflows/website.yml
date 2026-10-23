@@ -1,0 +1,166 @@
+name: Deploy website
+
+# Builds the site (website/) with the editor in it, and publishes both to GitHub Pages. Nothing built is committed:
+# what is deployed is what this job built.
+#
+#   1. The editor: the engine, its LaTeX format and its TeX Live tree come from the reflow-tectonic release that
+#      engine/reflow-tectonic.json names (scripts/fetch-engine.ts, checked against the lock's sha256s); the release
+#      is built by scripts/build.ts, with its acceptance in Chromium and its smoke test in Firefox and WebKit.
+#   2. It is staged into website/static/app/ with its TeX tree (website/tools/stage-app.ts): "Open ReflowEd" opens
+#      app/, and the tree is served beside it at app/texlive/2022/.
+#   3. The site is built as the Reflow TeX site is: inside Reflow TeX's CI image (a pinned TeX toolchain with Node
+#      and Hugo), with the reflowtex pipeline from a checkout of radek-p/reflowtex.
+#
+# The image: Reflow TeX's CI publishes it as ghcr.io/radek-p/reflowtex-ci:<tag>, public, the tag a hash of its
+# Dockerfile, docker/ and package-lock.json. This job works the tag out the same way from the reflowtex checkout and
+# pulls it; when that tag is not there (yet), it builds the image from the same Dockerfile instead, with GitHub's
+# cache, so the site never waits on the other repository's CI.
+#
+# Caches: the engine release's files (by the lock), Tectonic's bundle chunks the editor's TeX set is packed from (by
+# the working-set lists), the browsers (by app/package-lock.json), the site's compiled blocks (by their sources).
+#
+# Variables (Settings › Secrets and variables › Actions › Variables), optional:
+#   REFLOWTEX_REF        the reflowtex branch, tag or commit to build with (default main)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      REFLOWTEX: ${{ github.workspace }}/reflowtex
+      REFLOW_ENGINE_CACHE: /home/runner/editor-cache/reflow-tectonic
+      TECTONIC_CACHE: /home/runner/editor-cache/tectonic-bundle
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: radek-p/reflowtex
+          ref: ${{ vars.REFLOWTEX_REF || 'main' }}
+          path: reflowtex
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            app/package-lock.json
+            engine/package-lock.json
+            engine/encode/package-lock.json
+            reflowtex/package-lock.json
+
+      - name: Dependencies
+        run: |
+          (cd app && npm ci --no-audit --no-fund)
+          (cd engine && npm ci --no-audit --no-fund)
+          (cd engine/encode && npm ci --no-audit --no-fund)
+          (cd reflowtex && npm ci --no-audit --no-fund)
+
+      # ── 1. the editor ────────────────────────────────────────────────────────────────────────────────────
+      - name: Cache the engine release
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.REFLOW_ENGINE_CACHE }}
+          key: reflow-tectonic-${{ hashFiles('engine/reflow-tectonic.json') }}
+      - name: The engine, its format and its TeX tree
+        run: node scripts/fetch-engine.ts
+
+      - name: Cache Tectonic's bundle chunks
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.TECTONIC_CACHE }}
+          key: tectonic-bundle-${{ hashFiles('engine/working-set*.txt', 'engine/working-set-tiers.json', 'samples/intro/source/**') }}-${{ github.sha }}
+          restore-keys: tectonic-bundle-
+
+      - name: Cache the browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('app/package-lock.json') }}
+      - name: The browsers
+        run: cd app && npx playwright install --with-deps chromium firefox webkit
+
+      - name: The release (with its acceptance)
+        run: node scripts/build.ts
+
+      - name: Staged into the site
+        run: node website/tools/stage-app.ts dist/reflowtex-editor build/resources/www/texlive/2022
+
+      # ── 2. the site ──────────────────────────────────────────────────────────────────────────────────────
+      - id: tag
+        env:
+          INPUTS_HASH: ${{ hashFiles('reflowtex/Dockerfile', 'reflowtex/docker/**', 'reflowtex/package-lock.json') }}
+        run: echo "image=ghcr.io/radek-p/reflowtex-ci:${INPUTS_HASH:0:20}" >> "$GITHUB_OUTPUT"
+
+      - id: pull
+        continue-on-error: true
+        run: |
+          for wait in 15 45 0; do
+            if docker pull --quiet "${{ steps.tag.outputs.image }}"; then
+              docker tag "${{ steps.tag.outputs.image }}" reflowtex:test
+              exit 0
+            fi
+            sleep "$wait"
+          done
+          echo "${{ steps.tag.outputs.image }} could not be pulled: building the image here"
+          exit 1
+
+      - if: steps.pull.outcome == 'failure'
+        uses: docker/setup-buildx-action@v3
+      - if: steps.pull.outcome == 'failure'
+        uses: docker/build-push-action@v6
+        with:
+          context: reflowtex
+          target: test
+          load: true
+          tags: reflowtex:test
+          cache-from: type=gha,scope=reflowtex-ci
+          cache-to: type=gha,scope=reflowtex-ci,mode=max
+
+      # The pipeline is incremental by content hash: restoring the previous run's per-block build tree means only
+      # blocks whose content changed are compiled again (a change of the intro's figures recompiles the intro:
+      # tools/prepare-intro.ts).
+      - uses: actions/cache@v4
+        with:
+          path: |
+            website/.reflowtex-build
+            website/data/latex_blocks
+            website/data/latex_files.json
+          key: website-blocks-${{ hashFiles('reflowtex/src/**', 'reflowtex/integrations/hugo/**', 'website/content/**', 'website/latex-preambles/**', 'samples/intro/source/**') }}
+          restore-keys: |
+            website-blocks-
+
+      - name: Build the site in the container
+        run: |
+          docker run --rm -v "$PWD":/workspace -w /workspace/website -e REFLOWTEX=/workspace/reflowtex \
+            reflowtex:test bash -lc './build.sh'
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

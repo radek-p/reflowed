@@ -1,0 +1,333 @@
+% rtx-xetex.sty – reflowtex's extraction hooks on XeTeX (Tectonic with the
+%
+% On LuaTeX, reflowtex's template (src/extract/template.tex) switches the
+% companion package (reflowtex.sty) into web mode and gives it LuaTeX
+% attributes and Serializer.note_*(…) calls. This package does the same for
+% the XeTeX engine capture. Load it in the prelude, right after \documentclass
+% and before reflowtex.sty and rtx-numbering.sty:
+%
+%   \documentclass{…}
+%   \usepackage{mathtools}\usepackage{amssymb}\usepackage{tectonic-capture}
+%   \usepackage{rtx-xetex}
+%   … the author's preamble (\usepackage{reflowtex}, rtx-numbering, …)
+%
+% What it gives:
+%   - \ifreflowtex true (web mode);
+%   - \attributeN (909–917) as count registers \count(31091+N), i.e.
+%     \count32000–\count32008: grouped like LuaTeX's attributes, and read by
+%     the engine (capture flag 32, patch 0005), which stamps every node it
+%     allocates with the nine values in force. 909–916 are the template's;
+%     917 is this package's: set on the glue \addvspace appends (for the
+%     editor's inter-block spacing, src/spacing.ts); They sit at the top of
+%     e-TeX's register range, where LaTeX's allocator (upwards from 266)
+%     never gets; \count909 itself could be a package's \newcount;
+%   - \directlua{…} as \immediate\write to \jobname.rtxlua (at once, no node,
+%     as LuaTeX runs Lua), and \luaescapestring{…} as the text between two
+%     markers, ^^A and ^^B (the converter reads it as written; nothing is
+%     escaped). Defined at the end of \begin{document} only, so a package
+%     that looks for \directlua in the preamble still takes its XeTeX path;
+%   - what reflowtex.sty takes from the template: \reflowtexStreamCount,
+%     \reflowtexLinkCount, \reflowtexAnchorCount, \reflowtexAside (\webaside,
+%     \webpart, \marginpar), and the template's cross-references (\ref and
+%     relatives, \label: attribute 909/910 and note_link/note_label), the
+%     outline (note_outline) and table-of-contents links, and batch parts.
+% slots/convert-slots.ts turns the notes and the stamps into output.json's
+% links, anchors, slots, marks, streams and outline, as serializer.lua does.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{rtx-xetex}[2026/09/27 v0.1 reflowtex extraction hooks for the XeTeX engine capture]
+% On LuaTeX the template has done all of this.
+\ifdefined\luatexversion\expandafter\endinput\fi
+
+% Unicode input in documents set in 8-bit (TFM) fonts: rtx-tfm-unicode.sty
+\RequirePackage{rtx-tfm-unicode}
+
+% ── Web mode ─────────────────────────────────────────────────────────────────
+\ifcsname ifreflowtex\endcsname\else
+  \expandafter\newif\csname ifreflowtex\endcsname
+\fi
+\reflowtextrue
+
+% ── Attributes ───────────────────────────────────────────────────────────────
+% \attribute913=5 is \count\numexpr31091+913=5, i.e. \count32004=5; \the,
+% \ifnum, \global and \advance see an ordinary count register. Unset is <= 0
+% (LuaTeX: -"7FFFFFFF); a register nobody set reads 0.
+\def\attribute{\count\numexpr31091+}
+
+% ── Lua calls, written out ───────────────────────────────────────────────────
+\newwrite\rtx@lua
+\newif\ifrtx@luaopen
+\long\def\rtx@directlua#1{%
+  \ifrtx@luaopen\else
+    \global\rtx@luaopentrue
+    \immediate\openout\rtx@lua=\jobname.rtxlua\relax
+  \fi
+  \immediate\write\rtx@lua{#1}}
+\begingroup
+  \catcode`\^^A=12 \catcode`\^^B=12
+  \gdef\rtx@luaescapestring#1{^^A#1^^B}
+\endgroup
+\AddToHook{begindocument/end}{%
+  \let\directlua\rtx@directlua
+  \let\luaescapestring\rtx@luaescapestring}
+
+% ── Counters the companion package shares with the template ─────────────────
+\newcount\reflowtexStreamCount
+\newcount\reflowtexLinkCount
+\newcount\reflowtexAnchorCount
+\ifdefined\reflowtexSlotCount\else\newcount\reflowtexSlotCount\fi
+
+% ── Asides (template.tex, "Asides") ──────────────────────────────────────────
+% \reflowtexAside{kind}{key=value,…}{text}: text out of the flow, in an
+% insertion (attribute 914 on it, 911 on its content), and in running text an
+% empty box where it stood (attribute 915).
+\newinsert\reflowtexAsideIns
+\count\reflowtexAsideIns=0 \dimen\reflowtexAsideIns=\maxdimen \skip\reflowtexAsideIns=0pt
+\long\def\reflowtexAside#1#2#3{%
+  \global\advance\reflowtexStreamCount by 1
+  \directlua{Serializer.note_stream(\the\reflowtexStreamCount,
+    "\luaescapestring{#1}", 0, "\luaescapestring{#2}")}%
+  \begingroup
+    \ifhmode\attribute915=\reflowtexStreamCount\relax\hbox{}\attribute915=-"7FFFFFFF\fi
+    \attribute914=\reflowtexStreamCount\relax
+    \insert\reflowtexAsideIns{%
+      \attribute911=\reflowtexStreamCount\relax
+      \hsize\linewidth \parindent0pt \everypar{}#3\par}%
+  \endgroup}
+
+% ── Batch parts (template.tex) ───────────────────────────────────────────────
+\def\reflowtexbatchpart#1{%
+  \par
+  \global\advance\reflowtexStreamCount by 1
+  \directlua{Serializer.note_stream(\the\reflowtexStreamCount, "batch-part", -1, "part=#1")}%
+  \global\attribute911=\reflowtexStreamCount\relax}
+
+% ── Cross-references (template.tex, same definitions) ───────────────────────
+\newbox\reflowtexAnchorBox
+\def\reflowtex@anchorbox{%
+  \setbox\reflowtexAnchorBox=\hbox{}%
+  \wd\reflowtexAnchorBox=0pt \ht\reflowtexAnchorBox=0pt \dp\reflowtexAnchorBox=0pt
+  \box\reflowtexAnchorBox}
+\def\reflowtex@wrapref#1#2{%
+  \ifnum\attribute909>0
+    #1{#2}%
+  \else
+    \global\advance\reflowtexLinkCount by 1
+    \directlua{Serializer.note_link(\the\reflowtexLinkCount, "\luaescapestring{#2}")}%
+    \begingroup\attribute909=\reflowtexLinkCount\relax #1{#2}\endgroup
+  \fi}
+\DeclareRobustCommand{\reflowtex@newref}[1]{\reflowtex@wrapref\reflowtex@ref{#1}}
+\DeclareRobustCommand{\reflowtex@neweqref}[1]{\reflowtex@wrapref\reflowtex@eqref{#1}}
+\DeclareRobustCommand{\reflowtex@newautoref}[1]{\reflowtex@wrapref\reflowtex@autoref{#1}}
+\DeclareRobustCommand{\reflowtex@newnameref}[1]{\reflowtex@wrapref\reflowtex@nameref{#1}}
+\DeclareRobustCommand{\reflowtex@newcref}[1]{\reflowtex@wrapref\reflowtex@cref{#1}}
+\DeclareRobustCommand{\reflowtex@newCref}[1]{\reflowtex@wrapref\reflowtex@Cref{#1}}
+\def\reflowtex@newlinkurl#1#2{%
+  \ifnum\attribute909>0
+    \reflowtex@linkurl{#1}{#2}%
+  \else
+    \global\advance\reflowtexLinkCount by 1
+    \directlua{Serializer.note_link_url(\the\reflowtexLinkCount,
+      "\luaescapestring{#2}")}%
+    \begingroup\attribute909=\reflowtexLinkCount\relax
+      \reflowtex@linkurl{#1}{#2}%
+    \endgroup
+  \fi}
+\def\reflowtex@newhyperlinkfile file:#1\\#2#3#4{%
+  \ifnum\attribute909>0
+    \reflowtex@hyperlinkfile file:#1\\{#2}{#3}{#4}%
+  \else
+    \global\advance\reflowtexLinkCount by 1
+    \directlua{Serializer.note_link_file(\the\reflowtexLinkCount,
+      "\luaescapestring{#4}", "\luaescapestring{#3}")}%
+    \begingroup\attribute909=\reflowtexLinkCount\relax
+      \reflowtex@hyperlinkfile file:#1\\{#2}{#3}{#4}%
+    \endgroup
+  \fi}
+\DeclareRobustCommand{\reflowtex@newlabel@}[1]{%
+  \global\advance\reflowtexAnchorCount by 1
+  \directlua{Serializer.note_label(\the\reflowtexAnchorCount, "\luaescapestring{#1}")}%
+  \begingroup\attribute910=\reflowtexAnchorCount\relax
+    \reflowtex@anchorbox
+  \endgroup
+  \reflowtex@label{#1}}
+% After hyperref's and cleveref's own \begin{document} code (the template
+% declares its hook after the user preamble; here the hook's end does it).
+\AddToHook{begindocument/end}{%
+  \let\reflowtex@ref\ref     \let\ref\reflowtex@newref
+  \@ifundefined{eqref}{}{\let\reflowtex@eqref\eqref \let\eqref\reflowtex@neweqref}%
+  \@ifundefined{autoref}{}{\let\reflowtex@autoref\autoref
+                           \let\autoref\reflowtex@newautoref}%
+  \@ifundefined{nameref}{}{\let\reflowtex@nameref\nameref
+                           \let\nameref\reflowtex@newnameref}%
+  \@ifundefined{cref}{}{\let\reflowtex@cref\cref \let\cref\reflowtex@newcref}%
+  \@ifundefined{Cref}{}{\let\reflowtex@Cref\Cref \let\Cref\reflowtex@newCref}%
+  \@ifundefined{hyper@linkurl}{}{\let\reflowtex@linkurl\hyper@linkurl
+                                 \let\hyper@linkurl\reflowtex@newlinkurl}%
+  \@ifundefined{@hyper@linkfile}{}{\let\reflowtex@hyperlinkfile\@hyper@linkfile
+                                   \let\@hyper@linkfile\reflowtex@newhyperlinkfile}%
+  \let\reflowtex@label\label \let\label\reflowtex@newlabel@
+  \@ifundefined{ltx@label}{}{\let\ltx@label\reflowtex@newlabel@}}
+
+% ── Table of contents (template.tex) ─────────────────────────────────────────
+\newcount\reflowtexTocEntryCount
+\newcount\reflowtexTocAnchorCount
+\let\reflowtex@tocfile\@empty
+\def\reflowtex@newstarttoc#1{%
+  \def\reflowtex@tocfile{#1}\reflowtex@starttoc{#1}\let\reflowtex@tocfile\@empty}
+\def\reflowtex@newcontentsline#1#2#3{%
+  \@ifnextchar\bgroup{\reflowtex@contentsline{#1}{#2}}{\reflowtex@contentsline{#1}{#2}\reflowtex@noarg}}
+\def\reflowtex@noarg{\reflowtex@noarg}
+\def\reflowtex@contentsline#1#2#3{%
+  \def\reflowtex@tmp{toc}%
+  \ifx\reflowtex@tocfile\reflowtex@tmp
+    \global\advance\reflowtexTocEntryCount by 1
+    \global\advance\reflowtexLinkCount by 1
+    \directlua{Serializer.note_link(\the\reflowtexLinkCount,
+      "reflowtex-toc-\the\reflowtexTocEntryCount")}%
+    \edef\reflowtex@tocattr{\the\attribute909}%
+    \attribute909=\reflowtexLinkCount\relax
+    \reflowtex@origcontentsline{#1}{#2}{#3}%
+    \attribute909=\reflowtex@tocattr\relax
+  \else
+    \reflowtex@origcontentsline{#1}{#2}{#3}%
+  \fi}
+\def\reflowtex@origcontentsline#1#2#3{%
+  \def\reflowtex@tmpa{#3}%
+  \ifx\reflowtex@tmpa\reflowtex@noarg \expandafter\@firstoftwo\else \expandafter\@secondoftwo\fi
+  {\reflowtexOrigContentsline{#1}{#2}{}}{\reflowtexOrigContentsline{#1}{#2}{}{#3}}}
+\AddToHook{begindocument/end}{%
+  \def\@dotsep{10000}%
+  \let\reflowtexOrigContentsline\contentsline
+  \let\contentsline\reflowtex@newcontentsline
+  \let\reflowtex@starttoc\@starttoc
+  \let\@starttoc\reflowtex@newstarttoc}
+
+% ── Outline (template.tex, "Outline capture") ───────────────────────────────
+\newcount\reflowtexOutlineCount
+\def\reflowtex@outline@note#1#2#3#4{%
+  \global\advance\reflowtexAnchorCount by 1
+  \global\advance\reflowtexOutlineCount by 1
+  \directlua{Serializer.note_label(\the\reflowtexAnchorCount,
+      "reflowtex-outline-\the\reflowtexOutlineCount")
+    Serializer.note_outline(\the\reflowtexAnchorCount,
+      "\luaescapestring{\detokenize\expandafter{#1}}", #2,
+      "\luaescapestring{\detokenize\expandafter{#3}}",
+      "\luaescapestring{\detokenize\expandafter{#4}}")}}
+\def\reflowtex@outline@mark#1#2#3#4{%
+  \reflowtex@outline@note{#1}{#2}{#3}{#4}%
+  \ifvmode
+    \dimen@=\prevdepth \nointerlineskip
+    \begingroup\attribute910=\reflowtexAnchorCount\relax\reflowtex@anchorbox\endgroup
+    \prevdepth=\dimen@
+  \else
+    \begingroup\attribute910=\reflowtexAnchorCount\relax\reflowtex@anchorbox\endgroup
+  \fi}
+\def\reflowtex@outline@acl#1#2#3{%
+  \def\reflowtex@ol@file{#1}\def\reflowtex@ol@toc{toc}%
+  \ifx\reflowtex@ol@file\reflowtex@ol@toc
+    \begingroup
+      \protected@edef\reflowtex@ol@kind{#2}%
+      \protected@edef\reflowtex@ol@text{#3}%
+      \let\reflowtex@ol@none\@empty
+      \reflowtex@outline@mark\reflowtex@ol@kind{0}\reflowtex@ol@none\reflowtex@ol@text
+    \endgroup
+    \reflowtex@toc@anchor
+  \fi
+  \reflowtex@acl{#1}{#2}{#3}}
+\def\reflowtex@toc@anchor{%
+  \global\advance\reflowtexTocAnchorCount by 1
+  \global\advance\reflowtexAnchorCount by 1
+  \directlua{Serializer.note_label(\the\reflowtexAnchorCount,
+    "reflowtex-toc-\the\reflowtexTocAnchorCount")}%
+  \ifvmode
+    \dimen@=\prevdepth \nointerlineskip
+    \begingroup\attribute910=\reflowtexAnchorCount\relax\reflowtex@anchorbox\endgroup
+    \prevdepth=\dimen@
+  \else
+    \begingroup\attribute910=\reflowtexAnchorCount\relax\reflowtex@anchorbox\endgroup
+  \fi}
+\def\reflowtex@outline@thm#1#2#3{%
+  \begingroup
+    \protected@edef\reflowtex@ol@name{#1}%
+    \protected@edef\reflowtex@ol@num{#2}%
+    \protected@edef\reflowtex@ol@note{#3}%
+    \protected@edef\reflowtex@ol@title{\reflowtex@ol@name
+      \ifx\reflowtex@ol@note\@empty\else\space(\reflowtex@ol@note)\fi}%
+    \protected@edef\reflowtex@ol@kind{\@currenvir}%
+    \reflowtex@outline@note\reflowtex@ol@kind{9}\reflowtex@ol@num\reflowtex@ol@title
+    \edef\reflowtex@ol@hook{\noexpand\AddToHookNext{para/begin}{%
+      \begingroup\attribute910=\the\reflowtexAnchorCount\relax
+      \noexpand\reflowtex@anchorbox\endgroup}}%
+  \expandafter\endgroup\reflowtex@ol@hook}
+\def\reflowtex@outline@starred#1{%
+  \begingroup
+    \protected@edef\reflowtex@ol@title{#1}%
+    \let\reflowtex@ol@none\@empty
+    \reflowtex@outline@note\reflowtex@ol@secname{0}\reflowtex@ol@none\reflowtex@ol@title
+    \edef\reflowtex@ol@hook{\noexpand\AddToHookNext{para/begin}{%
+      \begingroup\attribute910=\the\reflowtexAnchorCount\relax
+      \noexpand\reflowtex@anchorbox\endgroup}}%
+  \expandafter\endgroup\reflowtex@ol@hook}
+\let\reflowtex@ol@secname\@empty
+\def\reflowtex@ol@startsection#1#2#3#4#5#6{%
+  \def\reflowtex@ol@secname{#1}\reflowtex@ss{#1}{#2}{#3}{#4}{#5}{#6}}
+\def\reflowtex@ol@ssect#1#2#3#4#5{%
+  \reflowtex@outline@starred{#5}\reflowtex@sss{#1}{#2}{#3}{#4}{#5}}
+\def\reflowtex@ams@bt#1#2[#3]{\reflowtex@bt{#1}{#2}[#3]\reflowtex@outline@thm{#1}{#2}{#3}}
+\def\reflowtex@k@bt#1#2{\reflowtex@bt{#1}{#2}\reflowtex@outline@thm{#1}{#2}{}}
+\def\reflowtex@k@obt#1#2#3{\reflowtex@obt{#1}{#2}{#3}\reflowtex@outline@thm{#1}{#2}{#3}}
+\AddToHook{begindocument/end}{%
+  \let\reflowtex@acl\addcontentsline
+  \let\addcontentsline\reflowtex@outline@acl
+  \let\reflowtex@ss\@startsection  \let\@startsection\reflowtex@ol@startsection
+  \let\reflowtex@sss\@ssect        \let\@ssect\reflowtex@ol@ssect
+  \let\reflowtex@bt\@begintheorem
+  \@ifpackageloaded{amsthm}%
+    {\let\@begintheorem\reflowtex@ams@bt}%
+    {\let\@begintheorem\reflowtex@k@bt
+     \let\reflowtex@obt\@opargbegintheorem
+     \let\@opargbegintheorem\reflowtex@k@obt}}
+
+% ── Margin notes (template.tex) ──────────────────────────────────────────────
+\newcommand\reflowtex@marginpar[2][]{\reflowtexAside{marginpar}{place=margin}{#2}}
+\AddToHook{begindocument/end}{\let\marginpar\reflowtex@marginpar}
+
+% ── The 2021 kernel (Tectonic's bundle) ─────────────────────────────────────
+% rtx-numbering.sty hooks \label through the kernel's `label` hook with an
+% argument (LaTeX 2023-06). Where the kernel has neither, that one hook is
+% provided: its code runs after \label has done its work (outermost, as the
+% document begins, so hyperref's and cleveref's \label are inside), between
+% \@bsphack and \@esphack as the kernel runs it.
+\ifdefined\AddToHookWithArguments\else
+  \def\rtx@labelhook#1{}
+  \long\def\AddToHookWithArguments#1#2{%
+    \def\rtx@tmp{#1}\def\rtx@tmpb{label}%
+    \ifx\rtx@tmp\rtx@tmpb
+      \expandafter\def\expandafter\rtx@labelhook\expandafter##\expandafter1\expandafter{\rtx@labelhook{##1}#2}%
+    \else
+      \PackageError{rtx-xetex}{\string\AddToHookWithArguments{#1} needs a newer LaTeX kernel}{Only the label hook is provided.}%
+    \fi}
+  \AddToHook{begindocument/end}{%
+    \let\rtx@kernel@label\label
+    \def\label#1{\rtx@kernel@label{#1}\@bsphack\rtx@labelhook{#1}\@esphack}%
+    \@ifundefined{ltx@label}{}{\let\ltx@label\label}}
+\fi
+
+% ── \addvspace's glue: attribute 917 ────────────────────────────────────────
+% Every \vskip \addvspace puts on the list (and the negative one that takes
+% back \lastskip) carries \attribute917=1, so the editor tells LaTeX's
+% max-merged space from an author's \vskip. The group changes nothing else:
+% \addvspace's own assignments are local scratch registers. Wrapped as the
+% document begins, outside packages that patch \addvspace in the preamble.
+\AddToHook{begindocument/end}{%
+  \let\rtx@addvspace\addvspace
+  \def\addvspace#1{{\attribute917=1 \rtx@addvspace{#1}}}}
+
+% Registers LaTeX hands out must stay below the attributes' (it would take
+% 31,700 more \newcount's to reach them); say so if one day they do not.
+\AddToHook{begindocument/end}{%
+  \ifnum\count10>31999
+    \PackageWarningNoLine{rtx-xetex}{count registers reach \string\count32000:
+      the attributes (\string\attribute909–917) share them}%
+  \fi}
+\endinput

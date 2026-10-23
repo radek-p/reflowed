@@ -1,0 +1,11 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /*
+  Reading options: the companion package's <ReadingButton> (src/companion/
+  src/reading.tsx), a round "Aa" button in the corner opening a panel. On this
+  site it offers the text size, the colour theme and, on pages with
+  widthControl: true (the intro), the column width: data-selection="false"
+  leaves out how selected text looks, data-debug="false" the reader text view.
+  The width a reader picked is saved like the rest, but only pages that offer
+  the control apply it (<html data-width-control>, see baseof.html).
+*/ -}}
+<div data-rtx="reading-button" data-selection="false" data-debug="false"{{ if .Params.widthControl }} data-width="true"{{ end }}></div>

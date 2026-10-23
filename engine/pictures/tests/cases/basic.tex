@@ -1,0 +1,17 @@
+% Lines, a circle, a filled shape in colour, an arrow, a node with text and
+% mathematics.
+\documentclass{article}
+\usepackage{tikz}
+\begin{document}
+Before the picture.
+
+\begin{tikzpicture}
+  \draw (0,0) -- (2,1);
+  \draw (0,0) circle (1) node {$x$};
+  \fill[blue!40] (2,0) rectangle (3,0.5);
+  \draw[->, red, thick] (0,-1) -- (2,-1);
+  \node[draw] at (3,1) {Text $a_1^2$};
+\end{tikzpicture}
+
+After the picture.
+\end{document}

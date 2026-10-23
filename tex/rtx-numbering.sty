@@ -1,0 +1,757 @@
+% rtx-numbering.sty – numbers and references a page fills in: the numbering
+% Based on an earlier prototype (v0.2).
+%
+%   \documentclass{…}  … your packages (amsthm, thmtools, cleveref, biblatex) …
+%   \usepackage{reflowtex}
+%   \usepackage{rtx-numbering}      % anywhere after the class; before the
+%                                   % first \newtheorem / \declaretheorem
+%
+% In a block document every block is compiled on its own (or in a batch of
+% whichever blocks changed), so the numbers TeX prints are wrong across
+% blocks. With this package, in the extraction run (\ifreflowtex), every
+% number and every reference is a \webtext-like slot that the page's overlay
+% (../app/src/refs/numbering.ts) fills in document order, with no
+% recompiling. In an ordinary LaTeX run the package does nothing.
+%
+% Differences from the earlier prototype:
+%   - NO LUA. The state (which number a \label belongs to, labels waiting
+%     for their number) is kept in TeX macros, and the only thing sent out is
+%     Serializer.note_slot(id, "name", sp, st, sh) through \directlua – on
+%     LuaTeX it runs, on XeTeX (Tectonic, rtx-xetex.sty) \directlua is a
+%     \write the converter reads back. A slot renamed later (a \label after
+%     its number) is simply noted again; the last note for an id wins.
+%   - thmtools: \declaretheorem goes through thmtools as usual (its keys,
+%     counter aliases for sibling=, refname=/Refname= for cleveref); only the
+%     final \newtheorem and \theoremstyle are this package's.
+%     thm-restate: a restated copy (\name*) shows the original's number as a
+%     reference to thmtools' own label thmt@@name.
+%   - aliased counters (thmtools' sibling, \newcounteralias) are reported by
+%     the counter they share ("c"), with the name LaTeX stepped kept for
+%     labels.
+%   - labels carry cleveref's type and names: {"k": type, "n": [cref, crefs,
+%     Cref, Crefs], "fc"/"fC": \cref/\Cref format sample, "lf": label
+%     format sample}; a sample has the number as \rtx@N.
+%   - \cref{a,b} and \Cref{a,b}: one slot, "rtxc:a,b".
+%   - caption numbers (\fnum@figure, \fnum@table) are number slots.
+%   - a \tag's text rides a marker slot (so its \label is not lost).
+%   - \rtxcontext{flags} (the TS context prefix, contextFor): appendix,
+%     afterheading; with no flag it undoes what an earlier part of a batch
+%     left (appendix formats, a pending \@afterheading).
+%   - \rtxcited{keys}: the keys the document cites (the TS prefix of the
+%     \printbibliography block); that block's bibliography then lists them.
+%
+% Slot names (the overlay reads them from the mounted block's instances):
+%   "rtxn {json}"  a number: {"s": serial, "c": counter (aliases resolved),
+%                  "r": the name LaTeX stepped, "p": parent counter, "f":
+%                  \the<counter> with counter=4 and parent=23, "h": head,
+%                  "t": TeX's own text, "L": [label records]}
+%                  and, for a restated theorem, "R": the label of the
+%                  original (its number is that label's)
+%   "rtxl {json}"  a label with no number slot of its own: {"L": [...]}
+%   "rtxr:<label>" \ref / \eqref       -> the number
+%   "rtxa:<label>" \autoref            -> "Theorem 3"
+%   "rtxc:<labels>" \cref, "rtxC:<labels>" \Cref (comma-separated labels)
+% A label record: {"s": serial of its number (0: the item current where this
+% block began, -1: none), "l": label, "c": \@currentcounter, "t":
+% \@currentlabel, "k"/"n"/"fc"/"fC"/"lf" (cleveref, when loaded)}.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{rtx-numbering}[2026/09/27 v0.3-editor numbers and references the page fills in]
+
+\ifcsname ifreflowtex\endcsname\else
+  \expandafter\newif\csname ifreflowtex\endcsname
+\fi
+% Print: nothing to do (but the commands the editor's prefixes use exist).
+\ifreflowtex\else
+  \providecommand\rtxcontext[1]{}
+  \providecommand\rtxcited[1]{}
+  \providecommand\rtxbibcites[1]{}
+  \providecommand\rtxdefsbegin{}
+  \providecommand\rtxdefsend{}
+  \providecommand\rtxnestpart[1]{}
+  \providecommand\rtxnestdone{}
+  \expandafter\endinput
+\fi
+
+\ifdefined\reflowtexSlotCount\else\newcount\reflowtexSlotCount\fi
+\providecommand\@currentcounter{}
+\newcount\rtx@serial
+
+% ── Strings and JSON ─────────────────────────────────────────────────────────
+\ExplSyntaxOn
+\str_new:N \l__rtx_a_str
+\cs_generate_variant:Nn \str_replace_all:Nnn { Nee }
+% \rtx@js\cs{material}: \cs := "material" as a JSON string (material
+% protected-expanded, then detokenized; backslash and quote escaped)
+\cs_new_protected:Npn \rtx@js #1 #2
+  {
+    \protected@edef \l__rtx_tmp_tl {#2}
+    \str_set:Nx \l__rtx_a_str { \exp_not:V \l__rtx_tmp_tl }
+    \rtx@jsesc #1
+  }
+% \rtx@jsstr\cs{string}: the same for an already detokenized string
+\cs_new_protected:Npn \rtx@jsstr #1 #2
+  {
+    \str_set:Nx \l__rtx_a_str {#2}
+    \rtx@jsesc #1
+  }
+\cs_new_protected:Npn \rtx@jsesc #1
+  {
+    \str_replace_all:Nee \l__rtx_a_str { \c_backslash_str } { \c_backslash_str \c_backslash_str }
+    \str_replace_all:Nnn \l__rtx_a_str { " } { \" }
+    \tl_gset:Nx #1 { " \l__rtx_a_str " }
+  }
+\tl_new:N \l__rtx_tmp_tl
+% \rtx@strip\cs: a label as amsmath replays it, "{lab}", loses its braces
+\cs_new_protected:Npn \rtx@strip #1
+  { \regex_replace_once:nnN { \A \{ (.*) \} \Z } { \1 } #1 }
+\cs_new:Npn \rtx@streqTF #1 #2 { \str_if_eq:eeTF {#1} {#2} }
+\ExplSyntaxOff
+\def\rtx@fd{\number\fontdimen2\font, \number\fontdimen3\font, \number\fontdimen4\font}
+
+% ── Sending a slot's name out ────────────────────────────────────────────────
+% \rtx@note{id}{fd}{name}: Serializer.note_slot. On XeTeX, rtx-xetex.sty
+% makes \directlua a \write the converter reads (and \luaescapestring a
+% macro), so this is the one place the engine is reached.
+\def\rtx@note#1#2#3{%
+  \directlua{Serializer.note_slot(#1, "\luaescapestring{#3}", #2)}}
+% \rtx@slot{name-macro}{default}: a slot, as \webtext (attribute 913 on every
+% glyph and glue of the default). \rtx@lastid: its id.
+\long\def\rtx@slot#1#2{%
+  \leavevmode
+  \global\advance\reflowtexSlotCount\@ne
+  \xdef\rtx@lastid{\the\reflowtexSlotCount}%
+  \xdef\rtx@lastfd{\rtx@fd}%
+  \rtx@note\rtx@lastid\rtx@lastfd{#1}%
+  \begingroup\attribute913=\reflowtexSlotCount\relax \rtx@unboxundefined #2\endgroup
+  \ifhmode\spacefactor\@m\fi}
+% the space factor after a slot is 1000: a reference to another block is
+% `??` when its block compiles (`?` has \sfcode 3000), so the space after it
+% had end-of-sentence width, and the overlay's "Lemma 3.2" kept it (a double
+% space). What the page shows ends in a digit or letter: 1000, as print.
+% An undefined reference prints LaTeX's (and cleveref's) `\nfss@text{\bfseries ??}`,
+% i.e. `{\mbox{??}}`: a box in the paragraph, which the viewer cannot replace –
+% the overlay then rewrote the drawn glyphs and the paragraph did not re-break
+% In a slot's default the text stays in the paragraph
+% (a group, no box); in maths \nfss@text keeps its box.
+\def\rtx@unboxundefined{\def\nfss@text##1{\ifmmode\mbox{##1}\else{##1}\fi}}
+
+% ── Batch parts ──────────────────────────────────────────────────────────────
+% A part starts afresh (template.tex's \reflowtexbatchpart; on the warm
+% engine each block starts from the snapshot, which is afresh anyway).
+% LaTeX's current label as it stands there is remembered, so a \label that
+% finds it unchanged belongs to the item before the block.
+\def\rtx@partstate{}
+\def\rtx@state{\@currentcounter/\@currentlabel}
+\let\rtx@do\relax \let\rtx@O\relax   % unexpandable in the \xdef's below
+\def\rtx@parted{}      % \rtx@do{raw counter} for every counter numbered in this part
+\def\rtx@orphans{}     % \rtx@O{s}{c}{t}{rest}: labels waiting for a slot
+\def\rtx@last{}        % the record \rtx@onlabel could not place
+\def\rtx@newpart{%
+  \begingroup
+    \def\rtx@do##1{\global\expandafter\let\csname rtx@latest@##1\endcsname\@undefined}%
+    \rtx@parted
+  \endgroup
+  \gdef\rtx@parted{}\gdef\rtx@orphans{}\gdef\rtx@last{}\gdef\rtx@tagmark{}%
+  \protected@xdef\rtx@partstate{\rtx@state}}
+\ifdefined\reflowtexbatchpart
+  \let\rtx@orig@batchpart\reflowtexbatchpart
+  \def\reflowtexbatchpart#1{\rtx@orig@batchpart{#1}\rtx@newpart}
+\fi
+\AddToHook{begindocument/end}{\rtx@newpart}
+
+% ── A counter: the counter it aliases, its parent, its format ────────────────
+% Canonical name: the first counter in \cl@@ckpt whose count register this
+% one is (thmtools' \@counteralias, LaTeX's \newcounteralias \let the \c@).
+\def\rtx@canonof#1{%
+  \@ifundefined{rtx@can@#1}{\rtx@findcanon{#1}}{}%
+  \edef\rtx@canon{\csname rtx@can@#1\endcsname}}
+\def\rtx@findcanon#1{%
+  \begingroup
+    \expandafter\let\expandafter\rtx@reg\csname c@#1\endcsname
+    \let\rtx@found\@empty
+    \def\@elt##1{\ifx\rtx@found\@empty
+      \expandafter\ifx\csname c@##1\endcsname\rtx@reg \def\rtx@found{##1}\fi\fi}%
+    \cl@@ckpt
+    \ifx\rtx@found\@empty\def\rtx@found{#1}\fi
+    \expandafter\xdef\csname rtx@can@#1\endcsname{\rtx@found}%
+  \endgroup}
+% Parent: the counter p whose reset list \cl@p holds it. Cached per counter.
+\def\rtx@parentof#1{%
+  \@ifundefined{rtx@par@#1}{\rtx@findparent{#1}}{}%
+  \edef\rtx@parent{\csname rtx@par@#1\endcsname}}
+\def\rtx@findparent#1{%
+  \global\expandafter\let\csname rtx@par@#1\endcsname\@empty
+  \begingroup
+    \edef\rtx@target{#1}%
+    \def\@elt##1{\rtx@tryparent{##1}}%
+    \cl@@ckpt
+  \endgroup}
+\def\rtx@tryparent#1{%
+  \begingroup
+    \def\@elt##1{\def\rtx@x{##1}%
+      \ifx\rtx@x\rtx@target \expandafter\xdef\csname rtx@par@\rtx@target\endcsname{#1}\fi}%
+    \@ifundefined{cl@#1}{}{\csname cl@#1\endcsname}%
+  \endgroup}
+% Format: \the<counter> with the counter at 4 and its parent at 23.
+\def\rtx@sample#1#2{% #1 the name to print (\the#1), #2 the canonical counter
+  \begingroup
+    \csname c@#2\endcsname=4\relax
+    \ifx\rtx@parent\@empty\else\csname c@\rtx@parent\endcsname=23\relax\fi
+    \protected@edef\rtx@t{\csname the#1\endcsname}%
+    \xdef\rtx@samp{\detokenize\expandafter{\rtx@t}}%
+  \endgroup}
+
+% ── A number ─────────────────────────────────────────────────────────────────
+% \rtx@numslot{counter}{head}{number as TeX prints it}, right after the
+% counter was stepped: the number, as a slot. Kept: \rtx@I@<serial> (id, fd,
+% the JSON fields but "s" and "L"), \rtx@L@<serial> (label records),
+% \rtx@T@<serial> (TeX's text), \rtx@latest@<counter> (this part's last).
+\protected\def\rtx@numslot#1#2#3{%
+  \edef\rtx@c{#1}%
+  \rtx@canonof\rtx@c
+  \rtx@parentof\rtx@canon
+  \rtx@sample\rtx@c\rtx@canon
+  \global\advance\rtx@serial\@ne
+  \edef\rtx@s{\the\rtx@serial}\gdef\rtx@tagmark{}%
+  \rtx@js\rtx@jc{\rtx@canon}\rtx@js\rtx@jr{\rtx@c}\rtx@js\rtx@jp{\rtx@parent}%
+  \rtx@jsstr\rtx@jf{\rtx@samp}\rtx@js\rtx@jh{#2}%
+  \protected@edef\rtx@tex{#3}\edef\rtx@tex{\detokenize\expandafter{\rtx@tex}}%
+  \rtx@jsstr\rtx@jt{\rtx@tex}%
+  \expandafter\xdef\csname rtx@T@\rtx@s\endcsname{\rtx@tex}%
+  \expandafter\xdef\csname rtx@B@\rtx@s\endcsname{%
+    "c":\rtx@jc,"r":\rtx@jr,"p":\rtx@jp,"f":\rtx@jf,"h":\rtx@jh,"t":\rtx@jt\rtx@extra}%
+  % labels that came first: those of this very item get its serial
+  \expandafter\xdef\csname rtx@L@\rtx@s\endcsname{}%
+  \rtx@takeorphans{\rtx@c}{\rtx@tex}{\rtx@s}%
+  \expandafter\xdef\csname rtx@latest@\rtx@c\endcsname{\rtx@s}%
+  \xdef\rtx@parted{\rtx@parted\noexpand\rtx@do{\rtx@c}}%
+  \rtx@slot{}{#3}%
+  \expandafter\xdef\csname rtx@I@\rtx@s\endcsname{{\rtx@lastid}{\rtx@lastfd}}%
+  \rtx@renote\rtx@s}
+\def\rtx@extra{}
+% the item's name, noted again (a label joined it)
+\def\rtx@renote#1{%
+  \edef\rtx@name{rtxn {"s":#1,\csname rtx@B@#1\endcsname,"L":[\csname rtx@L@#1\endcsname]}}%
+  \expandafter\expandafter\expandafter\rtx@renote@\csname rtx@I@#1\endcsname}
+\def\rtx@renote@#1#2{\rtx@note{#1}{#2}{\rtx@name}}
+% a record {"s":…,rest} added to an item's list
+\def\rtx@addrec#1#2#3{% serial, s, rest
+  \expandafter\ifx\csname rtx@L@#1\endcsname\@empty
+    \expandafter\xdef\csname rtx@L@#1\endcsname{{"s":#2,#3}}%
+  \else
+    \expandafter\xdef\csname rtx@L@#1\endcsname{\csname rtx@L@#1\endcsname,{"s":#2,#3}}%
+  \fi}
+% every orphan goes on this item; those of this very item (a label that came
+% before its number: amsmath's display tags) get its serial
+\def\rtx@takeorphans#1#2#3{%
+  \begingroup
+    \def\rtx@O##1##2##3##4{%
+      \def\rtx@os{##1}%
+      \ifnum##1=\m@ne \rtx@streqTF{##2}{#1}{\rtx@streqTF{##3}{#2}{\def\rtx@os{#3}}{}}{}\fi
+      \rtx@addrec{#3}{\rtx@os}{##4}}%
+    \rtx@orphans
+  \endgroup
+  \gdef\rtx@orphans{}}
+
+% ── A label ──────────────────────────────────────────────────────────────────
+% The kernel's label hook (every \label, amsmath's \ltx@label too): the label
+% goes to its item's number slot if it has one in this part; else, in
+% horizontal mode, it rides on a marker slot (the space before it, or a zero
+% skip); else it waits for the next slot of this part.
+\def\rtx@onlabel#1{%
+  \edef\rtx@lab{\detokenize{#1}}\rtx@strip\rtx@lab
+  \protected@edef\rtx@t{\@currentlabel}\edef\rtx@t{\detokenize\expandafter{\rtx@t}}%
+  \edef\rtx@cc{\@currentcounter}%
+  \protected@edef\rtx@now{\rtx@state}%
+  \rtx@jsstr\rtx@jl{\rtx@lab}\rtx@js\rtx@jc{\rtx@cc}\rtx@jsstr\rtx@jt{\rtx@t}%
+  \rtx@crefdata
+  \edef\rtx@rest{"l":\rtx@jl,"c":\rtx@jc,"t":\rtx@jt\rtx@jcref}%
+  \let\rtx@placed\relax
+  \ifx\rtx@now\rtx@partstate\else
+    \@ifundefined{rtx@latest@\rtx@cc}{}{%
+      \edef\rtx@s{\csname rtx@latest@\rtx@cc\endcsname}%
+      \rtx@streqTF{\csname rtx@T@\rtx@s\endcsname}{\rtx@t}{%
+        \rtx@addrec{\rtx@s}{\rtx@s}{\rtx@rest}%
+        \rtx@renote\rtx@s
+        \let\rtx@placed\@empty}{}}%
+  \fi
+  \ifx\rtx@placed\relax
+    \xdef\rtx@last{\noexpand\rtx@O{\ifx\rtx@now\rtx@partstate 0\else -1\fi}{\rtx@cc}{\rtx@t}{\rtx@rest}}%
+    \ifhmode\rtx@marker\else
+     \if@inlabel
+      % right after \item (\item\label{…}): the item's paragraph starts here
+      % (as its text would), the label rides a marker, and the space after
+      % \label is skipped (\@esphack sees a skip before it)
+      \leavevmode\rtx@marker\global\@savsk\p@\global\@savsf\@m
+     \else
+      % a display's \tag: its label comes after the tag was typeset
+      \ifx\rtx@tagmark\@empty\rtx@orphan\else
+        \expandafter\rtx@tagjoin\rtx@tagmark\gdef\rtx@last{}%
+      \fi
+     \fi
+    \fi
+  \fi}
+\AddToHookWithArguments{label}{\rtx@onlabel{#1}}
+\def\rtx@orphan{\xdef\rtx@orphans{\rtx@orphans\rtx@last}\gdef\rtx@last{}}
+% a marker slot carrying the orphans and the last label; its default the
+% space before it (or a zero skip), or #1 if given (\rtx@markerwith)
+\def\rtx@markername{%
+  \begingroup
+    \def\rtx@list{}%
+    \def\rtx@O##1##2##3##4{\edef\rtx@list{\ifx\rtx@list\@empty\else\rtx@list,\fi{"s":##1,##4}}}%
+    \rtx@orphans\rtx@last
+    \xdef\rtx@name{rtxl {"L":[\rtx@list]}}\global\let\rtx@list@made\rtx@list
+  \endgroup
+  \gdef\rtx@orphans{}\gdef\rtx@last{}}
+\def\rtx@marker{%
+  \rtx@markername
+  \@tempskipa\lastskip
+  \ifdim\@tempskipa=\z@
+    \rtx@slot{\rtx@name}{\nobreak\hskip\z@}%
+  \else
+    \unskip
+    \rtx@slot{\rtx@name}{\hskip\@tempskipa}%
+  \fi}
+% a \tag's text: a marker whose label comes later (\rtx@tagjoin)
+\def\rtx@tagmark{}
+\def\rtx@markerwith#1{%
+  \rtx@markername
+  \let\rtx@tagL\rtx@list@made
+  \rtx@slot{\rtx@name}{#1}%
+  \xdef\rtx@tagmark{{\rtx@lastid}{\rtx@lastfd}}\global\let\rtx@tagL\rtx@tagL}
+\def\rtx@tagjoin#1#2{%
+  \xdef\rtx@tagL{\ifx\rtx@tagL\@empty\else\rtx@tagL,\fi{"s":-1,\rtx@rest}}%
+  \edef\rtx@name{rtxl {"L":[\rtx@tagL]}}%
+  \rtx@note{#1}{#2}{\rtx@name}}
+
+% cleveref's view of the label: its type (from \cref@currentlabel, as
+% cleveref's \label reads it), the type's names, and format samples.
+\protected\def\rtx@N{}
+\def\rtx@jcref{}
+\def\rtx@gettype[#1]#2\@nil{\def\rtx@k{#1}}
+\def\rtx@crefdata{%
+  \def\rtx@jcref{}%
+  \ifdefined\cref@currentlabel
+    \ifx\cref@currentlabel\@empty\else
+      \expandafter\rtx@gettype\cref@currentlabel\@nil
+      \rtx@crefsample
+    \fi
+  \fi}
+\def\rtx@jsname#1#2{\@ifundefined{#2}{\gdef#1{""}}{\rtx@js#1{\csname #2\endcsname}}}
+\def\rtx@crefsample{%
+  \rtx@js\rtx@jk{\rtx@k}%
+  \rtx@jsname\rtx@n@a{cref@\rtx@k @name}\rtx@jsname\rtx@n@b{cref@\rtx@k @name@plural}%
+  \rtx@jsname\rtx@n@c{Cref@\rtx@k @name}\rtx@jsname\rtx@n@d{Cref@\rtx@k @name@plural}%
+  \@ifundefined{cref@\rtx@k @format}{\gdef\rtx@fc{""}}{\rtx@js\rtx@fc{\csname cref@\rtx@k @format\endcsname{\rtx@N}{}{}}}%
+  \@ifundefined{Cref@\rtx@k @format}{\gdef\rtx@fC{""}}{\rtx@js\rtx@fC{\csname Cref@\rtx@k @format\endcsname{\rtx@N}{}{}}}%
+  \@ifundefined{cref@\rtx@k @label}%
+    {\ifdefined\cref@default@label \rtx@js\rtx@lf{\cref@default@label{\rtx@N}{}{}}\else\gdef\rtx@lf{""}\fi}%
+    {\rtx@js\rtx@lf{\csname cref@\rtx@k @label\endcsname{\rtx@N}{}{}}}%
+  \edef\rtx@jcref{,"k":\rtx@jk,"n":[\rtx@n@a,\rtx@n@b,\rtx@n@c,\rtx@n@d],"fc":\rtx@fc,"fC":\rtx@fC,"lf":\rtx@lf}}
+
+% The full stop after the proof's title, as amsthm's \@addpunct: not when the
+% title ends in punctuation already (\begin{proof}[Proof of Lemma 3.], a
+% claimproof whose default is [Proof.]): its space factor is then above 1000
+% (amsgen keeps it so under \frenchspacing too). Theorem heads always get
+% theirs, as amsthm's do ("Remark 2 (Smith et al.).").
+\def\rtx@addpunct#1{\relax\ifhmode\ifnum\spacefactor>\@m\else#1\fi\fi}
+
+% A long theorem or proof can be edited as one block per paragraph. Each
+% paragraph is compiled inside its environment:
+%   \rtxnestpart{head,end}\begin{proof}[…]\rtxnestdone <paragraph> \end{proof}
+% with the flags   head: typeset the head ("Proof.", "Theorem 3 (Name).")
+% (the first paragraph), end: the end mark (the QED box) and the space after
+% (the last). Without head the environment goes on as its next paragraph
+% would: no head, no number (the counter is not stepped, so a \label there
+% refers to what LaTeX's current label was), no space above, the body font;
+% without end: no QED, no space below. Only the next theorem or proof
+% environment takes the flags; \rtxnestdone drops them if none did.
+\newif\ifrtx@nest \newif\ifrtx@nesthead \newif\ifrtx@nestend
+\def\rtx@nestflag@head{head}\def\rtx@nestflag@end{end}
+\newcommand\rtxnestpart[1]{%
+  \global\rtx@nesttrue\global\rtx@nestheadfalse\global\rtx@nestendfalse
+  \@for\rtx@x:=#1\do{%
+    \ifx\rtx@x\rtx@nestflag@head\global\rtx@nestheadtrue\fi
+    \ifx\rtx@x\rtx@nestflag@end\global\rtx@nestendtrue\fi}}
+\def\rtxnestdone{\global\rtx@nestfalse\ignorespaces}
+% in an environment's begin: \rtx@nh / \rtx@ne = T (head / end mark) or F,
+% local to the environment (its end reads \rtx@ne)
+\def\rtx@nesttake{%
+  \ifrtx@nest
+    \global\rtx@nestfalse
+    \edef\rtx@nh{\ifrtx@nesthead T\else F\fi}\edef\rtx@ne{\ifrtx@nestend T\else F\fi}%
+  \else \def\rtx@nh{T}\def\rtx@ne{T}\fi}
+\def\rtx@nh{T}\def\rtx@ne{T}
+% The abstract is the class's own environment: its title (article, report: a
+% centred heading; lipics-v2021: the rule and the grey box) only for the first
+% paragraph; the setting every paragraph needs (article: \small and the
+% quotation's margins; lipics: its 9/12 pt font) for the others. LIPIcs sets
+% the subject classification, keywords, funding … at the end: only after the
+% last paragraph.
+\def\rtx@abstract@goon{%
+  \@ifclassloaded{lipics-v2021}{\fontsize{9}{12}\selectfont}%
+    {\if@twocolumn\else\small\quotation\fi}\ignorespaces}
+\def\rtx@abstract@goonend{%
+  \@ifclassloaded{lipics-v2021}{\par}{\if@twocolumn\else\endquotation\fi}}
+\AddToHook{env/abstract/begin}{%
+  \rtx@nesttake
+  \if T\rtx@nh\else\let\abstract\rtx@abstract@goon\fi
+  \if T\rtx@ne\else\let\endabstract\rtx@abstract@goonend\fi}
+
+% ── Theorems: the package's own ──────────────────────────────────────────────
+% Styles, as amsthm's: plain (bold head, italic body), definition (bold head,
+% upright body), remark (italic head, upright body, half the space around).
+\def\rtx@style@plain{\def\rtx@headfont{\bfseries}\def\rtx@bodyfont{\itshape}\def\rtx@skip{\topsep}}
+\def\rtx@style@definition{\def\rtx@headfont{\bfseries}\def\rtx@bodyfont{\normalfont}\def\rtx@skip{\topsep}}
+\def\rtx@style@remark{\def\rtx@headfont{\itshape}\def\rtx@bodyfont{\normalfont}\def\rtx@skip{.5\topsep}}
+\def\rtx@curstyle{plain}
+\newcommand\rtx@theoremstyle[1]{%
+  \@ifundefined{rtx@style@#1}%
+    {\PackageWarning{rtx-numbering}{Theorem style `#1' is not one of plain,
+       definition, remark: plain used on the web}\def\rtx@curstyle{plain}}%
+    {\def\rtx@curstyle{#1}}}
+% \newtheorem*?{env}[shared]{Head}[within]
+\NewDocumentCommand\rtx@newtheorem{s m o m o}{%
+  \IfBooleanTF{#1}{\def\rtx@ctr{}}{%
+    \IfValueTF{#3}{\def\rtx@ctr{#3}}{%
+      \def\rtx@ctr{#2}%
+      \IfValueTF{#5}%
+        {\newcounter{#2}[#5]%
+         \expandafter\def\csname the#2\endcsname{\csname the#5\endcsname.\arabic{#2}}}%
+        {\newcounter{#2}}}}%
+  \expandafter\edef\csname rtx@thm@#2\endcsname{{\rtx@ctr}{\unexpanded{#4}}{\rtx@curstyle}}%
+  \NewDocumentEnvironment{#2}{o}%
+    {\expandafter\expandafter\expandafter\rtx@thmbegin\csname rtx@thm@#2\endcsname{##1}}%
+    {\rtx@thmend}%
+  \rtx@webbox{#2}}
+% counter (empty: unnumbered), #2 head, #3 style, #4 the note (-NoValue- if none)
+\def\rtx@thmbegin#1#2#3#4{%
+  \rtx@nesttake
+  \csname rtx@style@#3\endcsname
+  \if T\rtx@nh
+  \par\addvspace{\rtx@skip}\addvspace{-\parskip}%
+  \normalfont
+  \ifx\relax#1\relax\else\refstepcounter{#1}\fi   % outside the head's group: \@currentlabel stays
+  % a thm-restate copy (\name*): its number is the original's
+  \def\rtx@rst{}%
+  \ifx\relax#1\relax\else
+    \expandafter\let\expandafter\rtx@thethm\csname the#1\endcsname
+    \expandafter\rtx@isrestated\rtx@thethm\thmt@trivialref{}{}\@nil
+  \fi
+  % numbers inside a restated copy (its equations) are the original's: they
+  % say so ("R"), and the overlay counts them as the original's
+  \ifx\rtx@rst\@empty\else\edef\rtx@extra{,"R":"\rtx@rst"}\fi
+  % The head waits for the first paragraph (\everypar), as amsthm's does, so
+  % a \label after \begin{theorem} is read in vertical mode; it is set there
+  % as running text, not in a box, so its number is a slot the viewer can
+  % replace.
+  \edef\rtx@head{%
+    \noexpand\rtx@headset{\unexpanded{#1}}{\unexpanded{#2}}{\unexpanded{#4}}{\rtx@rst}}%
+  \everypar{\rtx@dohead}%
+  \else
+  % a later paragraph of a nested theorem (\rtxnestpart without head): no
+  % head, no number, no space above; it goes on as the paragraph after the
+  % first would (its \label refers to what LaTeX's current label was)
+  \par\normalfont
+  \fi
+  \rtx@bodyfont\ignorespaces}
+\def\rtx@headset#1#2#3#4{%
+  {\normalfont\rtx@headfont #2%
+   \ifx\relax#1\relax\else
+     \space
+     \ifx\relax#4\relax \rtx@numslot{#1}{#2}{\csname the#1\endcsname}%
+     \else \rtx@link{\rtx@refslot{rtxr}}{#4}\fi
+   \fi
+   \IfValueT{#3}{ {\normalfont(#3)}}%
+   .}%   (amsthm: a theorem head's full stop always, \thm@headpunct; only the proof's title checks)
+  \hskip 5\p@\@plus\p@\@minus\p@}
+\def\rtx@dohead{\everypar{}{\setbox\z@\lastbox}\rtx@head}
+\def\rtx@thmend{\par\if T\rtx@ne\addvspace{\rtx@skip}\@endpetrue\fi}
+% thm-restate's copy defines \the<env> as \thmt@trivialref{thmt@@name}{??}
+% (protected@edef'd); made \protected here, it stays readable there.
+\def\rtx@isrestated#1\thmt@trivialref#2#3#4\@nil{\def\rtx@rst{#2}}
+% [boxed] (reflowtex.sty): its hook boxes amsthm's theorems at
+% \@begintheorem, which these do not use; declare each a web box instead.
+\def\rtx@webbox#1{%
+  \expandafter\ifx\csname ifreflowtex@boxed\endcsname\iftrue
+    \ifdefined\DeclareWebBox \DeclareWebBox{#1}\fi
+  \fi}
+
+% proof[title]: an italic run-in title, the body upright, a QED box at the
+% end (or where \qedhere puts it)
+\newif\ifrtx@qed
+\def\rtx@openbox{\leavevmode
+  \hbox to.77778em{\hfil\vrule\vbox to.675em{\hrule width.6em\vfil\hrule}\vrule\hfil}}
+\def\rtx@qedbox{\leavevmode\unskip\penalty9999 \hbox{}\nobreak\hfill\quad\hbox{\qedsymbol}}
+\def\rtx@qedhere{%
+  \ifrtx@qed
+    \global\rtx@qedfalse
+    \ifmmode
+      \ifdefined\tag \tag*{\qedsymbol}\else \eqno\hbox{\qedsymbol}\fi
+    \else \rtx@qedbox \fi
+  \fi}
+\NewDocumentEnvironment{rtx@proof}{O{\proofname}}%
+  {\rtx@nesttake
+   \par\if T\rtx@nh\addvspace{\topsep}\addvspace{-\parskip}\fi
+   \edef\rtx@qedouter{\ifrtx@qed T\fi}\global\rtx@qedtrue
+   \normalfont
+   \if T\rtx@nh\noindent{\itshape #1\rtx@addpunct{.}}\hskip\labelsep\fi
+   \ignorespaces}%
+  {\if T\rtx@ne\ifrtx@qed\rtx@qedbox\fi\fi
+   \if T\rtx@qedouter\global\rtx@qedtrue\else\global\rtx@qedfalse\fi
+   \par\if T\rtx@ne\addvspace{\topsep}\@endpetrue\fi}
+
+% Taking over: now, and again if amsthm is loaded after this package.
+% thmtools keeps its own \declaretheorem (keys, aliases, refname); its final
+% \newtheorem and \theoremstyle are ours.
+\def\rtx@takeover{%
+  \let\newtheorem\rtx@newtheorem
+  \let\theoremstyle\rtx@theoremstyle
+  \providecommand\proofname{Proof}%
+  \let\openbox\rtx@openbox
+  \def\qedsymbol{\openbox}%
+  \def\qed{\rtx@qedbox}%
+  \def\qedhere{\rtx@qedhere}%
+  \expandafter\let\csname proof\expandafter\endcsname\csname rtx@proof\endcsname
+  \expandafter\let\csname endproof\expandafter\endcsname\csname endrtx@proof\endcsname
+  \rtx@thmtools}
+\def\rtx@thmtools{%
+  \@ifpackageloaded{thm-patch}{%
+    \let\thmt@original@newtheorem\rtx@newtheorem
+    \let\thmt@theoremdefiner\rtx@newtheorem
+    % thm-patch's \newtheorem (aliases, hooks) in front of ours
+    \let\newtheorem\thmt@patched@newtheorem}{}%
+  \@ifpackageloaded{thm-kv}{%
+    \let\thmt@originalthmstyle\rtx@theoremstyle
+    \def\thmt@setstyle##1{\rtx@theoremstyle{##1}}%
+    \def\theoremstyle##1{\def\thmt@outerstyle{##1}\rtx@theoremstyle{##1}}}{}%
+  \@ifpackageloaded{thm-restate}{%
+    \ifx\thmt@trivialref\rtx@trivialref\else
+      \let\rtx@orig@trivialref\thmt@trivialref
+      \let\thmt@trivialref\rtx@trivialref
+    \fi}{}}
+\protected\def\rtx@trivialref#1#2{\rtx@orig@trivialref{#1}{#2}}
+% thm-patch loaded before us: its \newtheorem (aliases, hooks) is kept, in
+% front of ours
+\@ifpackageloaded{thm-patch}{\let\thmt@patched@newtheorem\newtheorem}{}
+\rtx@takeover
+% thm-patch saves \newtheorem when it loads; its own is put back in front.
+\AddToHook{package/thm-patch/after}{\let\thmt@patched@newtheorem\newtheorem\rtx@thmtools}
+\AddToHook{package/thm-kv/after}{\rtx@thmtools}
+\AddToHook{package/thm-restate/after}{\rtx@thmtools}
+% amsthm loaded after this package defines these with \newcommand: let it,
+% then take them back.
+\def\rtx@release{%
+  \@for\rtx@x:=theoremstyle,qed,qedhere,qedsymbol,openbox,proof,endproof,proofname\do
+    {\expandafter\let\csname\rtx@x\endcsname\@undefined}}
+\AddToHook{package/amsthm/before}{\rtx@release}
+\AddToHook{package/amsthm/after}{\rtx@takeover}
+
+% ── References ───────────────────────────────────────────────────────────────
+% the kind (rtxr, rtxa, rtxc, rtxC), #2 the label(s), #3 the default.
+\def\rtx@refslot#1#2{\rtx@refslotd{#1}{#2}{\rtx@refvalue{#2}}}
+\def\rtx@refslotd#1#2#3{%
+  \edef\rtx@lab{\zap@space#2 \@empty}\edef\rtx@lab{\detokenize\expandafter{\rtx@lab}}\rtx@strip\rtx@lab
+  \edef\rtx@name{#1:\rtx@lab}%
+  \rtx@slot{\rtx@name}{#3}}
+\def\rtx@refvalue#1{%
+  \@ifundefined{r@#1}{0}{\expandafter\expandafter\expandafter\@car\csname r@#1\endcsname\@nil}}
+% \rtx@link{printer}{label}: what the printer prints for the label, as a link
+% to it when the template links references (it does in the extraction run).
+\def\rtx@link#1#2{\ifdefined\reflowtex@wrapref \reflowtex@wrapref{#1}{#2}\else #1{#2}\fi}
+\def\rtx@firstlabel#1,#2\@nil{#1}
+\def\rtx@crefprint#1#2{% kind, labels: the default is cleveref's own text
+  \edef\rtx@lfirst{\rtx@firstlabel#2,\@nil}%
+  \rtx@link{\rtx@crefprint@{#1}{#2}}{\rtx@lfirst}}
+\def\rtx@crefprint@#1#2#3{\rtx@refslotd{#1}{#2}{\rtx@undefinplace\csname rtx@orig@#1\endcsname{#2}}}
+% In a \cref slot's default, cleveref's `??` for a label of another block (always
+% undefined in the block's own run) is set in the surrounding font, not bold: the page draws the
+% slot's text ("Bounds 1 to 4") in the default's first glyph's font, so the text was bold and
+% measured bold, wider than print, and the paragraph broke unlike the whole document.
+\def\rtx@undefinplace{\def\nfss@text##1{\ifmmode\mbox{##1}\else{\let\reset@font\relax\let\bfseries\relax##1}\fi}}
+\def\rtx@refparen#1{(\rtx@refslot{rtxr}{#1})}
+
+% ── \mbox around a reference: unboxed on the web ────────────────────────────
+\ExplSyntaxOn
+\cs_new_protected:Npn \rtx@unboxed #1
+  {
+    \tl_set:Nn \l_tmpa_tl {#1}
+    \tl_replace_all:Nnn \l_tmpa_tl { ~ } { \nobreakspace }
+    \mode_leave_vertical:
+    \group_begin:
+      \lefthyphenmin = 62 \scan_stop:
+      \righthyphenmin = 62 \scan_stop:
+      \tl_use:N \l_tmpa_tl
+    \group_end:
+  }
+\bool_new:N \l__rtx_hasref_bool
+\cs_new_protected:Npn \rtx@hasref #1 #2 #3
+  {
+    \bool_set_false:N \l__rtx_hasref_bool
+    \clist_map_inline:nn { \ref, \eqref, \autoref, \cref, \Cref }
+      { \tl_if_in:nnT {#1} {##1} { \bool_set_true:N \l__rtx_hasref_bool } }
+    \bool_if:NTF \l__rtx_hasref_bool {#2} {#3}
+  }
+\ExplSyntaxOff
+
+% ── Context (the page's prefix to a block: contextFor in refs/context.ts) ────
+% \rtxcontext{appendix,afterheading}. Each block is compiled without the
+% blocks before it; what they would have left that shows in this block is
+% given here. With no flag, what an earlier part of the same batch left is
+% undone (so a result does not depend on the batch it was compiled in).
+\def\rtx@saveformats{%
+  \@for\rtx@x:=thechapter,thesection,theHchapter,theHsection,@chapapp\do{%
+    \expandafter\let\csname rtx@save@\rtx@x\expandafter\endcsname\csname\rtx@x\endcsname}}
+\def\rtx@restoreformats{%
+  \@for\rtx@x:=thechapter,thesection,theHchapter,theHsection,@chapapp\do{%
+    \expandafter\ifx\csname rtx@save@\rtx@x\endcsname\relax\else
+      \global\expandafter\let\csname\rtx@x\expandafter\endcsname\csname rtx@save@\rtx@x\endcsname
+    \fi}}
+\newcommand\rtxcontext[1]{%
+  \def\rtx@ctx@appendix{}\def\rtx@ctx@afterheading{}%
+  \@for\rtx@x:=#1\do{\expandafter\let\csname rtx@ctx@\rtx@x\endcsname\relax}%
+  \ifx\rtx@ctx@appendix\relax \ifdefined\appendix\appendix\fi \else \rtx@restoreformats \fi
+  \ifx\rtx@ctx@afterheading\relax
+    \@afterindentfalse\@afterheading
+  \else
+    \if@nobreak \global\@nobreakfalse \everypar{}\fi
+  \fi
+  % the block's own numbering starts here (not before the definitions and
+  % restatables the prefix typeset into discarded boxes)
+  \rtx@newpart
+  \ignorespaces}
+
+% \rtxdefsbegin … \rtxdefsend: definitions of earlier blocks, run again
+% before this one (contextFor). Defining what is already defined is allowed
+% in between: in a batch the defining block may have run already.
+\def\rtxdefsbegin{%
+  \let\rtx@save@ifdefinable\@ifdefinable
+  \long\def\@ifdefinable##1##2{##2}%
+  \let\rtx@save@newenv\new@environment
+  \def\new@environment##1{%
+    \expandafter\let\csname ##1\endcsname\relax
+    \expandafter\let\csname end##1\endcsname\relax
+    \rtx@save@newenv{##1}}}
+\def\rtxdefsend{%
+  \let\@ifdefinable\rtx@save@ifdefinable
+  \let\new@environment\rtx@save@newenv}
+
+% ── The bibliography's entries (the prefix of the \printbibliography block) ─
+% \rtxcited{key,key,…}: every key the document cites; the block's
+% \printbibliography then lists exactly those (a category), in the .bbl's
+% order.
+\newif\ifrtx@cited
+\newcommand\rtxcited[1]{%
+  \ifdefined\addtocategory
+    \addtocategory{rtxcited}{#1}\global\rtx@citedtrue
+  \fi\ignorespaces}
+\AddToHook{begindocument/before}{%
+  \@ifpackageloaded{biblatex}{\DeclareBibliographyCategory{rtxcited}}{}}
+
+% ── Citations of a bibtex-style bibliography (a thebibliography) ──────
+% A block is compiled on its own: there is no .aux from an earlier run, so no
+% \bibcite and every \cite would print [?]. The TS context of a block that
+% cites gives the cited keys' \bibitem's (web/src/bib/bibitems.ts):
+%   \rtxbibcites{\rtxbibitem{enumiv}{NAT@ctr}{\bibitem[opt]{key}}…}
+% They run in a discarded box with \@auxout caught in a file, as the
+% bibliography writes its .aux lines (the kernel's, natbib's or hyperref's own
+% \bibitem, the counters as they stand before that item), and the \bibcite
+% lines are read back at once, as the next LaTeX run would read them.
+\newwrite\rtx@bibout
+\newcommand\rtxbibcites[1]{%
+  \begingroup
+    \immediate\openout\rtx@bibout=rtx-bibcites.aux\relax
+    \let\@auxout\rtx@bibout \@fileswtrue
+    \def\rtxbibitem##1##2##3{\c@enumiv##1\relax
+      \ifdefined\c@NAT@ctr\global\c@NAT@ctr##2\relax\fi ##3\leavevmode}%
+    \setbox\z@\vbox{\list{}{\usecounter{enumiv}}#1\endlist}%
+    \immediate\closeout\rtx@bibout
+  \endgroup
+  \begingroup
+    % \@newl@bel is a preamble command (LaTeX reads the .aux at \begin{document})
+    \def\@newl@bel##1##2##3{\global\@namedef{##1@##2}{##3}}%
+    \makeatletter
+    \InputIfFileExists{rtx-bibcites.aux}{}{}%
+  \endgroup\ignorespaces}
+
+% ── Installed last, over whatever the preamble's packages defined ───────────
+\AddToHook{begindocument/end}{\rtx@install}
+\def\rtx@install{%
+  \rtx@saveformats
+  % section numbers (\@seccntformat); the heading's hanging box unpacked into
+  % the paragraph (the hang indent kept), so the number is in running text
+  % in the class's own shape: LaTeX's default ends with \quad, a class's may
+  % not (lipics-v2021: the number in a \colorbox, its \quad outside); a format
+  % of another shape gets LaTeX's
+  \def\rtx@c@seccnt##1{\csname the##1\endcsname}%
+  \ifx\@seccntformat\rtx@c@seccnt
+    \def\@seccntformat##1{\rtx@numslot{##1}{##1}{\csname the##1\endcsname}}%
+  \else
+    \def\@seccntformat##1{\rtx@numslot{##1}{##1}{\csname the##1\endcsname}\quad}%
+  \fi
+  \def\@hangfrom##1{\setbox\@tempboxa\hbox{{##1}}%
+    \hangindent\wd\@tempboxa\noindent\unhbox\@tempboxa}%
+  % equation numbers (in the display's box: a slot there keeps its default,
+  % the overlay's DOM fallback shows the number); a \tag's text rides a
+  % marker, so a label on it is kept
+  \def\rtx@theeq{\theequation}%
+  \ifdefined\tagform@
+    \let\rtx@orig@tagform\tagform@
+    \def\tagform@##1{\def\rtx@tmp{##1}%
+      \ifx\rtx@tmp\rtx@theeq \rtx@orig@tagform{\rtx@numslot{equation}{equation}{\theequation}}%
+      \else \rtx@orig@tagform{\rtx@markerwith{##1}}\fi}%
+  \fi
+  \def\@eqnnum{{\normalfont\normalcolor(\rtx@numslot{equation}{equation}{\theequation})}}%
+  % caption numbers
+  \ifdefined\fnum@figure
+    \def\fnum@figure{\figurename\nobreakspace\rtx@numslot{figure}{\figurename}{\thefigure}}\fi
+  \ifdefined\fnum@table
+    \def\fnum@table{\tablename\nobreakspace\rtx@numslot{table}{\tablename}{\thetable}}\fi
+  % references: a slot, inside the template's link (\reflowtex@wrapref:
+  % attribute 909 on the glyphs), as the \ref it replaces was
+  \DeclareDocumentCommand\ref{s m}{\rtx@link{\rtx@refslot{rtxr}}{##2}}%
+  \ifdefined\eqref
+    \DeclareDocumentCommand\eqref{s m}{\textup{\normalfont\rtx@link\rtx@refparen{##2}}}%
+  \fi
+  \ifdefined\autoref
+    \DeclareDocumentCommand\autoref{s m}{\rtx@link{\rtx@refslot{rtxa}}{##2}}%
+  \fi
+  \ifdefined\cref
+    \def\rtx@orig@rtxc##1{\@cref{cref}{##1}}\def\rtx@orig@rtxC##1{\@cref{Cref}{##1}}
+    \DeclareDocumentCommand\cref{s m}{\rtx@crefprint{rtxc}{##2}}%
+    \DeclareDocumentCommand\Cref{s m}{\rtx@crefprint{rtxC}{##2}}%
+  \fi
+  % citations: what a cite command prints, as it prints it, rides a marker slot "rtxk:<keys>" (the
+  % overlay leaves its text alone), so the page can find a citation's glyphs (refnav's citation card)
+  \@for\rtx@c:=\rtx@citecmds\do{\ifcsname\rtx@c\endcsname\expandafter\rtx@wrapcite\expandafter{\rtx@c}\fi}%
+  % the bibliography block lists the cited keys (\rtxcited)
+  \ifdefined\printbibliography
+    \let\rtx@orig@printbib\printbibliography
+    \def\printbibliography{\@ifnextchar[\rtx@printbib{\rtx@printbib[]}}%
+  \fi
+  \let\rtx@orig@mbox\mbox
+  \protected\long\def\mbox##1{%
+    \ifmmode\rtx@orig@mbox{##1}\else\ifinner\rtx@orig@mbox{##1}\else
+      \rtx@hasref{##1}{\rtx@unboxed{##1}}{\rtx@orig@mbox{##1}}%
+    \fi\fi}%
+}
+% the cite commands of the kernel, natbib and biblatex: each keeps its own definition (\rtx@orig@cite@<name>)
+% and its arguments (a star, up to two optional ones, the keys), and prints inside a slot named by its keys
+\def\rtx@citecmds{cite,citep,citet,citealp,citealt,citeauthor,citeyear,citeyearpar,citenum,Citet,Citep,Citealp,Citealt,Citeauthor,parencite,Parencite,textcite,Textcite,autocite,Autocite,smartcite,Smartcite,supercite}
+\def\rtx@wrapcite#1{%
+  % (a copy that keeps a robust or xparse command whole: \let would share its internals with the new one)
+  \expandafter\NewCommandCopy\csname rtx@orig@cite@#1\expandafter\endcsname\csname#1\endcsname
+  \expandafter\DeclareDocumentCommand\csname#1\endcsname{s o o m}{\rtx@citeslot{#1}{##1}{##2}{##3}{##4}}}
+\def\rtx@citeslot#1#2#3#4#5{%
+  \def\rtx@cargs{}%
+  \IfBooleanT{#2}{\def\rtx@cargs{*}}%
+  \IfValueT{#3}{\expandafter\def\expandafter\rtx@cargs\expandafter{\rtx@cargs[#3]}}%
+  \IfValueT{#4}{\expandafter\def\expandafter\rtx@cargs\expandafter{\rtx@cargs[#4]}}%
+  \edef\rtx@lab{\zap@space#5 \@empty}\edef\rtx@lab{\detokenize\expandafter{\rtx@lab}}%
+  \edef\rtx@name{rtxk:\rtx@lab}%
+  \edef\rtx@call{\noexpand\rtx@slot\noexpand\rtx@name{\expandafter\noexpand\csname rtx@orig@cite@#1\endcsname
+    \unexpanded\expandafter{\rtx@cargs}{\unexpanded{#5}}}}%
+  \rtx@call}
+\def\rtx@printbib[#1]{%
+  \ifrtx@cited \rtx@orig@printbib[category=rtxcited,#1]\else \rtx@orig@printbib[#1]\fi}
+\endinput

@@ -1,0 +1,9 @@
+# Built and downloaded files: never tracked
+node_modules/
+build/
+dist/
+# what the test suites write (logs, results, screenshots)
+test-results/
+# seed files are built (scripts/seed.ts writes build/seed/)
+*seed*.json
+.DS_Store

@@ -1,0 +1,7 @@
+build/
+dist/
+node_modules/
+test-results/*.json
+test-results/*/browser-*.png
+test-results/*/node-*.png
+test-results/*/luatex-*.png

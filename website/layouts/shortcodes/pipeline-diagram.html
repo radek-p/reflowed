@@ -1,0 +1,73 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /* The How it works diagram: the blocks, as a stack, through the one engine in its worker, and their results to the viewer and the cache, drawn
+       in the page's colours (currentColor and --lt-primary), so it follows
+       the theme. Usage: {{< pipeline-diagram >}} */ -}}
+<figure class="pipeline-diagram">
+<svg viewBox="0 0 360 334" role="img" aria-labelledby="pd-title pd-desc">
+  <title id="pd-title">From source to screen</title>
+  <desc id="pd-desc">The document's blocks, drawn as a stack of cards, go into one TeX engine, which runs in a worker beside the page and typesets them one at a time. Out of it comes a stack of results, boxes and glue, one per block. They go to the Reflow TeX viewer, which breaks the lines for the width and draws them as SVG, and to a cache in the browser's storage, from which a block that has not changed is shown again without typesetting.</desc>
+  <defs>
+    <marker id="pd-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 1 L9 5 L0 9 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g class="pd-flow">
+    <path d="M172 52 V80"/>
+    <path d="M180 148 V172"/>
+    <path d="M140 226 L100 258"/>
+    <path d="M215 226 L262 258"/>
+    <path class="pd-dashed" d="M196 296 H178"/>
+  </g>
+  <g class="pd-stack">
+    <rect class="pd-card" x="113" y="0" width="150" height="34" rx="5"/>
+    <rect class="pd-card" x="105" y="8" width="150" height="34" rx="5"/>
+    <rect class="pd-card pd-front" x="97" y="16" width="150" height="34" rx="5"/>
+    <text x="109" y="38" class="pd-mono">a block of LaTeX</text>
+  </g>
+  <g class="pd-box">
+    <rect x="30" y="82" width="300" height="64" rx="6"/>
+  </g>
+  <g class="pd-stack">
+    <rect class="pd-card" x="113" y="174" width="150" height="34" rx="5"/>
+    <rect class="pd-card" x="105" y="182" width="150" height="34" rx="5"/>
+    <rect class="pd-card pd-front" x="97" y="190" width="150" height="34" rx="5"/>
+    <text x="109" y="212" class="pd-mono">boxes and glue</text>
+  </g>
+  <g class="pd-box">
+    <rect x="1" y="260" width="175" height="72" rx="6"/>
+    <rect x="198" y="260" width="161" height="72" rx="6"/>
+  </g>
+  <g class="pd-text">
+    <text x="262" y="24" class="pd-head">Blocks</text>
+    <text x="262" y="42">of the document</text>
+    <text x="46" y="108" class="pd-head">TeX engine, in a worker</text>
+    <text x="46" y="128">one block after another, off the page</text>
+    <text x="262" y="198" class="pd-head">Results</text>
+    <text x="262" y="216">one per block</text>
+    <text x="14" y="286" class="pd-head">Reflow TeX viewer</text>
+    <text x="14" y="306">breaks lines for the</text>
+    <text x="14" y="322">width, draws SVG</text>
+    <text x="212" y="286" class="pd-head">Cache</text>
+    <text x="212" y="306">in the browser,</text>
+    <text x="212" y="322">kept per block</text>
+  </g>
+</svg>
+<figcaption>One engine, in a worker, typesets the blocks one after another; each result goes to the viewer and to the cache. An edit typesets its block again, and only that block.</figcaption>
+</figure>
+<style>
+  #lt-content figure.pipeline-diagram { margin: 2rem 0 2.25rem; max-width: 30rem; }
+  .pipeline-diagram svg { display: block; width: 100%; height: auto; overflow: visible;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .pipeline-diagram .pd-flow path { fill: none; stroke: currentColor; stroke-width: 1.4; opacity: .7;
+    marker-end: url(#pd-arrow); }
+  .pipeline-diagram .pd-box rect { fill: color-mix(in srgb, var(--lt-primary) 9%, transparent);
+    stroke: var(--lt-primary); stroke-width: 1.5; }
+  .pipeline-diagram .pd-card { fill: var(--latex-page-bg, Canvas); stroke: var(--lt-primary); stroke-width: 1.3; }
+  .pipeline-diagram .pd-front { fill: color-mix(in srgb, var(--lt-primary) 9%, var(--latex-page-bg, Canvas)); }
+  .pipeline-diagram .pd-flow .pd-dashed { stroke-dasharray: 3 3; }
+  .pipeline-diagram .pd-text .pd-mono, .pipeline-diagram .pd-mono { fill: currentColor; font-size: 12px;
+    font-family: "Latin Modern Mono", ui-monospace, Menlo, monospace; }
+  .pipeline-diagram .pd-text text { fill: currentColor; font-size: 13px; }
+  .pipeline-diagram .pd-text .pd-head { font-weight: 600; font-size: 14px; }
+  #lt-content figure.pipeline-diagram figcaption { margin-top: .6rem; font-size: .85rem; opacity: .7; }
+</style>

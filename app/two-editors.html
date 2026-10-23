@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Two editors</title>
+<!-- a test harness, dev only (not in a release): two editors mounted side by side in two plain divs, each with its
+     own document (app/src/harness/two-editors.ts; tests/test-two-editors.ts). The schema and the seed-cache meta are
+     filled in by the dev server, as for index.html. -->
+<div id="latex-schema" data-schema-b64="{{SCHEMA_B64}}" hidden></div>
+<script id="latex-font-map" type="application/json" data-fonts-base="fonts/">{}</script>
+<link rel="stylesheet" href="lib/companion/companion.css">
+<link rel="stylesheet" href="app.css">
+<style>
+  html, body { margin: 0; height: 100%; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; height: 100vh; }
+  .two > .ed { height: 100vh; min-width: 0; border-left: 1px solid var(--ui-border, #ddd); }
+</style>
+</head>
+<body>
+<div class="two">
+  <div class="ed" id="ed-a" aria-label="Left editor"></div>
+  <div class="ed" id="ed-b" aria-label="Right editor"></div>
+</div>
+<script src="lib/viewer/protobuf.min.js"></script>
+<script src="lib/viewer/latex-viewer.js"></script>
+<script type="module" src="lib/two-editors.js"></script>
+</body>
+</html>

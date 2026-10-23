@@ -1,0 +1,7 @@
+{
+  "name": "reflowed-website",
+  "private": true,
+  "type": "module",
+  "description": "The ReflowEd site: its build tools and browser scripts (README.md). No dependencies of its own: build.sh uses the reflowtex checkout's.",
+  "license": "AGPL-3.0-or-later"
+}

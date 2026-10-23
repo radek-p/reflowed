@@ -1,0 +1,19 @@
+{
+  "name": "reflowed-encode",
+  "private": true,
+  "type": "module",
+  "description": "reflowtex's encoder in the browser, after the Tectonic capture",
+  "dependencies": {
+    "buffer": "^6.0.3",
+    "harfbuzzjs": "1.6.2",
+    "opentype.js": "2.0.0",
+    "path-browserify": "^1.0.1",
+    "protobufjs": "8.8.0",
+    "speech-rule-engine": "4.1.4"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "playwright": "1.58.0"
+  },
+  "license": "AGPL-3.0-or-later"
+}

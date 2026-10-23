@@ -1,0 +1,19 @@
+{
+  // Type checking only, for the site's TypeScript (tools/ runs on Node by type
+  // stripping; browser/ is bundled by esbuild in build.sh). With the
+  // reflowtex checkout's packages: REFLOWTEX/node_modules/.bin/tsc -p website
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["tools/**/*.ts", "browser/**/*.ts"]
+}

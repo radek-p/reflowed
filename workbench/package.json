@@ -1,0 +1,7 @@
+{
+  "name": "reflowed-workbench",
+  "private": true,
+  "type": "module",
+  "description": "Tabs, splits and panels for ReflowEd. Dependencies: preact, @preact/signals, htm, resolved from ../app/node_modules",
+  "license": "AGPL-3.0-or-later"
+}

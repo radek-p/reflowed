@@ -1,0 +1,46 @@
+# ReflowEd – the project's site.
+#
+# Build it with ./build.sh (runs the reflowtex prebuild, then hugo). See README.md.
+#
+# baseURL: the GitHub Pages project site. The viewer resolves font URLs against
+# it, so the subpath is part of it.
+baseURL = "https://radek-p.github.io/reflowed/"
+languageCode = "en-gb"
+title = "ReflowEd"
+enableInlineShortcodes = true
+
+[params]
+  github = "https://github.com/radek-p/reflowed"
+  # The sister project, linked from the header and the footer.
+  reflowtexSite = "https://radek-p.github.io/reflowtex/"
+  # AGPL-3.0 §13 source offer, read by the viewer partial's footer (the
+  # viewer's own source: the pages are rendered with Reflow TeX).
+  reflowtexSource = "https://github.com/radek-p/reflowtex"
+  tagline = "A LaTeX editor in your browser: each block is typeset by TeX and reflowed to fit the window."
+  # Where "Open ReflowEd" goes: the editor published with the site, a release
+  # and its TeX Live tree in static/app/ (tools/stage-app.ts puts them there;
+  # build.sh refuses to build without them).
+  appURL = "app/"
+  # The colour map every {{< latex >}} block uses unless it names another:
+  # latex-color-maps/site.json, which remaps TeX's colours per theme.
+  latexColorMap = "site"
+  # Every block with its accessible layer (its text for screen readers).
+  reflowtexA11y = true
+
+# The pages' copy is set through the reflowtex pipeline via {{< latex >}}
+# shortcodes wrapped in a little layout HTML, so raw HTML passes through.
+[markup.goldmark.renderer]
+  unsafe = true
+
+[markup.highlight]
+  noClasses = false
+
+[menu]
+  [[menu.main]]
+    name = "Features"
+    pageRef = "/docs/features/editing"
+    weight = 10
+  [[menu.main]]
+    name = "About"
+    pageRef = "/about"
+    weight = 20

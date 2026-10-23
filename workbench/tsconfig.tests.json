@@ -1,0 +1,8 @@
+{
+  // The tests and scripts: strict as the product code (tsconfig.json), but without noUncheckedIndexedAccess: they index
+  // measured arrays and Playwright results that the checks themselves validate (a missing entry fails the check); unused
+  // helpers are not reported there.
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noUncheckedIndexedAccess": false, "noUnusedLocals": false, "noUnusedParameters": false },
+  "include": ["scripts/**/*.ts", "tests/**/*.ts", "types/**/*.d.ts"]
+}

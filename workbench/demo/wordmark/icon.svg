@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20">
+  <!-- PLACEHOLDER (WORDMARK.md): a rounded tile in currentColor with \boldmath$\varepsilon$ (lmmib10) cut out of it -->
+  <mask id="rfed-mark-eps" maskUnits="userSpaceOnUse" x="0" y="0" width="20" height="20">
+    <rect width="20" height="20" fill="#fff"/>
+    <svg x="6.59375" y="4.984375" width="6.796875" height="7.265625" viewBox="35 -461 448 478"><path d="M439-94C439-103 432-111 422-111C417-111 412-108 412-108C389-63 327-59 241-59C178-59 84-59 84-126C84-146 98-184 134-210C175-188 229-188 247-188C274-188 350-188 350-243C350-284 296-284 265-284C245-284 191-284 138-259C130-269 126-283 126-294C126-349 195-385 314-385C341-385 373-385 416-355C424-350 431-347 438-347C459-347 483-369 483-392C483-410 467-423 430-441C386-461 348-461 333-461C161-461 79-365 79-294C79-264 94-243 100-236C59-202 35-161 35-113C35-44 90 17 224 17C387 17 439-78 439-94ZM303-243C299-231 296-224 248-224C231-224 205-224 177-235C213-248 251-248 261-248C288-248 291-247 303-243Z" fill="#000"/></svg>
+  </mask>
+  <rect width="20" height="20" rx="4" fill="currentColor" mask="url(#rfed-mark-eps)"/>
+</svg>

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ReflowEd gallery</title>
+<!-- Every UI component, from the real components with fixture data, in the four themes (app/src/gallery/main.ts,
+     bundled by scripts/w3-build.ts into lib/gallery.js; dev only, never in a release). /gallery on the dev server;
+     ?theme=light|dark|sepia|contrast. The schema is filled in by the dev server, as for index.html. -->
+<div id="latex-schema" data-schema-b64="{{SCHEMA_B64}}" hidden></div>
+<script id="latex-font-map" type="application/json" data-fonts-base="fonts/">{}</script>
+<link rel="stylesheet" href="lib/companion/companion.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="gallery"></div>
+<script src="lib/viewer/protobuf.min.js"></script>
+<script src="lib/viewer/latex-viewer.js"></script>
+<script type="module" src="lib/gallery.js"></script>
+</body>
+</html>

@@ -1,0 +1,370 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ if .IsHome }}{{ site.Title }}{{ else }}{{ .Title }} · {{ site.Title }}{{ end }}</title>
+<meta name="description" content="{{ site.Params.tagline }}">
+{{- /* The ReIcon (app/src/chrome/wordmark/icon.svg), as the tab's icon. */}}
+<link rel="icon" type="image/svg+xml" href="{{ "icon.svg" | relURL }}">
+
+{{/* ── The reader's choices, before first paint ─────────────────────────────
+     Colour theme, text size and column width, as the companion's `reading`
+     keeps them (src/companion/src/reading.tsx): set here from localStorage,
+     else a sensible default, so nothing flashes before the module loads; the
+     companion's reading options (partials/switches.html) change them later. */}}
+<script>
+  (function () {
+    var root = document.documentElement, get = function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } };
+    var t = get('reflowtex-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    if (t !== 'light') root.classList.add(t);
+    root.setAttribute('data-theme', t);
+    root.setAttribute('data-width', get('reflowtex-width') || 'auto');
+    var z = parseFloat(get('reflowtex-zoom'));
+    root.style.setProperty('--rtx-zoom', z > 0 ? Math.min(3, Math.max(0.5, z)) : 1);
+  })();
+</script>
+
+<style>
+  :root { color-scheme: light dark; }
+  /* Palette lives on <html> so it also fills the strip a fixed-width column
+     reveals when it overflows horizontally. The viewer keys its colour maps off
+     the same html.dark / .sepia / .contrast classes, so text stays in step. */
+  html { background: #fafaf9; color: #333; transition: background .15s ease, color .15s ease; }
+  html.dark     { background: #0c0a09; color: #e7e5e4; }
+  html.sepia    { background: #f4ecd8; color: #453a26; }
+  html.contrast { background: #fff;    color: #000; }
+  /* The one accent colour, used sparingly: links in the typeset text, the
+     current page in the menus, the main call to action, theorem frames,
+     focus rings and the logo. Lighter on dark, deeper on paper.
+     ReflowEd's is the purple of its icon, #a232c1, where the Reflow TeX
+     site has its indigo: everything else on the two sites is the same, so
+     they read as one family. Each value is at least 4.5:1 against its
+     theme's page (light 5.3, dark 8.2, sepia 5.8, contrast 10.8), and so is
+     the text of the primary button on it. */
+  /* Also on anything previewing a theme of its own (data-latex-theme: an
+     example's theme switch), and the variables made from
+     it with them, since a var() resolves where it is declared. */
+  html,          [data-latex-theme="light"]    { --lt-primary: #a232c1; --lt-primary-strong: #7b2193; }
+  html.dark,     [data-latex-theme="dark"]     { --lt-primary: #d58ce9; --lt-primary-strong: #e9bff4; }
+  html.sepia,    [data-latex-theme="sepia"]    { --lt-primary: #8e2aab; --lt-primary-strong: #6c1f84; }
+  html.contrast, [data-latex-theme="contrast"] { --lt-primary: #66137d; --lt-primary-strong: #000;    }
+  /* Its light variant, as a background, only in the light theme, and only
+     for theorem frames: the other grey backgrounds stay grey. */
+  html:not(.dark):not(.sepia):not(.contrast), [data-latex-theme="light"] { --latex-theorem-background: #f7ecfa; }
+  html.dark, html.sepia, html.contrast,
+  [data-latex-theme="dark"], [data-latex-theme="sepia"], [data-latex-theme="contrast"] { --latex-theorem-background: initial; }
+  html, [data-latex-theme] {
+    --latex-link: var(--lt-primary); --latex-link-hover: var(--lt-primary-strong);
+    --latex-theorem-accent: var(--lt-primary); --lt-outline-accent: var(--lt-primary);
+    --latex-handle-color: var(--lt-primary); }
+  body {
+    margin: 0; min-height: 100vh; line-height: 1.6;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 8rem;
+  }
+  a { color: inherit; }
+  /* ── Code ──────────────────────────────────────────────────────────────
+     Set in Latin Modern Mono, the face \texttt uses in the rendered LaTeX
+     around it (the pipeline serves it in fonts/), on a faint tint of the
+     text colour so it sits on every theme. Colours are chroma's classes
+     (hugo.toml: markup.highlight.noClasses = false), one palette per theme.
+     Code blocks scroll on their own rather than widening the page. */
+  @font-face {
+    font-family: "Latin Modern Mono";
+    src: url("{{ "fonts/lmmono10-regular.otf" | relURL }}") format("opentype");
+    font-display: swap;
+  }
+  :root {
+    --code-kw: #1f5fa8; --code-str: #2a7a3b; --code-com: #7b7f86;
+    --code-num: #a0522d; --code-name: #8a3ab9;
+  }
+  html.dark     { --code-kw: #79c0ff; --code-str: #7ee787; --code-com: #8b949e; --code-num: #ffa657; --code-name: #d2a8ff; }
+  html.sepia    { --code-kw: #155e97; --code-str: #3f6b1f; --code-com: #7d6f55; --code-num: #9a4a14; --code-name: #7a3e8a; }
+  html.contrast { --code-kw: #0000b3; --code-str: #005a00; --code-com: #444444; --code-num: #8a3000; --code-name: #5b0093; }
+  pre, code {
+    font-family: "Latin Modern Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  /* Plain-text blocks (directory trees) need box-drawing characters, which
+     Latin Modern Mono lacks: the system's monospace has them, at one width. */
+  code[data-lang="text"] { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.92em; }
+  pre {
+    overflow-x: auto;
+    margin: 2rem 0; padding: 1.1rem 1.4rem;
+    font-size: 0.95rem; line-height: 1.5;
+    background: color-mix(in srgb, currentColor 5%, transparent);
+    border: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+    border-radius: 6px;
+  }
+  .highlight pre.chroma { background: color-mix(in srgb, currentColor 5%, transparent); }
+  .chroma .k, .chroma .kc, .chroma .kd, .chroma .kn, .chroma .kr, .chroma .kt,
+  .chroma .nb, .chroma .nt { color: var(--code-kw); }
+  .chroma .s, .chroma .s1, .chroma .s2, .chroma .sb, .chroma .sr { color: var(--code-str); }
+  .chroma .c, .chroma .c1, .chroma .cm { color: var(--code-com); font-style: italic; }
+  .chroma .m, .chroma .mi, .chroma .mf, .chroma .mh { color: var(--code-num); }
+  .chroma .nc, .chroma .nf, .chroma .nv, .chroma .na, .chroma .nd { color: var(--code-name); }
+  .chroma .p, .chroma .o { opacity: 0.75; }
+
+  /* A page whose visible title is typeset by LaTeX (front matter
+     latexTitle: true) keeps a real <h1> for screen readers and outlines. */
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  /* ── Top nav ─────────────────────────────────────────────────────────────*/
+  .site-nav {
+    display: flex; align-items: center; gap: 1.2rem;
+    /* The docs grid's content width (sidebar 14 + gap 4 + column 64 rem,
+       or with a table of contents 14 + 4 + 46 + 4 + 14): the name starts at
+       the sidebar's edge and the last link ends at the content's. */
+    max-width: calc(82rem + 5rem); box-sizing: border-box; margin: 0 auto; padding: 1rem 2.5rem;
+    font-size: 0.9rem;
+  }
+  .site-nav .brand { font-weight: 700; letter-spacing: 0.01em; text-decoration: none; }
+  .site-nav .brand .int { opacity: 0.5; }
+  .site-nav .spacer { flex: 1; }
+  @media (max-width: 64rem) { .site-nav { padding: 1rem 1.25rem; } }
+  @media (max-width: 30rem) { .site-nav { gap: 0.9rem; font-size: 0.85rem; } }
+  .site-nav a.navlink { text-decoration: none; opacity: 0.72; }
+  .site-nav a.navlink:hover { opacity: 1; }
+
+  /* ── Content column (the width switch retargets it; zoom scales it) ───────*/
+  #lt-content {
+    max-width: 46rem; margin: 2rem auto 5rem; padding: 0 1.25rem;
+    zoom: var(--rtx-zoom, 1);
+  }
+  html[data-width-control][data-width="narrow"] #lt-content { max-width: none; width: 34rem; }
+  html[data-width-control][data-width="normal"] #lt-content { max-width: none; width: 46rem; }
+  html[data-width-control][data-width="wide"] #lt-content { max-width: none; width: 64rem; }
+  #lt-content h1 { font-weight: 700; line-height: 1.2; }
+  #lt-content h2 { font-weight: 650; margin-top: 2.5rem; opacity: 0.85; }
+
+  /* ── Air ─────────────────────────────────────────────────────────────────
+     Generous space between blocks, code and examples: the typeset text is
+     dense by nature, and the page around it should not be. #lt-content in
+     front so these win over the viewer partial's minimal rules. */
+  #lt-content .latex-block { margin: 2rem 0; }
+  #lt-content > .latex-block:first-of-type { margin-top: 0.5rem; }
+
+  /* ── Documentation layout ────────────────────────────────────────────────
+     A sidebar of every docs page beside the reading column; below 64rem it
+     folds into a "Contents" disclosure above the page. */
+  .docs-layout {
+    display: flex; justify-content: center; gap: 4rem;
+    --docs-pad: 2.5rem;
+    max-width: 90rem; margin: 0 auto; padding: 0 var(--docs-pad);
+  }
+  /* The column is wide enough for an example's Result and LaTeX side by
+     side; prose and code keep a reading measure inside it. */
+  /* The top of the page title's letters level with the top of the menu's
+     first group title ("Getting started", 52px down the sidebar), its
+     small-capitals line above. The title's tops are 46.3px down the column
+     (every \pagetitle has that line), times the text size, as is this
+     margin, so the margin is divided by it. */
+  .docs-layout #lt-content {
+    margin: calc(52px / var(--rtx-zoom, 1) - 46.3px) 0 6rem;
+    padding: 0; flex: 0 1 64rem; min-width: 0; max-width: none; }
+  .docs-layout #lt-content > .latex-block,
+  .docs-layout #lt-content > .highlight,
+  .docs-layout #lt-content > p,
+  .docs-layout #lt-content > ul { max-width: 46rem; }
+  /* wide: true in a page's front matter – room for an example with a panel
+     beside it (the inspector's page); prose keeps its measure. */
+  .docs-layout.is-wide { max-width: 112rem; }
+  .docs-layout.is-wide #lt-content { flex: 0 1 86rem; }
+  /* The reader's width is a most, never a least: the column gives way when
+     the window (or larger text, since the column is zoomed) leaves less, so
+     the page never scrolls sideways. The document block fills the column. */
+  html[data-width-control][data-width="narrow"] .docs-layout #lt-content { flex: 0 1 34rem; }
+  html[data-width-control][data-width="normal"] .docs-layout #lt-content { flex: 0 1 46rem; }
+  html[data-width-control][data-width="wide"]   .docs-layout #lt-content { flex: 0 1 64rem; }
+  html[data-width-control] .docs-layout #lt-content > .latex-block { max-width: none; }
+  /* A wide display scrolls in a box that peeks into the margins, sized by
+     default as if the column were centred in the window. Here it is not, and
+     the free space either side is at least the layout's padding (--docs-pad):
+     peek no further, in unzoomed units, so the page never scrolls sideways. */
+  .docs-layout .latex-display {
+    --latex-display-peek: min(100px, calc(var(--docs-pad) / var(--rtx-zoom, 1))); }
+  .docs-sidebar {
+    flex: 0 0 14rem; align-self: flex-start;
+    position: sticky; top: 0; max-height: calc(100vh - var(--rtx-dock-bottom, 0px)); overflow-y: auto;
+    padding: 3rem 0 1.5rem;
+  }
+  /* The sidebar is one list: group titles in small capitals, every page on
+     the rail below its title, the same spacing throughout, dense enough to
+     fit a laptop screen whole (it scrolls on its own below that). */
+  .docs-nav { font-size: 0.875rem; line-height: 1.35; }
+  .docs-nav a {
+    display: block; text-decoration: none; opacity: 0.72;
+    padding: 0.12rem 0 0.12rem 0.9rem; margin-left: calc(-0.9rem - 2px);
+    border-left: 2px solid transparent;
+  }
+  .docs-nav a:hover { opacity: 1; }
+  .docs-nav a[aria-current="page"] {
+    opacity: 1; font-weight: 600; border-left-color: var(--lt-primary);
+  }
+  .docs-nav ul { list-style: none; margin: 0; padding: 0 0 0 0.9rem;
+    border-left: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
+  .docs-nav ul a { margin-left: calc(-0.9rem - 1px); }
+  .docs-nav-group {
+    margin: 1.1rem 0 0.3rem; font-size: 0.72rem; font-weight: 650;
+    letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.55;
+  }
+  .docs-nav > .docs-nav-group:first-child { margin-top: 0; }
+  .docs-nav-fold { display: none; }
+  @media (max-width: 64rem) {
+    .docs-layout { --docs-pad: 1.25rem; flex-direction: column; gap: 0; padding: 0 var(--docs-pad); }
+    .docs-sidebar { display: none; }
+    .docs-nav-fold {
+      display: block; margin: 1.5rem 0 0; padding: 0.7rem 1rem;
+      border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+      border-radius: 8px; font-size: 0.95rem;
+    }
+    .docs-nav-fold summary { cursor: pointer; font-weight: 600; }
+    .docs-nav-fold .docs-nav { padding: 0.5rem 0 0.5rem 0.9rem; }
+    .docs-layout #lt-content { margin-top: 2rem; }
+  }
+
+  /* ── Document table of contents (toc: true; partials/docs-toc.html) ─────
+     The right-hand counterpart of the sidebar: level with the top of the
+     document, then sticky. Only where there is room for three columns. */
+  /* The column holds only the document's reading measure here, and the two
+     side columns are the same width, so the menus sit symmetrically either
+     side of the text. */
+  .docs-layout.has-toc { max-width: 100rem; }
+  .docs-layout.has-toc #lt-content { flex: 0 1 46rem; }
+  .docs-toc { flex: 0 0 14rem; min-width: 0; }
+  .docs-toc nav {
+    position: sticky; top: 3rem; max-height: calc(100vh - 5rem - var(--rtx-dock-bottom, 0px)); overflow-y: auto;
+    font-size: 0.85rem; line-height: 1.35; padding: 0 0.25rem 2rem 0;
+    scrollbar-width: thin;
+  }
+  .docs-toc nav .docs-nav-group { margin-top: 0; }
+  .docs-toc ul { list-style: none; margin: 0; padding: 0; }
+  .docs-toc ul ul { display: none; padding-left: 0.85rem; }
+  .docs-toc li.open > ul { display: block; }
+  .docs-toc a {
+    display: block; padding: 0.28rem 0 0.28rem 0.8rem; text-decoration: none;
+    border-left: 2px solid color-mix(in srgb, currentColor 10%, transparent); opacity: 0.66;
+  }
+  .docs-toc a:hover { opacity: 1; }
+  .docs-toc li.open > a { opacity: 0.9; }
+  .docs-toc a.current { opacity: 1; font-weight: 600; border-left-color: var(--lt-primary); }
+  .docs-toc .toc-theorem > a { font-size: 0.8rem; font-style: italic; }
+  .latex-anchor { scroll-margin-top: 1.5rem; }
+  @media (max-width: 88rem) { .docs-toc { display: none; } }
+  /* Set by docs-shell.html when the reader's width and text size would not
+     fit between both menus: the contents list gives way to the text. */
+  .docs-layout.toc-gives-way .docs-toc { display: none; }
+
+  /* Previous / next page, at the foot of every docs page. */
+  .docs-pager {
+    display: flex; justify-content: space-between; gap: 1.5rem;
+    margin-top: 5rem; padding-top: 2rem;
+    border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  }
+  .docs-pager a { text-decoration: none; display: flex; flex-direction: column; gap: 0.2rem; font-weight: 600; }
+  .docs-pager a span { font-size: 0.78rem; font-weight: 400; opacity: 0.6; }
+  .docs-pager a.next { text-align: right; margin-left: auto; }
+  .docs-pager a:hover { text-decoration: underline; }
+
+  /* ── Notes (reflowtex.sty's webnote) as sticky notes ────────────────────
+     Pale yellow paper with a soft shadow instead of the viewer's framed box.
+     #lt-content in front: the viewer's own rule is injected after this one. */
+  #lt-content .latex-stream[data-kind="note"] {
+    --latex-outset-start: 1rem; --latex-outset-end: 1rem;
+    border-left: 0; border-radius: 3px; background: var(--lt-note-paper);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .07), 0 8px 18px -10px rgba(0, 0, 0, .28); }
+  html,          [data-latex-theme="light"]    { --lt-note-paper: #fff4b0; }
+  html.sepia,    [data-latex-theme="sepia"]    { --lt-note-paper: #f6e19a; }
+  html.contrast, [data-latex-theme="contrast"] { --lt-note-paper: #fff27a; }
+  html.dark,     [data-latex-theme="dark"]     { --lt-note-paper: #3b3419; }
+
+  /* ── The page's colours per theme ───────────────────────────────────────
+     The reading options (the companion's <ReadingButton>, partials/
+     switches.html) are frosted in the page's own colour per theme (not
+     Canvas, which follows the system's light/dark, not the page's). */
+  /* --latex-page-bg tells the viewer the page's colour per theme: the
+     footnote popover is filled with it, and tints are mixed against it.
+     Without it the viewer falls back to Canvas, which follows the system's
+     light/dark setting rather than this page's theme. */
+  html          { --latex-page-bg: #fafaf9; --lt-glass: rgba(250, 250, 249, .74); --lt-seg-on: #ffffff; }
+  html.dark     { --latex-page-bg: #0c0a09; --lt-glass: rgba(34, 31, 29, .74);    --lt-seg-on: #4a4541; }
+  html.sepia    { --latex-page-bg: #f4ecd8; --lt-glass: rgba(244, 236, 216, .80); --lt-seg-on: #fbf6ea; }
+  html.contrast { --latex-page-bg: #ffffff; --lt-glass: rgba(255, 255, 255, .92); --lt-seg-on: #ffffff; }
+  /* Popovers (the viewer's footnotes, the companion's panels) in the reading
+     panel's glass, and the companion's buttons in its light surface. */
+  html { --latex-popover-background: var(--lt-glass); --rtx-glass: var(--lt-glass);
+         --rtx-surface-solid: var(--lt-seg-on); --rtx-accent: var(--lt-primary); }
+  /* The companion's own stylesheet sets its accent on :root, which outranks
+     html: the reading options' chosen theme and focus rings take the site's
+     accent from here. */
+  :root:root { --rtx-accent: var(--lt-primary); }
+
+  /* ── ReflowEd's own parts ────────────────────────────────────────────────
+     The name with the icon, the links to the editor, the screenshots of the
+     feature pages, focus rings and the site's footer, all in the accent. */
+  .site-nav .brand { display: inline-flex; align-items: center; gap: .5rem; color: inherit; }
+  .site-nav .brand svg { width: var(--lt-icon-size); height: var(--lt-icon-size); flex: none; }
+  /* The icon keeps its own colours in every theme: #a232c1 is 3.5:1 or
+     more against each page, and its white letter 5.6:1 on it. */
+  .site-nav a.navlink.sister { white-space: nowrap; }
+  .site-nav a.navlink[aria-current="page"] { opacity: 1; color: var(--lt-primary); }
+  @media (max-width: 30rem) { .site-nav a.navlink.sister { display: none; } }
+  /* Keyboard focus: a ring in the accent, on everything that takes it. */
+  a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--lt-primary); outline-offset: 2px; border-radius: 2px; }
+  /* The calls to action: the primary one filled with the accent, the
+     others outlined (as the Reflow TeX home page's). */
+  .cta { margin: 1.4rem 0 2.5rem; display: flex; gap: 0.7rem; flex-wrap: wrap; max-width: 46rem; }
+  .cta a {
+    text-decoration: none; padding: 0.55rem 1.15rem; font-size: 0.92rem;
+    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+    transition: background .15s ease;
+  }
+  .cta a:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+  .cta a.primary { background: var(--lt-primary); color: #fff; border-color: transparent; font-weight: 600; }
+  html.dark .cta a.primary { color: #0c0a09; }
+  .cta a.primary:hover { background: var(--lt-primary-strong); }
+  /* The intro document below the header: a hairline between them. */
+  .home-doc-rule { max-width: 46rem; margin: 0 0 2.5rem;
+    border: 0; border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
+  /* Screenshots on the feature pages, in a thin frame, at the measure. */
+  #lt-content figure.shot { margin: 2rem 0 2.25rem; max-width: 46rem; }
+  #lt-content figure.shot img {
+    display: block; width: 100%; height: auto; box-sizing: border-box;
+    border: 1px solid color-mix(in srgb, currentColor 14%, transparent); border-radius: var(--lt-shot-radius); }
+  #lt-content figure.shot figcaption { margin-top: .6rem; font-size: .85rem; opacity: .7; }
+  /* Screenshots float a little: a soft shadow with a large blur behind the
+     bitmap figures only (an <image> in a typeset picture, the shot
+     shortcode's <img>), drawn by a filter, so nothing moves and TeX's boxes
+     keep their size. The block's SVG does not clip it (overflow is visible).
+     In the dark theme a shadow would not show, so a faint glow instead; none
+     in the contrast theme, where the edges matter more than depth. */
+  /* The screenshots' corners: the ReIcon's, as the header shows it (its tile
+     is rx 8 of 32, a quarter of its size). */
+  html { --lt-icon-size: 1.5rem; --lt-shot-radius: calc(var(--lt-icon-size) * 8 / 32); }
+  html { --lt-shot-shadow: drop-shadow(0 8px 26px rgb(0 0 0 / .22)) drop-shadow(0 1px 3px rgb(0 0 0 / .08)); }
+  html.sepia { --lt-shot-shadow: drop-shadow(0 8px 26px rgb(69 58 38 / .24)) drop-shadow(0 1px 3px rgb(69 58 38 / .08)); }
+  html.dark { --lt-shot-shadow: drop-shadow(0 0 26px rgb(255 255 255 / .11)) drop-shadow(0 4px 14px rgb(0 0 0 / .6)); }
+  html.contrast { --lt-shot-shadow: none; }
+  #lt-content figure.shot img { filter: var(--lt-shot-shadow); }
+  /* Inside a typeset picture the same corners and shadow come from
+     browser/shots.ts: a clip on the <image>, an SVG filter on its group
+     (the filters in partials/shot-shadow.html's <defs>), its colours here. */
+  #lt-shot-defs .lt-shot-far  { flood-color: #000; flood-opacity: .22; }
+  #lt-shot-defs .lt-shot-near { flood-color: #000; flood-opacity: .08; }
+  #lt-shot-defs .lt-shot-glow { flood-color: #fff; flood-opacity: 0; }
+  html.sepia #lt-shot-defs .lt-shot-far  { flood-color: #453a26; flood-opacity: .24; }
+  html.sepia #lt-shot-defs .lt-shot-near { flood-color: #453a26; }
+  html.dark #lt-shot-defs .lt-shot-far  { flood-opacity: .6; }
+  html.dark #lt-shot-defs .lt-shot-near { flood-opacity: 0; }
+  html.dark #lt-shot-defs .lt-shot-glow { flood-opacity: .11; }
+  html.contrast .latex-picture.lt-shot { filter: none !important; }
+  /* The site's footer: its licence and source, and the sister project. */
+  .site-footer {
+    max-width: 46rem; margin: 4rem auto -2rem; padding: 0 1.25rem;
+    font-size: 0.75rem; line-height: 1.5; text-align: center; opacity: 0.55; }
+  .site-footer a { color: inherit; }
+
+</style>

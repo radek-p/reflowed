@@ -1,0 +1,9 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /* The calls to action: open the editor (params.appURL, which build.sh
+       sets) and its source. Usage: {{< open-editor >}} */ -}}
+{{- $app := site.Params.appURL -}}
+{{- if not (strings.HasPrefix $app "http") }}{{ $app = $app | relURL }}{{ end -}}
+<div class="cta">
+  <a class="primary" href="{{ $app }}">Open ReflowEd</a>
+  <a href="{{ site.Params.github }}">Source on GitHub</a>
+</div>

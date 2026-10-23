@@ -1,0 +1,14 @@
+% A tikz-cd diagram inline in a display and one in text, with curved and
+% dashed arrows and labels.
+\documentclass{article}
+\usepackage{tikz-cd}
+\begin{document}
+A diagram:
+\[
+\begin{tikzcd}[column sep=large]
+  X \arrow[r, "\varphi"] \arrow[dr, dashed, "\psi"'] \arrow[rr, bend left, "\chi"] & Y \arrow[d, hook] \arrow[r, two heads] & Z \\
+  & W \arrow[ur, Rightarrow, "\alpha"'] &
+\end{tikzcd}
+\]
+and text after it.
+\end{document}

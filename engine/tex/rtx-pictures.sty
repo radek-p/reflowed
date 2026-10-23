@@ -1,0 +1,44 @@
+% rtx-pictures.sty -- TikZ pictures for the editor's engine capture: the
+% picture section of the log/XDV capture package (tectonic-capture.sty), on its own, for the engine-api capture.
+% pgf's dvisvgm driver (raw SVG specials in the XDV instead of PDF
+% operators); the outermost picture's box is shipped as an XDV page of its
+% own (\special{rtx:picture N} first on it), and the flow gets an empty box
+% of the same size holding \special{rtx:pic N}. src/pictures.ts turns the
+% placeholder into a picture node with the page's SVG (pictures/src/picture.ts).
+% Loaded by the prelude right after \documentclass, before any pgf.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{rtx-pictures}[2026/09/27 TikZ pictures as SVG for the editor engine]
+\ifdefined\pgfsysdriver\else\def\pgfsysdriver{pgfsys-dvisvgm.def}\fi
+\let\rtx@primshipout\shipout
+\ifdefined\tex_shipout:D \expandafter\let\expandafter\rtx@primshipout\csname tex_shipout:D\endcsname\fi
+\newcount\rtx@piccount
+\newcount\rtx@picnest
+\newbox\rtx@picbox
+\def\rtx@wraptikz{%
+  \@ifundefined{tikzexternaldisable}{}{\tikzexternaldisable}%
+  \let\rtx@origtikzpicture\tikzpicture
+  \let\rtx@origendtikzpicture\endtikzpicture
+  \def\tikzpicture{\global\advance\rtx@picnest\@ne
+    \ifnum\rtx@picnest=\@ne\expandafter\rtx@picbegin\else\expandafter\rtx@origtikzpicture\fi}%
+  \def\endtikzpicture{\global\advance\rtx@picnest\m@ne
+    \ifnum\rtx@picnest=\z@\expandafter\rtx@picend\else\expandafter\rtx@origendtikzpicture\fi}}
+\def\rtx@picbegin{%
+  \global\advance\rtx@piccount\@ne
+  \edef\rtx@thispic{\the\rtx@piccount}%
+  \setbox\rtx@picbox=\hbox\bgroup\rtx@origtikzpicture}
+\def\rtx@picend{%
+    \rtx@origendtikzpicture
+  \egroup
+  \begingroup
+    \tracingoutput\z@ \hoffset\z@ \voffset\z@
+    \rtx@primshipout\vbox{\offinterlineskip\special{rtx:picture \rtx@thispic}\hbox{\copy\rtx@picbox}}%
+  \endgroup
+  \leavevmode
+  \begingroup
+    \dimen@\ht\rtx@picbox \dimen@ii\dp\rtx@picbox
+    \setbox\rtx@picbox\hbox to\wd\rtx@picbox{\special{rtx:pic \rtx@thispic}\hss}%
+    \ht\rtx@picbox\dimen@ \dp\rtx@picbox\dimen@ii
+    \box\rtx@picbox
+  \endgroup}
+\AddToHook{begindocument/end}{\ifdefined\tikzpicture\rtx@wraptikz\fi}
+\endinput

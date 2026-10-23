@@ -1,0 +1,36 @@
+% rtx-template.sty -- what reflowtex's LuaTeX template (src/extract/template.tex)
+% does to a document before any capture, for parity: figures and tables are
+% set where they are written (a pageless document has no page to float to).
+% Nothing here is part of the capture: the engine records everything itself.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{rtx-template}[2026/09/27 reflowtex template parity for the engine capture]
+\def\rtx@flowfloat#1{%
+  \par\addvspace{\intextsep}%
+  \begingroup
+  \def\@captype{#1}%
+  \parindent\z@
+  % plain macros, not \RenewDocumentCommand{\caption}{o m}: for a command with an optional argument
+  % ltcmd collects the arguments with an \edef (\tl_put_right), which makes new tokens, so every glyph of
+  % the caption's text lost its source position (the engine gave them all the \caption call's)
+  \def\caption{\@ifnextchar[\rtx@caption{\rtx@caption[]}}%
+  \long\def\rtx@caption[##1]##2{%
+    \refstepcounter{#1}%
+    \par\vskip\abovecaptionskip
+    {\small\centering\csname fnum@#1\endcsname: ##2\par}%
+    \vskip\belowcaptionskip}}
+\def\rtx@flowfloatend{\par\endgroup\addvspace{\intextsep}}
+\@ifundefined{figure}{}{%
+  \RenewDocumentEnvironment{figure}{O{}}{\rtx@flowfloat{figure}}{\rtx@flowfloatend}}
+\@ifundefined{table}{}{%
+  \RenewDocumentEnvironment{table}{O{}}{\rtx@flowfloat{table}}{\rtx@flowfloatend}}
+\@ifundefined{figure*}{}{%
+  \RenewDocumentEnvironment{figure*}{O{}}{\rtx@flowfloat{figure}}{\rtx@flowfloatend}}
+\@ifundefined{table*}{}{%
+  \RenewDocumentEnvironment{table*}{O{}}{\rtx@flowfloat{table}}{\rtx@flowfloatend}}
+% A wider or narrower \textwidth, as the LuaTeX template's WIDTH-EXTRA marker
+% makes one (for comparing with its samples and render tests only):
+% \def\rtxwidthextra{85pt} before this package.
+\@ifundefined{rtxwidthextra}{}{\AtBeginDocument{%
+  \advance\textwidth by \rtxwidthextra\relax
+  \hsize=\textwidth \linewidth=\textwidth \columnwidth=\textwidth}}
+\endinput

@@ -1,0 +1,11 @@
+{
+  "repository": "radek-p/reflow-tectonic",
+  "tag": "reflow-2026.10.23",
+  "assets": [
+    { "name": "tectonic.mjs", "sha256": "9116546c341627639a079f42d47b05d64887cdfc4ba647585f46aa0f795e783d" },
+    { "name": "tectonic_wasm.wasm", "sha256": "22cf079cb166a13292d457a9cd2d2fadfb30bad39426bbb96b5775db60e8efc3" },
+    { "name": "STAMP.txt", "sha256": "f04378fe3cd0b5daadfb8a8d377d2dcec94545b506d6126cc88ce0f697dde53b" },
+    { "name": "latex.fmt.gz", "sha256": "79d4dbfef884ab86b90a76ed967aee3818d042964b17cbd874c20d630e54c334" },
+    { "name": "texlive-tree.tar.gz", "sha256": "75c010662d185af82f63c1f955a716c2ce276b332af2e91f772a0d3d5645d3c3" }
+  ]
+}

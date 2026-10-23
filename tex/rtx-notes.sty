@@ -1,0 +1,184 @@
+% rtx-notes.sty – the editor's notes on the web.
+%
+% On the web (the pipeline's \ifreflowtex is true) every todonotes note
+% becomes a small inline widget, a chip the page draws (kind `rtxnote`,
+% app/src/notes/), whose message is typeset by TeX as its part `text`
+% (so maths in a note renders). The chip takes no room in the line beyond
+% itself; the margin is not used.
+%
+%   \todo[opts]{text}        todonotes' options read: color= (or
+%                            backgroundcolor=), author=, inline / noinline;
+%                            the rest ignored
+%   \missingfigure[opts]{t}  a note too (from=figure)
+%   \listoftodos             nothing on the web
+%   \rtxcomment{text}        a note made from a source comment (the editor
+%                            turns `% text` lines into it before compiling)
+%   \rtxnoteauthor{editor}{Editor}
+%                            \editor (a preamble macro defined with \todo) is
+%                            an example: its notes carry that author, and a
+%                            leading "Editor:" is taken off the text. The
+%                            editor declares these from the preamble.
+%
+% The widget's parameters (instance.attrs): n (the note's number in the
+% block), author, color (#RRGGBB when the note gives one), todocolor
+% (todonotes' default colour, #RRGGBB, when todonotes is loaded), inline (true
+% or false), from (todo, figure, comment).
+%
+% In print (\ifreflowtex false, or not defined) the package does nothing:
+% todonotes and the author's macros are left as they are, \rtxcomment and
+% \rtxnoteauthor are defined as no-ops.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{rtx-notes}[2026/09/28 v0.1 todo notes and comments as web widgets]
+
+\newif\ifrtx@notes@web
+% (in a macro argument: a skipped branch would not count the \if that
+% \csname makes, and its \fi would end the outer one)
+\@ifundefined{ifreflowtex}{}{\csname ifreflowtex\endcsname \rtx@notes@webtrue \fi}
+
+\ifrtx@notes@web\else
+  \providecommand\rtxcomment[1]{\ignorespaces}
+  \providecommand\rtxnoteauthor[2]{}
+  \expandafter\endinput
+\fi
+
+\RequirePackage{reflowtex}
+\RequirePackage{xcolor}
+
+% ── The author of a macro defined with \todo ─────────────────────────────────
+% \rtxnoteauthor{editor}{Editor}: at \begin{document}, \editor first says whose
+% note follows, then does what it did. Protected, so it survives a moving
+% argument.
+\gdef\rtx@note@macroauthor{}
+\newcommand\rtxnoteauthor[2]{\AtBeginDocument{\rtx@note@wrap{#1}{#2}}}
+\def\rtx@note@wrap#1#2{%
+  \expandafter\ifx\csname #1\endcsname\relax\else
+    \expandafter\let\csname rtx@note@orig@#1\expandafter\endcsname\csname #1\endcsname
+    \expandafter\protected\expandafter\def\csname #1\endcsname{%
+      \gdef\rtx@note@macroauthor{#2}\csname rtx@note@orig@#1\endcsname}%
+  \fi}
+
+% ── "Name: text" ─────────────────────────────────────────────────────────────
+% \rtx@note@split{text}: when the text starts with a short name and a colon
+% ("Editor: check"), \rtx@note@head is the name and \rtx@note@body the rest;
+% else \rtx@note@head is empty and \rtx@note@body the text. A name is at most
+% three words and 30 characters, with no command, maths or group in it.
+\long\def\rtx@note@split#1{%
+  \def\rtx@note@head{}\def\rtx@note@body{#1}%
+  \in@{:}{#1}%
+  \ifin@ \rtx@note@split@a#1\rtx@note@stop \fi}
+\long\def\rtx@note@split@a#1:#2\rtx@note@stop{%
+  \rtx@note@ifname{#1}{\def\rtx@note@head{#1}\def\rtx@note@body{#2}}{}}
+
+\ExplSyntaxOn
+\int_new:N \g__rtxn_count_int
+\tl_new:N \l__rtxn_color_tl
+\tl_new:N \l__rtxn_author_tl
+\tl_new:N \l__rtxn_hex_tl
+\tl_new:N \l__rtxn_default_tl
+\tl_new:N \l__rtxn_opts_tl
+\str_new:N \l__rtxn_name_str
+\seq_new:N \l__rtxn_words_seq
+\bool_new:N \l__rtxn_inline_bool
+\bool_new:N \l__rtxn_name_bool
+
+\keys_define:nn { rtx-notes }
+  {
+    color .tl_set:N = \l__rtxn_color_tl ,
+    backgroundcolor .tl_set:N = \l__rtxn_color_tl ,
+    author .tl_set:N = \l__rtxn_author_tl ,
+    inline .bool_set:N = \l__rtxn_inline_bool ,
+    inline .default:n = true ,
+    noinline .code:n = \bool_set_false:N \l__rtxn_inline_bool ,
+  }
+
+% (only variants the 2021 kernel of Tectonic's bundle has, or made here)
+\cs_generate_variant:Nn \seq_set_split:Nnn { NnV }
+
+% a name? (see \rtx@note@split)
+\cs_new_protected:Npn \rtx@note@ifname #1 #2 #3
+  {
+    \str_set:Nn \l__rtxn_name_str {#1}
+    \tl_trim_spaces:N \l__rtxn_name_str
+    \seq_set_split:NnV \l__rtxn_words_seq { ~ } \l__rtxn_name_str
+    \bool_set_true:N \l__rtxn_name_bool
+    \str_if_empty:NT \l__rtxn_name_str { \bool_set_false:N \l__rtxn_name_bool }
+    \int_compare:nNnT { \str_count:N \l__rtxn_name_str } > { 30 } { \bool_set_false:N \l__rtxn_name_bool }
+    \int_compare:nNnT { \seq_count:N \l__rtxn_words_seq } > { 3 } { \bool_set_false:N \l__rtxn_name_bool }
+    \str_if_in:NnT \l__rtxn_name_str { $ } { \bool_set_false:N \l__rtxn_name_bool }
+    \exp_args:NNV \str_if_in:NnT \l__rtxn_name_str \c_backslash_str { \bool_set_false:N \l__rtxn_name_bool }
+    \exp_args:NNV \str_if_in:NnT \l__rtxn_name_str \c_left_brace_str { \bool_set_false:N \l__rtxn_name_bool }
+    \bool_if:NTF \l__rtxn_name_bool {#2} {#3}
+  }
+
+% A colour (an xcolor expression) as #RRGGBB in #2; empty for none.
+\cs_new_protected:Npn \__rtxn_tohex:nN #1 #2
+  {
+    \tl_clear:N #2
+    \tl_if_blank:nF {#1}
+      {
+        \colorlet { rtx@notecolor } {#1}
+        \extractcolorspecs { rtx@notecolor } \rtx@note@model \rtx@note@spec
+        \convertcolorspec { \rtx@note@model } { \rtx@note@spec } { HTML } \rtx@note@html
+        \tl_set:Nx #2 { \c_hash_str \rtx@note@html }
+      }
+  }
+% The note's colour (color=), and todonotes' own default (its package
+% option color=) for a note of no author: \l__rtxn_hex_tl, \l__rtxn_default_tl.
+\cs_new_protected:Npn \__rtxn_hex:
+  {
+    \exp_args:No \__rtxn_tohex:nN { \l__rtxn_color_tl } \l__rtxn_hex_tl
+    \tl_clear:N \l__rtxn_default_tl
+    \cs_if_exist:cT { @todonotes@backgroundcolor }
+      { \exp_args:Nv \__rtxn_tohex:nN { @todonotes@backgroundcolor } \l__rtxn_default_tl }
+  }
+
+% \rtx@notes@put{options}{text}{from}
+\cs_new_protected:Npn \rtx@notes@put #1 #2 #3
+  {
+    \group_begin:
+    \tl_clear:N \l__rtxn_color_tl
+    \tl_clear:N \l__rtxn_author_tl
+    \bool_set_false:N \l__rtxn_inline_bool
+    \keys_set_known:nn { rtx-notes } {#1}
+    \__rtxn_hex:
+    \rtx@note@split {#2}
+    % author: author=, else the macro's (\rtxnoteauthor), else the "Name:"
+    % the text starts with (taken off the text in every case)
+    \tl_if_empty:NT \l__rtxn_author_tl
+      { \tl_set_eq:NN \l__rtxn_author_tl \rtx@note@macroauthor }
+    \tl_if_empty:NT \l__rtxn_author_tl
+      { \tl_set_eq:NN \l__rtxn_author_tl \rtx@note@head }
+    \gdef \rtx@note@macroauthor {}
+    \int_gincr:N \g__rtxn_count_int
+    \tl_set:Nx \l__rtxn_opts_tl
+      {
+        n = \int_use:N \g__rtxn_count_int ,
+        author = { \tl_to_str:N \l__rtxn_author_tl } ,
+        color = { \tl_to_str:N \l__rtxn_hex_tl } ,
+        todocolor = { \tl_to_str:N \l__rtxn_default_tl } ,
+        inline = \bool_if:NTF \l__rtxn_inline_bool { true } { false } ,
+        from = #3
+      }
+    \exp_last_unbraced:NNo \webwidget [ \l__rtxn_opts_tl ] { rtxnote }
+    \webpart { text } { \small \rtx@note@body }
+    \group_end:
+  }
+\ExplSyntaxOff
+
+% ── The commands ─────────────────────────────────────────────────────────────
+% After the preamble, so todonotes (and a preamble's own \todo) are replaced
+% wherever they were defined.
+\AtBeginDocument{%
+  \DeclareDocumentCommand\todo{O{} +m}{\rtx@notes@put{#1}{#2}{todo}}%
+  \DeclareDocumentCommand\missingfigure{O{} +m}{\rtx@notes@put{#1}{#2}{figure}}%
+  \DeclareDocumentCommand\listoftodos{O{}}{}%
+}
+\newcommand\rtxcomment[1]{\rtx@notes@put{}{#1}{comment}}
+
+% Batch runs (several blocks in one document): each block counts its notes
+% from 1.
+\ifdefined\reflowtexbatchpart
+  \let\rtx@notes@batchpart\reflowtexbatchpart
+  \def\reflowtexbatchpart{\global\csname g__rtxn_count_int\endcsname=\z@ \rtx@notes@batchpart}
+\fi
+\endinput

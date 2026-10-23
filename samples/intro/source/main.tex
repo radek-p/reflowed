@@ -1,0 +1,217 @@
+%% This document has two versions: the editor's default document and the website's home page (samples/intro/variants.ts).
+%% Lines from "%% editor:" or "%% site:" to "%% end" are kept only in that version; every line that starts with %%
+%% is left out of both.
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usepackage{todonotes}
+\usepackage{hyperref}
+\usepackage[capitalise]{cleveref}
+%% editor:
+\usepackage{framed}
+\newcommand{\shot}[1]{\begin{framed}\centering\includegraphics[width=\linewidth]{#1}\end{framed}}
+%% end
+%% site:
+\newcommand{\shot}[1]{\includegraphics[width=0.9\linewidth]{#1}}
+%% end
+\bibliographystyle{plain}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+
+\title{An Introduction to ReflowEd}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{What ReflowEd is}\label{sec:what}
+
+ReflowEd is a LaTeX editor that runs in your browser. A document is a list of blocks: a paragraph, a heading, a theorem, a proof, a figure. Each block is typeset by a TeX engine running on your machine, and the result is broken into lines again for the width of the window, so the same document reads well on a wide screen and on a phone.
+
+ReflowEd keeps writing a document apart from setting it in pages. While you write, the content keeps changing, and it does not need to be broken into pages yet. Nor should one cryptic LaTeX error stop the whole document. So a ReflowEd document is:
+\begin{itemize}
+  \item pageless: there are no pages, so there are no figures to push around and no line breaks to fix, and the text does not jump about while you edit;
+  \item made of blocks: each block is typeset on its own and changes nothing for the others, so only the block you edit is typeset again, and an error stays in its block.
+\end{itemize}
+Both come from the approach of \href{https://radek-p.github.io/reflowtex/}{Reflow\,\TeX}, which breaks \TeX's lines again for any width.
+
+%% editor:
+This document is itself a ReflowEd document. Everything it describes is in front of you: click on a block to see its source, change it, and watch it typeset again.
+%% end
+%% site:
+In \href{app/}{ReflowEd}, clicking on a block opens its source; change it, and the block is typeset again as you type.
+%% end
+
+The same document can be open twice, side by side, as in \cref{fig:shot-split-view}; an edit in one pane shows in the other.
+
+\begin{figure}[h]
+  \centering
+  \shot{figures/shot-split-view}
+  \caption{A split view: the same document in two panes.}\label{fig:shot-split-view}
+\end{figure}
+
+The side panel lists the document's sections in the Outline (\cref{fig:shot-outline}), and each section has a menu of its own (\cref{fig:shot-section-menu}).
+
+\begin{figure}[h]
+  \centering
+  \shot{figures/shot-outline}
+  \caption{The side panel with the Outline.}\label{fig:shot-outline}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \shot{figures/shot-section-menu}
+  \caption{The section menu.}\label{fig:shot-section-menu}
+\end{figure}
+
+The View options set the width of the text and the theme; \cref{fig:shot-themes} shows the four themes.
+
+\begin{figure}[h]
+  \centering
+  \shot{figures/shot-themes}
+  \caption{The View options and the four themes.}\label{fig:shot-themes}
+\end{figure}
+
+\section{Editing a block}\label{sec:editing}
+
+%% editor:
+Click on any paragraph. Its LaTeX source opens next to it, with the caret at the place you clicked. While you type, the block is typeset again and the preview follows. Press Escape to close the source.
+%% end
+%% site:
+Clicking on a paragraph in ReflowEd opens its LaTeX source next to it, with the caret at the place of the click. While you type, the block is typeset again and the preview follows. Escape closes the source.
+%% end
+
+\Cref{fig:shot-code-popover} shows the source of a block open in the code popover.
+
+\begin{figure}[h]
+  \centering
+  \shot{figures/shot-code-popover}
+  \caption{The code popover open on a block.}\label{fig:shot-code-popover}
+\end{figure}
+
+A long paragraph can be split into two blocks at the caret, and two neighbouring paragraphs can be joined again. Blocks can be moved by dragging them.
+
+\section{Mathematics}\label{sec:maths}
+
+Theorems, proofs and numbered equations are blocks like any other. The numbers are worked out for the whole document, so a block typeset on its own still shows the right number.
+
+\begin{definition}\label{def:triangular}
+The $n$th \emph{triangular number} is $T_n = 1 + 2 + \dots + n$.
+\end{definition}
+
+\begin{theorem}\label{thm:gauss}
+For every $n \geq 1$,
+\begin{equation}\label{eq:gauss}
+  T_n = \frac{n(n+1)}{2}.
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+Write the sum twice, once forwards and once backwards, and add the two term by term: each of the $n$ pairs sums to $n + 1$, so $2T_n = n(n+1)$.
+\end{proof}
+
+%% editor:
+\Cref{thm:gauss} and \cref{eq:gauss} above are cross-references. Click on one to see what it points to. Change the label in the theorem and the reference shows the problem straight away.
+%% end
+%% site:
+\Cref{thm:gauss} and \cref{eq:gauss} above are cross-references. Pointing at one shows its target, here as in ReflowEd. In the editor, a change to the label in the theorem shows as a problem at the reference straight away.
+%% end
+
+\Cref{fig:shot-reference-card} shows the card a cross-reference opens.
+
+\begin{figure}[h]
+  \centering
+  \shot{figures/shot-reference-card}
+  \caption{The reference card of a cross-reference.}\label{fig:shot-reference-card}
+\end{figure}
+
+\section{Citations}\label{sec:cite}
+
+%% editor:
+This paragraph cites \cite{knuth1984} and \cite{lamport1994}. Hover over a citation to see the entry. The bibliography at the end is a block like any other.
+%% end
+%% site:
+This paragraph cites \cite{knuth1984} and \cite{lamport1994}. Pointing at a citation shows its entry. In ReflowEd, the bibliography at the end is a block like any other.
+%% end
+
+\section{Figures}\label{sec:figures}
+
+%% editor:
+A TikZ picture is typeset by the engine in the browser, as in \cref{fig:tikz}.
+%% end
+%% site:
+In ReflowEd, a TikZ picture such as \cref{fig:tikz} is typeset by the engine in your browser.
+%% end
+
+A picture can also be drawn in the figure editor (\cref{fig:shot-figure-editor}).
+
+\begin{figure}[h]
+  \centering
+  \shot{figures/shot-figure-editor}
+  \caption{The figure editor.}\label{fig:shot-figure-editor}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \begin{tikzpicture}[scale=0.8]
+    \foreach \k in {1,...,4} {
+      \foreach \j in {1,...,\k} {
+        \fill (\j*0.5, -\k*0.5) circle (0.12);
+      }
+    }
+    \node[right] at (2.5,-1.25) {$T_4 = 10$};
+  \end{tikzpicture}
+  \caption{The fourth triangular number.}\label{fig:tikz}
+\end{figure}
+
+\section{Notes and TODOs}\label{sec:notes}
+
+%% editor:
+A \verb|\todo| note shows as a small mark in the text, and the TODOs panel lists every note of the document.\todo{A note like this one.}
+%% end
+%% site:
+A \verb|\todo| note shows as a small mark in the text, and in ReflowEd the TODOs panel lists every note of the document.\todo{A note like this one.}
+%% end
+
+\section{Tables and lists}\label{sec:tables}
+
+Tables and lists are blocks too.
+
+\begin{itemize}
+  \item a paragraph is one block;
+  \item a theorem, a proof or a figure is one block;
+  \item the preamble is shared by every block.
+\end{itemize}
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{ll}
+    \toprule
+    Block & What it holds \\
+    \midrule
+    Paragraph & text and inline maths \\
+    Theorem & a statement, with its number \\
+    Figure & a picture and its caption \\
+    \bottomrule
+  \end{tabular}
+  \caption{Some kinds of block.}\label{tab:kinds}
+\end{table}
+
+\section{Where your document lives}\label{sec:store}
+
+%% editor:
+The engine runs in your browser and the documents are kept in its storage, so a document never leaves your machine unless you export it.
+%% end
+%% site:
+ReflowEd's engine runs in your browser, and your documents are kept in the browser's storage, so a document never leaves your machine unless you export it.
+%% end
+
+\bibliography{refs}
+
+\end{document}

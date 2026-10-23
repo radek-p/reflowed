@@ -1,0 +1,1 @@
+Copies (unchanged) of reflowtex/src/shared/tree.ts and src/pipeline/display-model.ts, taken 2026-09-27, so the converter builds the same display model as the pipeline. AGPL-3.0-or-later, like their origin.

@@ -1,0 +1,26 @@
+{
+  // tsc --noEmit over the workbench's product code, src/ and demo/ (scripts/typecheck.ts runs it; tsconfig.tests.json the
+  // tests and scripts). Erasable TypeScript only: Node runs the tests and
+  // scripts as they are (type stripping) and esbuild bundles the demo; nothing is emitted.
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "strict": true,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": [],
+    "baseUrl": ".",
+    "paths": { "*": ["../app/node_modules/*"] }
+  },
+  "include": ["src/**/*.ts", "demo/**/*.ts", "types/**/*.d.ts"]
+}

@@ -1,0 +1,755 @@
+%
+%   \usepackage{reflowed-meta}            % apply=auto: the class's own \title,
+%                                         % \author … are set at \begin{document}
+%   \ReflowedMeta{
+%     title       = {…},  subtitle = {…},  short-title = {…},
+%     date        = {…},  keywords = {a, b},  funding = {…},  thanks = {…},
+%     author      = {name = {…}, affil = {uw, mpi}, email = …, orcid = …,
+%                    thanks = {…}, funding = {…}, corresponding, equal,
+%                    break-after},
+%     author      = {…},                  % repeated keys append
+%     affiliation = {id = uw, name = {…}},
+%   }
+%
+% Raw data (any key, known or not, is kept):
+%   \ReflowedMetaGet{author/1/name}       expandable; empty when unset
+%   \ReflowedMetaCount{author}            expandable integer
+%   \ReflowedMetaIfSetTF{author/1/orcid}{…}{…}   expandable
+%   \ReflowedMetaJoin[ and ]{author}{name}{, }   expandable (pdfauthor=…)
+%   \ReflowedMetaForEach{author}[\a]{… \a …}     \a = 1, 2, … (default \x)
+%   \ReflowedMetaApply                    apply now (with apply=none)
+%   \ReflowedMetaSetup{apply=none}        options, also at \usepackage
+% expl3: \g_reflowedmeta_prop, \reflowedmeta_get:n, \reflowedmeta_count:n,
+%   \reflowedmeta_if_set:nTF, \reflowedmeta_join:nnnn,
+%   \reflowedmeta_map_variable:nNn.
+%
+% Paths: title; author/<i>/<field>; author/<i>/affil/<k> (an affiliation id)
+% and author/<i>/affil/<k>/<field> (that affiliation's fields);
+% affiliation/<i>/<field>, affiliation/<id>/<field>, affiliation/<id>/index,
+% affiliation/<id>/text (as printed); <list>/count.
+% See ../meta/DESIGN.md. Needs LaTeX 2021-11-15 (TL2022) or later.
+\NeedsTeXFormat{LaTeX2e}[2021/11/15]
+\ProvidesExplPackage{reflowed-meta}{2026-10-03}{1.0}
+  {Title, authors and affiliations as data, applied per class}
+
+% ---------------------------------------------------------------- options
+\tl_new:N \g__reflowedmeta_apply_tl
+\tl_new:N \g__reflowedmeta_adapter_tl
+\bool_new:N \g__reflowedmeta_pdfinfo_bool
+\keys_define:nn { reflowedmeta }
+  {
+    apply   .choices:nn = { auto , none }
+      { \tl_gset_eq:NN \g__reflowedmeta_apply_tl \l_keys_choice_tl } ,
+    apply   .initial:n  = auto ,
+    adapter .tl_gset:N  = \g__reflowedmeta_adapter_tl ,
+    pdfinfo .bool_gset:N = \g__reflowedmeta_pdfinfo_bool ,
+    pdfinfo .initial:n  = true ,
+  }
+% key–value package options (the 2021 kernel has no \ProcessKeyOptions)
+\clist_new:N \g__reflowedmeta_options_clist
+\DeclareOption* { \clist_gput_right:Nx \g__reflowedmeta_options_clist { \CurrentOption } }
+\ProcessOptions \relax
+\keys_set:nV { reflowedmeta } \g__reflowedmeta_options_clist
+\NewDocumentCommand \ReflowedMetaSetup { m } { \keys_set:nn { reflowedmeta } {#1} }
+
+% ---------------------------------------------------------------- the store
+\prop_new:N \g_reflowedmeta_prop
+\prop_new:N \l__reflowedmeta_item_prop
+\int_new:N \l__reflowedmeta_n_int
+\int_new:N \l__reflowedmeta_k_int
+\tl_new:N \l__reflowedmeta_tmp_tl
+\tl_new:N \l__reflowedmeta_id_tl
+\clist_new:N \l__reflowedmeta_tmp_clist
+
+\cs_new_protected:Npn \__reflowedmeta_put:nn #1#2
+  { \prop_gput:Nnn \g_reflowedmeta_prop {#1} {#2} }
+\cs_generate_variant:Nn \__reflowedmeta_put:nn { e , ee }
+
+\cs_new:Npn \reflowedmeta_get:n #1 { \prop_item:Nn \g_reflowedmeta_prop {#1} }
+\cs_generate_variant:Nn \reflowedmeta_get:n { e }
+\prg_new_conditional:Npnn \reflowedmeta_if_set:n #1 { p , T , F , TF }
+  { \prop_if_in:NnTF \g_reflowedmeta_prop {#1} \prg_return_true: \prg_return_false: }
+\prg_generate_conditional_variant:Nnn \reflowedmeta_if_set:n { e } { p , T , F , TF }
+\cs_new:Npn \reflowedmeta_count:n #1
+  { \int_eval:n { 0 \reflowedmeta_get:e { #1 / count } } }
+% a value, or #2 when unset
+\cs_new:Npn \__reflowedmeta_get_or:nn #1#2
+  { \reflowedmeta_if_set:eTF {#1} { \reflowedmeta_get:e {#1} } { \exp_not:n {#2} } }
+
+% \ReflowedMeta{…}: top-level keys are stored as given; author= and
+% affiliation= append an item whose own keys are stored under <list>/<i>/.
+\NewDocumentCommand \ReflowedMeta { +m }
+  {
+    \keyval_parse:nnn \__reflowedmeta_top_flag:n \__reflowedmeta_top:nn {#1}
+    \__reflowedmeta_link:
+  }
+\cs_new_protected:Npn \__reflowedmeta_top_flag:n #1 { \__reflowedmeta_top:nn {#1} { true } }
+\cs_new_protected:Npn \__reflowedmeta_top:nn #1#2
+  {
+    \str_case:nnF {#1}
+      {
+        { author }      { \__reflowedmeta_item:nn { author } {#2} }
+        { affiliation } { \__reflowedmeta_item:nn { affiliation } {#2} }
+      }
+      { \__reflowedmeta_put:nn {#1} {#2} }
+  }
+\cs_new_protected:Npn \__reflowedmeta_field_flag:n #1
+  { \prop_put:Nnn \l__reflowedmeta_item_prop {#1} { true } }
+\cs_new_protected:Npn \__reflowedmeta_field:nn #1#2
+  { \prop_put:Nnn \l__reflowedmeta_item_prop {#1} {#2} }
+\cs_new_protected:Npn \__reflowedmeta_item:nn #1#2
+  {
+    \int_set:Nn \l__reflowedmeta_n_int { \reflowedmeta_count:n {#1} + 1 }
+    \__reflowedmeta_put:ee { #1 / count } { \int_use:N \l__reflowedmeta_n_int }
+    \prop_clear:N \l__reflowedmeta_item_prop
+    \keyval_parse:nnn \__reflowedmeta_field_flag:n \__reflowedmeta_field:nn {#2}
+    \prop_map_inline:Nn \l__reflowedmeta_item_prop
+      { \__reflowedmeta_put:en { #1 / \int_use:N \l__reflowedmeta_n_int / ##1 } {##2} }
+    \use:c { __reflowedmeta_item_ #1 : }
+  }
+% an affiliation is also reachable by its id; its printed text is kept as `text`
+\cs_new_protected:Npn \__reflowedmeta_item_affiliation:
+  {
+    \prop_get:NnNT \l__reflowedmeta_item_prop { id } \l__reflowedmeta_id_tl
+      {
+        \prop_map_inline:Nn \l__reflowedmeta_item_prop
+          { \__reflowedmeta_put:en { affiliation / \l__reflowedmeta_id_tl / ##1 } {##2} }
+        \__reflowedmeta_put:ee { affiliation / \l__reflowedmeta_id_tl / index }
+          { \int_use:N \l__reflowedmeta_n_int }
+        \__reflowedmeta_put:ee { affiliation / \int_use:N \l__reflowedmeta_n_int / index }
+          { \int_use:N \l__reflowedmeta_n_int }
+        \tl_set:Nx \l__reflowedmeta_tmp_tl { \__reflowedmeta_affil_text:V \l__reflowedmeta_id_tl }
+        \__reflowedmeta_put:eV { affiliation / \l__reflowedmeta_id_tl / text } \l__reflowedmeta_tmp_tl
+        \__reflowedmeta_put:eV { affiliation / \int_use:N \l__reflowedmeta_n_int / text } \l__reflowedmeta_tmp_tl
+      }
+  }
+\cs_generate_variant:Nn \__reflowedmeta_put:nn { eV }
+% an author's affil = {a, b} is also a list: author/<i>/affil/<k>
+\cs_new_protected:Npn \__reflowedmeta_item_author:
+  {
+    \prop_get:NnNT \l__reflowedmeta_item_prop { name } \l__reflowedmeta_tmp_tl
+      {
+        \tl_if_in:NnT \l__reflowedmeta_tmp_tl { \and }
+          { \msg_warning:nnx { reflowedmeta } { and-in-name } { \tl_to_str:N \l__reflowedmeta_tmp_tl } }
+      }
+    \prop_get:NnNT \l__reflowedmeta_item_prop { affil } \l__reflowedmeta_tmp_tl
+      {
+        \clist_set:NV \l__reflowedmeta_tmp_clist \l__reflowedmeta_tmp_tl
+        \int_zero:N \l__reflowedmeta_k_int
+        \clist_map_inline:Nn \l__reflowedmeta_tmp_clist
+          {
+            \int_incr:N \l__reflowedmeta_k_int
+            \__reflowedmeta_put:en
+              { author / \int_use:N \l__reflowedmeta_n_int / affil / \int_use:N \l__reflowedmeta_k_int } {##1}
+          }
+        \__reflowedmeta_put:ee { author / \int_use:N \l__reflowedmeta_n_int / affil / count }
+          { \int_use:N \l__reflowedmeta_k_int }
+      }
+  }
+% after each \ReflowedMeta: author/<i>/affil/<k>/<field> for every
+% affiliation field (affiliations may come before or after their authors)
+\clist_const:Nn \c__reflowedmeta_affil_fields_clist
+  { id , name , department , institution , address , city , country , ror , url , index , text }
+\cs_new_protected:Npn \__reflowedmeta_link:
+  {
+    \int_step_inline:nn { \reflowedmeta_count:n { author } }
+      {
+        \int_step_inline:nn { \reflowedmeta_count:n { author / ##1 / affil } }
+          {
+            \tl_set:Nx \l__reflowedmeta_id_tl { \reflowedmeta_get:n { author / ##1 / affil / ####1 } }
+            \reflowedmeta_if_set:eT { affiliation / \l__reflowedmeta_id_tl / index }
+              {
+                \clist_map_inline:Nn \c__reflowedmeta_affil_fields_clist
+                  {
+                    \reflowedmeta_if_set:eT { affiliation / \l__reflowedmeta_id_tl / ########1 }
+                      {
+                        \__reflowedmeta_put:ee { author / ##1 / affil / ####1 / ########1 }
+                          { \reflowedmeta_get:e { affiliation / \l__reflowedmeta_id_tl / ########1 } }
+                      }
+                  }
+              }
+          }
+      }
+  }
+
+% ---------------------------------------------------------------- raw access
+\NewExpandableDocumentCommand \ReflowedMetaGet { m } { \reflowedmeta_get:e {#1} }
+\NewExpandableDocumentCommand \ReflowedMetaCount { m } { \reflowedmeta_count:n {#1} }
+\NewExpandableDocumentCommand \ReflowedMetaIfSetTF { m m m }
+  { \reflowedmeta_if_set:eTF {#1} {#2} {#3} }
+
+% \reflowedmeta_join:nnnn {list} {field} {sep} {last sep}
+\cs_new:Npn \reflowedmeta_join:nnnn #1#2#3#4
+  { \exp_args:Nf \__reflowedmeta_join:nnnnnn { \reflowedmeta_count:n {#1} } { 1 } {#1} {#2} {#3} {#4} }
+\cs_new:Npn \__reflowedmeta_join:nnnnnn #1#2#3#4#5#6
+  {
+    \int_compare:nNnF {#2} > {#1}
+      {
+        \int_compare:nNnF {#2} = { 1 }
+          { \int_compare:nNnTF {#2} = {#1} { \exp_not:n {#6} } { \exp_not:n {#5} } }
+        \reflowedmeta_get:e { #3 / #2 / #4 }
+        \exp_args:Nnf \__reflowedmeta_join:nnnnnn {#1} { \int_eval:n { #2 + 1 } } {#3} {#4} {#5} {#6}
+      }
+  }
+\NewExpandableDocumentCommand \ReflowedMetaJoin { O{#4} m m m }
+  { \reflowedmeta_join:nnnn {#2} {#3} {#4} {#1} }
+
+% The loop, pgffor-like: a named variable holds 1, 2, … (no # parameters, so
+% nothing to double inside definitions; nested loops take distinct names).
+% No group around the body, and the variable is set globally, so an \and or a
+% \\ (which end table cells) inside it are fine and assignments stay;
+% the variable gets its old meaning back after the loop.
+\int_new:N \g__reflowedmeta_depth_int
+\cs_new_protected:Npn \reflowedmeta_map_variable:nNn #1#2#3
+  {
+    \int_gincr:N \g__reflowedmeta_depth_int
+    \cs_gset_eq:cN { g__reflowedmeta_saved_ \int_use:N \g__reflowedmeta_depth_int :w } #2
+    \exp_args:Nnf \__reflowedmeta_map_loop:nnNn { 1 } { \reflowedmeta_count:n {#1} } #2 {#3}
+    \cs_gset_eq:Nc #2 { g__reflowedmeta_saved_ \int_use:N \g__reflowedmeta_depth_int :w }
+    \int_gdecr:N \g__reflowedmeta_depth_int
+  }
+\cs_new_protected:Npn \__reflowedmeta_map_loop:nnNn #1#2#3#4
+  {
+    \int_compare:nNnF {#1} > {#2}
+      {
+        \cs_gset_nopar:Npn #3 {#1}
+        #4
+        \exp_args:Nf \__reflowedmeta_map_loop:nnNn { \int_eval:n { #1 + 1 } } {#2} #3 {#4}
+      }
+  }
+\NewDocumentCommand \ReflowedMetaForEach { m O{\x} +m }
+  { \reflowedmeta_map_variable:nNn {#1} #2 {#3} }
+
+% ---------------------------------------------------------------- helpers
+\tl_new:N \l__reflowedmeta_title_tl
+\tl_new:N \l__reflowedmeta_authors_tl
+\tl_new:N \l__reflowedmeta_one_tl
+\tl_new:N \l__reflowedmeta_affils_tl
+\bool_new:N \l__reflowedmeta_shared_bool
+\prop_new:N \l__reflowedmeta_groups_prop
+
+% call #1 with the value at path #2, expanded once into the argument
+\cs_new_protected:Npn \__reflowedmeta_call:Nn #1#2
+  { \use:e { \exp_not:N #1 { \reflowedmeta_get:n {#2} } } }
+\cs_new_protected:Npn \__reflowedmeta_call_if_set:Nn #1#2
+  { \reflowedmeta_if_set:nT {#2} { \__reflowedmeta_call:Nn #1 {#2} } }
+\prg_new_conditional:Npnn \__reflowedmeta_if_true:n #1 { p , T , F , TF }
+  {
+    \reflowedmeta_if_set:eTF {#1}
+      {
+        \str_if_eq:eeTF { \reflowedmeta_get:e {#1} } { false }
+          \prg_return_false: \prg_return_true:
+      }
+      \prg_return_false:
+  }
+
+% the printed text of affiliation <id>: name, else department, institution,
+% address, city, country joined with commas
+\cs_new:Npn \__reflowedmeta_affil_text:n #1
+  {
+    \reflowedmeta_if_set:eTF { affiliation / #1 / name }
+      { \reflowedmeta_get:e { affiliation / #1 / name } }
+      {
+        \__reflowedmeta_compose:nnw {#1} { }
+          department , institution , address , city , country ,
+          \q_recursion_tail , \q_recursion_stop
+      }
+  }
+\cs_generate_variant:Nn \__reflowedmeta_affil_text:n { V }
+\cs_new:Npn \__reflowedmeta_compose:nnw #1#2#3 ,
+  {
+    \quark_if_recursion_tail_stop:n {#3}
+    \reflowedmeta_if_set:eTF { affiliation / #1 / #3 }
+      {
+        \exp_not:n {#2} \reflowedmeta_get:e { affiliation / #1 / #3 }
+        \__reflowedmeta_compose:nnw {#1} { , ~ }
+      }
+      { \__reflowedmeta_compose:nnw {#1} {#2} }
+  }
+
+\cs_new:Npn \__reflowedmeta_orcid_url:n #1
+  {
+    \str_if_eq:eeTF { \str_range:nnn {#1} { 1 } { 4 } } { http }
+      { #1 } { https://orcid.org/ #1 }
+  }
+
+% ---------------------------------------------------------------- applying
+% classes built on article (lipics-v2021, amsart …) are looked for first
+\prop_const_from_keyval:Nn \c__reflowedmeta_classes_prop
+  {
+    lipics-v2021 = lipics , oasics-v2021 = lipics ,
+    acmart = acmart , llncs = llncs ,
+    amsart = amsart , amsproc = amsart , amsbook = amsart ,
+    revtex4-2 = revtex , revtex4-1 = revtex ,
+  }
+\clist_const:Nn \c__reflowedmeta_article_clist
+  { article , report , book , scrartcl , scrreprt , scrbook , memoir }
+\cs_new_protected:Npn \__reflowedmeta_detect:
+  {
+    \prop_map_inline:Nn \c__reflowedmeta_classes_prop
+      { \IfClassLoadedTF {##1} { \tl_gset:Nn \g__reflowedmeta_adapter_tl {##2} \prop_map_break: } { } }
+    \tl_if_empty:NT \g__reflowedmeta_adapter_tl
+      {
+        \clist_map_inline:Nn \c__reflowedmeta_article_clist
+          { \IfClassLoadedTF {##1} { \tl_gset:Nn \g__reflowedmeta_adapter_tl { article } \clist_map_break: } { } }
+      }
+    \tl_if_empty:NT \g__reflowedmeta_adapter_tl
+      {
+        \msg_warning:nn { reflowedmeta } { no-adapter }
+        \tl_gset:Nn \g__reflowedmeta_adapter_tl { article }
+      }
+    \str_if_eq:VnT \g__reflowedmeta_adapter_tl { article }
+      { \IfPackageLoadedTF { authblk } { \tl_gset:Nn \g__reflowedmeta_adapter_tl { authblk } } { } }
+  }
+\msg_new:nnn { reflowedmeta } { and-in-name }
+  { The~name~'#1'~contains~\iow_char:N\\and:~give~each~author~their~own~author~=~\iow_char:N\{...\iow_char:N\}. }
+\msg_new:nnn { reflowedmeta } { no-adapter }
+  { No~adapter~for~this~class:~the~title~is~set~as~for~article. }
+\msg_new:nnn { reflowedmeta } { unknown-adapter }
+  { Adapter~'#1'~is~not~(yet)~written:~the~title~is~set~as~for~article. }
+\msg_new:nnn { reflowedmeta } { class-option }
+  { '#1'~is~a~class~option~here:~\iow_char:N\\documentclass[#1]{#2}. }
+\msg_new:nnn { reflowedmeta } { no-equal }
+  { #1~has~no~place~for~equal~contribution:~say~it~in~a~note~or~the~acknowledgements. }
+
+\bool_new:N \g__reflowedmeta_applied_bool
+\cs_new_protected:Npn \__reflowedmeta_apply:
+  {
+    \bool_if:NF \g__reflowedmeta_applied_bool
+      {
+        \bool_gset_true:N \g__reflowedmeta_applied_bool
+        \tl_if_empty:NT \g__reflowedmeta_adapter_tl { \__reflowedmeta_detect: }
+        \cs_if_exist:cF { __reflowedmeta_apply_ \g__reflowedmeta_adapter_tl : }
+          {
+            \msg_warning:nnx { reflowedmeta } { unknown-adapter } { \tl_to_str:N \g__reflowedmeta_adapter_tl }
+            \tl_gset:Nn \g__reflowedmeta_adapter_tl { article }
+          }
+        % in the body (the editor's title block), a class's \AtBeginDocument
+        % (LIPIcs's \author uses it) is run at once
+        \cs_set_eq:NN \__reflowedmeta_saved_atbegin: \AtBeginDocument
+        \cs_if_eq:NNT \AtBeginDocument \@notprerr { \cs_set_eq:NN \AtBeginDocument \use:n }
+        \use:c { __reflowedmeta_apply_ \g__reflowedmeta_adapter_tl : }
+        \cs_set_eq:NN \AtBeginDocument \__reflowedmeta_saved_atbegin:
+      }
+  }
+\NewDocumentCommand \ReflowedMetaApply { } { \__reflowedmeta_apply: }
+\hook_gput_code:nnn { begindocument / before } { reflowed-meta }
+  { \str_if_eq:VnT \g__reflowedmeta_apply_tl { auto } { \__reflowedmeta_apply: } }
+
+% hyperref's PDF information, for classes that do not set it themselves
+\cs_new_protected:Npn \__reflowedmeta_pdfinfo:
+  {
+    \bool_if:NT \g__reflowedmeta_pdfinfo_bool
+      {
+        \IfPackageLoadedTF { hyperref }
+          {
+            \use:e
+              {
+                \exp_not:N \hypersetup
+                  {
+                    pdftitle = { \reflowedmeta_get:n { title } } ,
+                    \__reflowedmeta_if_true:nF { anonymous }
+                      { pdfauthor = { \reflowedmeta_join:nnnn { author } { name } { , ~ } { , ~ } } , }
+                    \reflowedmeta_if_set:nT { keywords }
+                      { pdfkeywords = { \reflowedmeta_get:n { keywords } } , }
+                  }
+              }
+          }
+          { }
+      }
+  }
+
+% --- notes on a name (article, authblk) ------------------------------------
+% equal contribution: the first author of a group gets the note, the others
+% its mark (\footnotemark[n], the number taken when the note is set)
+\cs_new_protected:Npn \__reflowedmeta_equal_note:n #1
+  {
+    \thanks { \__reflowedmeta_get_or:nn { equal-text } { Equal~contribution. } }
+    \cs_gset:cpx { g__reflowedmeta_equal_ #1 _tl } { \int_use:c { c@footnote } }
+  }
+\cs_new_protected:Npn \__reflowedmeta_equal_mark:n #1
+  { \footnotemark [ \use:c { g__reflowedmeta_equal_ #1 _tl } ] }
+% the name of author #1 with its notes, into \l__reflowedmeta_one_tl
+\cs_new_protected:Npn \__reflowedmeta_name_notes:n #1
+  {
+    \tl_set:Nx \l__reflowedmeta_one_tl
+      {
+        \reflowedmeta_get:n { author / #1 / name }
+        \reflowedmeta_if_set:nT { author / #1 / thanks }
+          { \exp_not:N \thanks { \reflowedmeta_get:n { author / #1 / thanks } } }
+        \reflowedmeta_if_set:nT { author / #1 / funding }
+          { \exp_not:N \thanks { \reflowedmeta_get:n { author / #1 / funding } } }
+        \__reflowedmeta_if_true:nT { author / #1 / corresponding }
+          { \exp_not:N \thanks { \__reflowedmeta_get_or:nn { corresponding-text } { Corresponding~author. } } }
+      }
+    \__reflowedmeta_if_true:nT { author / #1 / equal }
+      {
+        \tl_set:Nx \l__reflowedmeta_tmp_tl { \reflowedmeta_get:n { author / #1 / equal } }
+        \prop_if_in:NVTF \l__reflowedmeta_groups_prop \l__reflowedmeta_tmp_tl
+          { \tl_put_right:Nx \l__reflowedmeta_one_tl { \exp_not:N \__reflowedmeta_equal_mark:n { \l__reflowedmeta_tmp_tl } } }
+          {
+            \prop_put:NVn \l__reflowedmeta_groups_prop \l__reflowedmeta_tmp_tl { }
+            \tl_put_right:Nx \l__reflowedmeta_one_tl { \exp_not:N \__reflowedmeta_equal_note:n { \l__reflowedmeta_tmp_tl } }
+          }
+      }
+  }
+
+% --- article (and report, book, KOMA, memoir) ---------------------------
+% \title{title \\ {\large subtitle} \thanks{thanks} \thanks{funding}};
+% authors sharing one set of affiliations: their names in one centred line
+% that wraps between names (break-after forces a break), then the
+% affiliations once; otherwise one block per author (name, affiliations,
+% email) joined with \and (a line break after a break-after author).
+\cs_new_protected:Npn \__reflowedmeta_title_tl:
+  {
+    \tl_set:Nx \l__reflowedmeta_title_tl { \reflowedmeta_get:n { title } }
+    \reflowedmeta_if_set:nT { subtitle }
+      { \tl_put_right:Nx \l__reflowedmeta_title_tl { \exp_not:N \\ { \exp_not:N \large \reflowedmeta_get:n { subtitle } } } }
+    \__reflowedmeta_if_true:nF { anonymous }
+      {
+        \reflowedmeta_if_set:nT { thanks }
+          { \tl_put_right:Nx \l__reflowedmeta_title_tl { \exp_not:N \thanks { \reflowedmeta_get:n { thanks } } } }
+        \reflowedmeta_if_set:nT { funding }
+          { \tl_put_right:Nx \l__reflowedmeta_title_tl { \exp_not:N \thanks { \reflowedmeta_get:n { funding } } } }
+      }
+  }
+% affiliation lines of author #1, each after \\ (line breaks in a tabular)
+\cs_new_protected:Npn \__reflowedmeta_affil_lines:n #1
+  {
+    \tl_clear:N \l__reflowedmeta_affils_tl
+    \int_step_inline:nn { \reflowedmeta_count:n { author / #1 / affil } }
+      {
+        \tl_put_right:Nx \l__reflowedmeta_affils_tl
+          { \exp_not:N \\ \reflowedmeta_get:n { author / #1 / affil / ##1 / text } }
+      }
+  }
+\cs_new_protected:Npn \__reflowedmeta_check_shared:
+  {
+    \bool_set:Nn \l__reflowedmeta_shared_bool
+      { \int_compare_p:nNn { \reflowedmeta_count:n { author } } > { 1 }
+        && \reflowedmeta_if_set_p:n { author / 1 / affil } }
+    \int_step_inline:nnn { 2 } { \reflowedmeta_count:n { author } }
+      {
+        \str_if_eq:eeF { \reflowedmeta_get:n { author / 1 / affil } }
+          { \reflowedmeta_get:e { author / ##1 / affil } }
+          { \bool_set_false:N \l__reflowedmeta_shared_bool }
+      }
+  }
+\cs_new_protected:Npn \__reflowedmeta_anonymous_author:
+  { \exp_args:Nx \author { \__reflowedmeta_get_or:nn { anonymous-text } { Anonymous~author(s) } } }
+\cs_new_protected:Npn \__reflowedmeta_apply_article:
+  {
+    \__reflowedmeta_title_tl:
+    \exp_args:NV \title \l__reflowedmeta_title_tl
+    \__reflowedmeta_call_if_set:Nn \date { date }
+    \tl_clear:N \l__reflowedmeta_authors_tl
+    \prop_clear:N \l__reflowedmeta_groups_prop
+    \__reflowedmeta_if_true:nTF { anonymous }
+      { \__reflowedmeta_anonymous_author: }
+      {
+        \__reflowedmeta_check_shared:
+        \bool_if:NTF \l__reflowedmeta_shared_bool
+          {
+            \tl_clear:N \l__reflowedmeta_authors_tl
+            \int_step_inline:nn { \reflowedmeta_count:n { author } }
+              {
+                \__reflowedmeta_name_notes:n {##1}
+                \tl_put_right:Nx \l__reflowedmeta_authors_tl
+                  {
+                    \exp_not:N \mbox { \exp_not:V \l__reflowedmeta_one_tl }
+                    \int_compare:nNnF {##1} = { \reflowedmeta_count:n { author } }
+                      {
+                        \__reflowedmeta_if_true:nTF { author / ##1 / break-after }
+                          { \exp_not:N \\ } { , ~ }
+                      }
+                  }
+              }
+            \__reflowedmeta_affil_lines:n { 1 }
+            \tl_set:Nx \l__reflowedmeta_authors_tl
+              {
+                \exp_not:N \parbox { \exp_not:N \dimexpr \exp_not:N \linewidth - 2 \exp_not:N \tabcolsep \relax }
+                  {
+                    \exp_not:N \centering \exp_not:V \l__reflowedmeta_authors_tl
+                    \exp_not:N \\ [ 1ex ]
+                    \exp_not:o { \exp_after:wN \use_none:n \l__reflowedmeta_affils_tl }
+                  }
+              }
+          }
+          {
+            \int_step_inline:nn { \reflowedmeta_count:n { author } }
+              {
+                \__reflowedmeta_affil_lines:n {##1}
+                \__reflowedmeta_name_notes:n {##1}
+                \tl_put_right:Nx \l__reflowedmeta_authors_tl
+                  {
+                    \int_compare:nNnF {##1} = { 1 }
+                      {
+                        \__reflowedmeta_if_true:nTF { author / \int_eval:n { ##1 - 1 } / break-after }
+                          {
+                            \exp_not:N \end { tabular } \exp_not:N \par
+                            \exp_not:N \begin { tabular } [t] { c }
+                          }
+                          { \exp_not:N \and }
+                      }
+                    \exp_not:V \l__reflowedmeta_one_tl
+                    \exp_not:V \l__reflowedmeta_affils_tl
+                    \reflowedmeta_if_set:nT { author / ##1 / email }
+                      { \exp_not:N \\ \exp_not:N \texttt { \reflowedmeta_get:n { author / ##1 / email } } }
+                  }
+              }
+          }
+        \exp_args:NV \author \l__reflowedmeta_authors_tl
+      }
+    \__reflowedmeta_pdfinfo:
+  }
+
+% --- authblk: \author[1,2]{name} and \affil[1]{text} -----------------------
+\cs_new_protected:Npn \__reflowedmeta_apply_authblk:
+  {
+    \__reflowedmeta_title_tl:
+    \exp_args:NV \title \l__reflowedmeta_title_tl
+    \__reflowedmeta_call_if_set:Nn \date { date }
+    \prop_clear:N \l__reflowedmeta_groups_prop
+    \__reflowedmeta_if_true:nTF { anonymous }
+      { \__reflowedmeta_anonymous_author: }
+      {
+        \int_step_inline:nn { \reflowedmeta_count:n { author } }
+          {
+            \tl_clear:N \l__reflowedmeta_affils_tl
+            \int_step_inline:nn { \reflowedmeta_count:n { author / ##1 / affil } }
+              {
+                \tl_put_right:Nx \l__reflowedmeta_affils_tl
+                  {
+                    \int_compare:nNnF {####1} = { 1 } { , }
+                    \reflowedmeta_get:n { author / ##1 / affil / ####1 / index }
+                  }
+              }
+            \__reflowedmeta_name_notes:n {##1}
+            \use:e
+              {
+                \exp_not:N \author [ \exp_not:V \l__reflowedmeta_affils_tl ]
+                  { \exp_not:V \l__reflowedmeta_one_tl }
+              }
+          }
+        \int_step_inline:nn { \reflowedmeta_count:n { affiliation } }
+          {
+            \use:e
+              { \exp_not:N \affil [##1] { \reflowedmeta_get:n { affiliation / ##1 / text } } }
+          }
+      }
+    \__reflowedmeta_pdfinfo:
+  }
+
+% --- lipics-v2021: \author{name}{affils}{email}{orcid}{funding} ----------
+% anonymous: the class option `anonymous` (the class hides what it must);
+% the author's thanks and funding go to the fifth argument (the class lists
+% them under Funding); corresponding authors: the class shows every email.
+\cs_new_protected:Npn \__reflowedmeta_apply_lipics:
+  {
+    \__reflowedmeta_if_true:nT { anonymous }
+      { \msg_warning:nnnn { reflowedmeta } { class-option } { anonymous } { lipics-v2021 } }
+    \__reflowedmeta_call:Nn \title { title }
+    \__reflowedmeta_call_if_set:Nn \subtitle { subtitle }
+    \__reflowedmeta_call_if_set:Nn \titlerunning { short-title }
+    \int_step_inline:nn { \reflowedmeta_count:n { author } }
+      {
+        \__reflowedmeta_if_true:nT { author / ##1 / equal }
+          { \msg_warning:nnn { reflowedmeta } { no-equal } { lipics-v2021 } }
+        \tl_clear:N \l__reflowedmeta_affils_tl
+        \int_step_inline:nn { \reflowedmeta_count:n { author / ##1 / affil } }
+          {
+            \tl_put_right:Nx \l__reflowedmeta_affils_tl
+              {
+                \int_compare:nNnF {####1} = { 1 } { ~ \exp_not:N \and ~ }
+                \reflowedmeta_get:n { author / ##1 / affil / ####1 / text }
+              }
+          }
+        \use:e
+          {
+            \exp_not:N \author
+              { \reflowedmeta_get:n { author / ##1 / name } }
+              { \exp_not:V \l__reflowedmeta_affils_tl }
+              { \reflowedmeta_get:n { author / ##1 / email } }
+              { \reflowedmeta_if_set:nT { author / ##1 / orcid }
+                  { \__reflowedmeta_orcid_url:n { \reflowedmeta_get:n { author / ##1 / orcid } } } }
+              {
+                \reflowedmeta_get:n { author / ##1 / funding }
+                \reflowedmeta_if_set:nT { author / ##1 / thanks }
+                  {
+                    \reflowedmeta_if_set:nT { author / ##1 / funding } { ~ }
+                    \reflowedmeta_get:n { author / ##1 / thanks }
+                  }
+              }
+          }
+      }
+    \reflowedmeta_if_set:nTF { short-authors }
+      { \__reflowedmeta_call:Nn \authorrunning { short-authors } }
+      { \use:e { \exp_not:N \authorrunning { \reflowedmeta_join:nnnn { author } { name } { , ~ } { ~ and ~ } } } }
+    \reflowedmeta_if_set:nTF { copyright }
+      { \__reflowedmeta_call:Nn \Copyright { copyright } }
+      { \use:e { \exp_not:N \Copyright { \reflowedmeta_join:nnnn { author } { name } { , ~ } { ~ and ~ } } } }
+    \__reflowedmeta_call_if_set:Nn \keywords { keywords }
+    \__reflowedmeta_call_if_set:Nn \funding { funding }
+  }
+
+% --- notes on a name as \thanks (llncs, amsart, revtex) ----------------------
+% the author's thanks, funding, corresponding and equal-contribution notes,
+% each a \thanks, into \l__reflowedmeta_one_tl
+\cs_new_protected:Npn \__reflowedmeta_thanks_notes:n #1
+  {
+    \tl_set:Nx \l__reflowedmeta_one_tl
+      {
+        \reflowedmeta_if_set:nT { author / #1 / thanks }
+          { \exp_not:N \thanks { \reflowedmeta_get:n { author / #1 / thanks } } }
+        \reflowedmeta_if_set:nT { author / #1 / funding }
+          { \exp_not:N \thanks { \reflowedmeta_get:n { author / #1 / funding } } }
+        \__reflowedmeta_if_true:nT { author / #1 / corresponding }
+          { \exp_not:N \thanks { \__reflowedmeta_get_or:nn { corresponding-text } { Corresponding~author. } } }
+        \__reflowedmeta_if_true:nT { author / #1 / equal }
+          { \exp_not:N \thanks { \__reflowedmeta_get_or:nn { equal-text } { Equal~contribution. } } }
+      }
+  }
+% the title's thanks and funding as \thanks, into \l__reflowedmeta_tmp_tl
+\cs_new_protected:Npn \__reflowedmeta_title_thanks:
+  {
+    \tl_clear:N \l__reflowedmeta_tmp_tl
+    \__reflowedmeta_if_true:nF { anonymous }
+      {
+        \tl_set:Nx \l__reflowedmeta_tmp_tl
+          {
+            \reflowedmeta_if_set:nT { thanks } { \exp_not:N \thanks { \reflowedmeta_get:n { thanks } } }
+            \reflowedmeta_if_set:nT { funding } { \exp_not:N \thanks { \reflowedmeta_get:n { funding } } }
+          }
+      }
+  }
+
+% --- llncs: \author{A\inst{1,2}\orcidID{…} \and B\inst{2}}, \institute{… \and …}
+% emails go into the institute of the author's first affiliation
+\cs_new_protected:Npn \__reflowedmeta_apply_llncs:
+  {
+    \__reflowedmeta_title_thanks:
+    \use:e { \exp_not:N \title { \reflowedmeta_get:n { title } \exp_not:V \l__reflowedmeta_tmp_tl } }
+    \__reflowedmeta_call_if_set:Nn \subtitle { subtitle }
+    \__reflowedmeta_call_if_set:Nn \titlerunning { short-title }
+    \__reflowedmeta_if_true:nTF { anonymous }
+      { \__reflowedmeta_anonymous_author: \institute { } }
+      {
+        \tl_clear:N \l__reflowedmeta_authors_tl
+        \int_step_inline:nn { \reflowedmeta_count:n { author } }
+          {
+            \__reflowedmeta_thanks_notes:n {##1}
+            \tl_clear:N \l__reflowedmeta_inst_tl
+            \int_step_inline:nn { \reflowedmeta_count:n { author / ##1 / affil } }
+              {
+                \tl_put_right:Nx \l__reflowedmeta_inst_tl
+                  { \int_compare:nNnF {####1} = { 1 } { , } \reflowedmeta_get:n { author / ##1 / affil / ####1 / index } }
+              }
+            \tl_put_right:Nx \l__reflowedmeta_authors_tl
+              {
+                \int_compare:nNnF {##1} = { 1 } { ~ \exp_not:N \and ~ }
+                \reflowedmeta_get:n { author / ##1 / name }
+                \tl_if_empty:NF \l__reflowedmeta_inst_tl
+                  { \exp_not:N \inst { \exp_not:V \l__reflowedmeta_inst_tl } }
+                \reflowedmeta_if_set:nT { author / ##1 / orcid }
+                  { \exp_not:N \orcidID { \reflowedmeta_get:n { author / ##1 / orcid } } }
+                \exp_not:V \l__reflowedmeta_one_tl
+              }
+          }
+        \exp_args:NV \author \l__reflowedmeta_authors_tl
+        \reflowedmeta_if_set:nTF { short-authors }
+          { \__reflowedmeta_call:Nn \authorrunning { short-authors } }
+          { \use:e { \exp_not:N \authorrunning { \reflowedmeta_join:nnnn { author } { name } { , ~ } { ~ and ~ } } } }
+        \tl_clear:N \l__reflowedmeta_affils_tl
+        \int_step_inline:nn { \reflowedmeta_count:n { affiliation } }
+          {
+            \tl_clear:N \l__reflowedmeta_tmp_tl
+            \int_step_inline:nn { \reflowedmeta_count:n { author } }
+              {
+                \bool_lazy_and:nnT
+                  { \reflowedmeta_if_set_p:n { author / ####1 / email } }
+                  { \int_compare_p:nNn { 0 \reflowedmeta_get:e { author / ####1 / affil / 1 / index } } = {##1} }
+                  {
+                    \tl_put_right:Nx \l__reflowedmeta_tmp_tl
+                      { \tl_if_empty:NF \l__reflowedmeta_tmp_tl { , ~ } \reflowedmeta_get:n { author / ####1 / email } }
+                  }
+              }
+            \tl_put_right:Nx \l__reflowedmeta_affils_tl
+              {
+                \int_compare:nNnF {##1} = { 1 } { ~ \exp_not:N \and ~ }
+                \reflowedmeta_get:n { affiliation / ##1 / text }
+                \tl_if_empty:NF \l__reflowedmeta_tmp_tl
+                  { \exp_not:N \\ \exp_not:N \email { \exp_not:V \l__reflowedmeta_tmp_tl } }
+              }
+          }
+        \exp_args:NV \institute \l__reflowedmeta_affils_tl
+      }
+  }
+\tl_new:N \l__reflowedmeta_inst_tl
+
+% --- amsart: \title[short]{…}, per author \author, \address, \email, \thanks;
+% \keywords, \date
+\cs_new_protected:Npn \__reflowedmeta_apply_amsart:
+  {
+    \tl_set:Nx \l__reflowedmeta_title_tl { \reflowedmeta_get:n { title } }
+    \reflowedmeta_if_set:nT { subtitle }
+      { \tl_put_right:Nx \l__reflowedmeta_title_tl { \exp_not:N \\ { \exp_not:N \large \reflowedmeta_get:n { subtitle } } } }
+    \reflowedmeta_if_set:nTF { short-title }
+      { \use:e { \exp_not:N \title [ \reflowedmeta_get:n { short-title } ] { \exp_not:V \l__reflowedmeta_title_tl } } }
+      { \exp_args:NV \title \l__reflowedmeta_title_tl }
+    \__reflowedmeta_if_true:nTF { anonymous }
+      { \__reflowedmeta_anonymous_author: }
+      {
+        \__reflowedmeta_title_thanks:
+        \tl_use:N \l__reflowedmeta_tmp_tl
+        \int_step_inline:nn { \reflowedmeta_count:n { author } }
+          {
+            \__reflowedmeta_call:Nn \author { author / ##1 / name }
+            \tl_clear:N \l__reflowedmeta_affils_tl
+            \int_step_inline:nn { \reflowedmeta_count:n { author / ##1 / affil } }
+              {
+                \tl_put_right:Nx \l__reflowedmeta_affils_tl
+                  {
+                    \int_compare:nNnF {####1} = { 1 } { \exp_not:N \newline }
+                    \reflowedmeta_get:n { author / ##1 / affil / ####1 / text }
+                  }
+              }
+            \tl_if_empty:NF \l__reflowedmeta_affils_tl
+              { \use:e { \exp_not:N \address { \exp_not:V \l__reflowedmeta_affils_tl } } }
+            \__reflowedmeta_call_if_set:Nn \email { author / ##1 / email }
+            \__reflowedmeta_thanks_notes:n {##1}
+            \tl_use:N \l__reflowedmeta_one_tl
+          }
+      }
+    \__reflowedmeta_call_if_set:Nn \keywords { keywords }
+    \__reflowedmeta_call_if_set:Nn \date { date }
+  }
+
+% --- revtex4-2: per author \author, \email, \thanks, \affiliation (each);
+% \keywords, \date. REVTeX takes its front matter only after \begin{document}:
+% applied in the preamble, it waits for begindocument/end
+\cs_new_protected:Npn \__reflowedmeta_apply_revtex:
+  {
+    \cs_if_eq:NNTF \@onlypreamble \@notprerr
+      { \__reflowedmeta_apply_revtex_now: }
+      { \hook_gput_code:nnn { begindocument / end } { reflowed-meta } { \__reflowedmeta_apply_revtex_now: } }
+  }
+\cs_new_protected:Npn \__reflowedmeta_apply_revtex_now:
+  {
+    \__reflowedmeta_title_tl:
+    \exp_args:NV \title \l__reflowedmeta_title_tl
+    \__reflowedmeta_if_true:nTF { anonymous }
+      { \__reflowedmeta_anonymous_author: }
+      {
+        \int_step_inline:nn { \reflowedmeta_count:n { author } }
+          {
+            \__reflowedmeta_call:Nn \author { author / ##1 / name }
+            \__reflowedmeta_call_if_set:Nn \email { author / ##1 / email }
+            \__reflowedmeta_thanks_notes:n {##1}
+            \tl_use:N \l__reflowedmeta_one_tl
+            \int_step_inline:nn { \reflowedmeta_count:n { author / ##1 / affil } }
+              { \__reflowedmeta_call:Nn \affiliation { author / ##1 / affil / ####1 / text } }
+          }
+      }
+    \__reflowedmeta_call_if_set:Nn \keywords { keywords }
+    \__reflowedmeta_call_if_set:Nn \date { date }
+  }

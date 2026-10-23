@@ -1,0 +1,12 @@
+{
+  "cpuMs": 25.53,
+  "recorded": "2026-10-11",
+  "reps": 5,
+  "spread": [
+    25.53,
+    42.33
+  ],
+  "host": "10 cores",
+  "chromium": "145.0.7632.0",
+  "how": "node tests/qa/record-work-baseline.ts <dev app> --rounds 10: the lowest of 10 rounds' medians (50 runs)"
+}

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ReflowEd · workbench demo</title>
+<script>
+  // the theme before the first paint (the workbench's themes.ts applies it fully at start): ?theme=<id>, else the choice, else the system's
+  (function () {
+    // ?theme=light|dark first, then the switch's choice (Light, Dark, System), then the system
+    var q = new URLSearchParams(location.search).get('theme'), s = null;
+    try { s = localStorage.getItem('wb-demo-theme'); } catch (e) {}
+    var t = q || s || 'system';
+    var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.classList.toggle('dark', dark);
+    document.documentElement.classList.toggle('sepia', t === 'sepia');
+    document.documentElement.classList.toggle('contrast', t === 'hc');
+    document.documentElement.dataset.themeChoice = q ? q : t;
+  })();
+</script>
+<style>
+  /* the host's theme variables (the editor's app.css and view/style.js set these; the kit's tokens derive from them) */
+  :root { --rfed-page: #ffffff; --rfed-ink: #2f2e2b; --rfed-ink-3: #9b9a97; --rfed-accent: #2383e2; --rfed-danger: #d44c47; --rfed-surface: #fff; color-scheme: light; }
+  html.sepia { --rfed-page: #f4ecd8; --rfed-ink: #453a26; }
+  html.contrast { --rfed-page: #fff; --rfed-ink: #000; }
+  html.dark { --rfed-page: #191919; --rfed-ink: #e6e4df; --rfed-ink-3: #8e8c87; --rfed-accent: #4a9ff0; --rfed-danger: #ff7b72; --rfed-surface: #252524; color-scheme: dark; }
+  html, body { height: 100%; margin: 0; background: var(--rfed-page); color: var(--rfed-ink); }
+  body { display: flex; flex-direction: column; font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  #bar { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--rfed-border-soft); }
+  #bar h1 { font-size: 13px; font-weight: 600; margin: 0 8px 0 0; }
+  #bar .sp { flex: 1; }
+  #wb { flex: 1 1 auto; min-height: 0; position: relative; }
+  #wb > .wb-root { position: absolute; inset: 0; }
+</style>
+<!-- the workbench owns the window from the first frame: the server fills this from src/viewport.ts (VIEWPORT_CSS) -->
+<style id="wb-viewport-css"></style>
+</head>
+<body>
+<div id="bar"></div>
+<div id="wb"></div>
+<script src="demo.js"></script>
+</body>
+</html>

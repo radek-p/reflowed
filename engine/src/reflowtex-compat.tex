@@ -1,0 +1,66 @@
+% ---- reflowtex-compat ----
+% Inserted by the in-browser backend's build right after reflowtex.sty's
+% \ProvidesPackage line. Tectonic's bundle (TeX Live 2022) has the LaTeX
+% kernel of 2021-11-15, which lacks \DeclareKeys, \SetKeys and
+% \ProcessKeyOptions (2022-11) and \NewEnvironmentCopy (2022-06). They are
+% defined here on expl3's l3keys for the key properties the package uses
+% (.if, .store, .code); on a newer kernel this does nothing. Only the print
+% branch of the package runs in this backend (\ifreflowtex is false: the
+% Tectonic capture records no streams, slots or marks).
+\ifdefined\DeclareKeys\else
+\RequirePackage{l3keys2e}
+\ExplSyntaxOn
+\tl_new:N \l__rtxcompat_family_tl
+\tl_new:N \l__rtxcompat_key_tl
+\tl_new:N \l__rtxcompat_name_tl
+\seq_new:N \l__rtxcompat_seq
+\cs_new_protected:Npn \__rtxcompat_set:nnn #1#2#3 { \keys_define:nn {#1} { #2 = {#3} } }
+\cs_generate_variant:Nn \__rtxcompat_set:nnn { VVn }
+\cs_new_protected:Npn \__rtxcompat_keyval:nn #1#2
+  {
+    \tl_set:Nn \l__rtxcompat_key_tl {#1}
+    \seq_set_split:Nnn \l__rtxcompat_seq { . } {#1}
+    \tl_set:Nx \l__rtxcompat_name_tl { \seq_item:Nn \l__rtxcompat_seq { 1 } }
+    \tl_if_in:NnTF \l__rtxcompat_key_tl { .if }
+      {
+        % a legacy \if: true/false choices setting it (\ifreflowtex@boxed)
+        \keys_define:Vx \l__rtxcompat_family_tl
+          {
+            \l__rtxcompat_name_tl .choice: ,
+            \l__rtxcompat_name_tl / true .code:n = { \exp_not:c { #2 true } } ,
+            \l__rtxcompat_name_tl / false .code:n = { \exp_not:c { #2 false } } ,
+            \l__rtxcompat_name_tl .default:n = true
+          }
+      }
+      {
+        \tl_replace_once:Nnn \l__rtxcompat_key_tl { .store } { .tl_set:N }
+        \tl_replace_once:Nnn \l__rtxcompat_key_tl { .code } { .code:n }
+        \__rtxcompat_set:VVn \l__rtxcompat_family_tl \l__rtxcompat_key_tl {#2}
+      }
+  }
+\cs_generate_variant:Nn \keys_define:nn { Vx }
+\cs_new_protected:Npn \__rtxcompat_key:n #1 { \__rtxcompat_keyval:nn {#1} { } }
+\NewDocumentCommand \DeclareKeys { O{\@currname} m }
+  {
+    \tl_set:Nx \l__rtxcompat_family_tl {#1}
+    \keyval_parse:NNn \__rtxcompat_key:n \__rtxcompat_keyval:nn {#2}
+  }
+\NewDocumentCommand \SetKeys { O{\@currname} m } { \keys_set:xn {#1} {#2} }
+\cs_generate_variant:Nn \keys_set:nn { xn }
+\NewDocumentCommand \ProcessKeyOptions { O{\@currname} } { \ProcessKeysOptions {#1} }
+\ExplSyntaxOff
+\fi
+% expl3 variants the package uses that the 2022-01 l3kernel does not have yet
+\ExplSyntaxOn
+\cs_if_exist:NF \tl_set:Ne { \cs_generate_variant:Nn \tl_set:Nn { Ne } }
+\cs_if_exist:NF \tl_put_right:Ne { \cs_generate_variant:Nn \tl_put_right:Nn { Ne } }
+\cs_if_exist:NF \prop_gput:cne { \cs_generate_variant:Nn \prop_gput:Nnn { cne } }
+\cs_if_exist:NF \prop_get:cVNT { \cs_generate_variant:Nn \prop_get:NnNT { cV } }
+\cs_if_exist:NF \str_case_e:nnF { \cs_new_eq:NN \str_case_e:nnF \str_case_x:nnF }
+\ExplSyntaxOff
+\ifdefined\NewEnvironmentCopy\else
+  \def\NewEnvironmentCopy#1#2{%
+    \expandafter\let\csname #1\expandafter\endcsname\csname #2\endcsname
+    \expandafter\let\csname end#1\expandafter\endcsname\csname end#2\endcsname}
+\fi
+% ---- end of reflowtex-compat ----

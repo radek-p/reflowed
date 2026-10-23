@@ -1,0 +1,30 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+<!doctype html>
+<html lang="{{ site.LanguageCode | default "en" }}"{{ if .Params.widthControl }} data-width-control{{ end }}>
+<head>
+{{ partial "head.html" . }}
+{{ partial "companion.html" . }}
+</head>
+<body>
+{{ partial "shot-shadow.html" . }}
+{{ partial "nav.html" . }}
+{{ block "main" . }}{{ end }}
+{{ partial "switches.html" . }}
+{{/* The site's own licence and source, and the sister project. */}}
+<footer class="site-footer">
+  ReflowEd is free software under <abbr title="GNU Affero General Public License v3.0 or later">AGPL-3.0-or-later</abbr>:
+  <a href="{{ site.Params.github }}">source code</a>. It is built on
+  <a href="{{ site.Params.reflowtexSite }}">Reflow&nbsp;TeX</a>.
+</footer>
+{{/* The intro's \todo notes as the editor shows them (browser/notes.ts): before the viewer draws. */}}
+<script src="{{ "notes.js" | relURL }}"></script>
+{{/* References and citations open a card with their target, as in the editor; a Back pill after a jump (browser/refcard.ts). */}}
+<script src="{{ "refcard.js" | relURL }}"></script>
+<script src="{{ "shots.js" | relURL }}" defer></script>
+{{/* The reflowtex viewer: schema, font map, minimal SVG CSS, the two scripts,
+     and the AGPL-3.0 source-offer footer. Include once per page. */}}
+{{ partial "reflowtex-viewer.html" . }}
+{{/* What the site keeps in the browser, said once (browser/privacy-notice.ts, built into static/). */}}
+<script src="{{ "privacy-notice.js" | relURL }}" defer></script>
+</body>
+</html>

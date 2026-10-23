@@ -1,0 +1,9 @@
+{{- /* SPDX-License-Identifier: AGPL-3.0-or-later */ -}}
+{{- /* A screenshot of the editor, from the intro document's figures (copied
+       into static/images/intro/ by build.sh):
+         {{< shot "shot-outline" "What the picture shows, for screen readers" "Caption" >}} */ -}}
+{{- $name := .Get 0 -}}
+<figure class="shot">
+  <img src="{{ printf "images/intro/%s.png" $name | relURL }}" alt="{{ .Get 1 }}" loading="lazy">
+  {{- with .Get 2 }}<figcaption>{{ . }}</figcaption>{{ end }}
+</figure>

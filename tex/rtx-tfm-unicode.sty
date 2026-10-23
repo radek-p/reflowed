@@ -1,0 +1,85 @@
+% rtx-tfm-unicode.sty – Unicode input in documents set in 8-bit (TFM) fonts on
+% XeTeX. Loaded by rtx-xetex.sty.
+%
+% XeTeX reads the source as Unicode and puts a character's code into the font
+% as it is. A TFM font in T1 or OT1 (\usepackage[T1]{fontenc}, lmodern: most
+% papers written for pdfLaTeX) has 256 slots: "ń" (U+0144) is a "Missing
+% character" and vanishes ("Gdańsk" printed "Gdask"), and a few codes
+% below 256 land on another glyph (U+00DF ß on T1's "SS", U+00A0 on "ă").
+% pdfLaTeX reads the same source through inputenc's utf8, which makes every
+% non-ASCII character a command that gives the encoding's own glyph (\'n: T1's
+% ń). This package does the same on XeTeX, from LaTeX's own tables (the
+% <enc>enc.dfu files inputenc reads), so the document comes out as its print
+% compile does, without touching its source:
+%   - when the default encoding is not TU (now, or after a later fontenc), each
+%     character the tables name becomes active, except one whose code already
+%     letters, typeset as before;
+%   - the active character gives the table's text command (\'n) in an 8-bit
+%     encoding, itself in TU (a native font) and inside \csname (a \label key
+%     with ń), and is \protect'ed like a text command in moving arguments.
+% The engine places what an active character above 127 typesets at that
+% character (patch 0010), as it does a letter.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{rtx-tfm-unicode}[2026/10/04 v0.1 Unicode input for TFM-encoded documents on XeTeX]
+\ifdefined\XeTeXversion\else\expandafter\endinput\fi
+
+\def\rtx@tfmu@TU{TU}
+
+% a table's line: \DeclareUnicodeCharacter{0144}{\@tabacckludge'n}
+\long\def\rtx@tfmu@DUC#1#2{%
+  \def\rtx@tfmu@code{"#1}%
+  \ifnum\catcode"#1=13 \else
+    \rtx@tfmu@isglyph{#2}%
+    \ifrtx@tfmu@glyph\else
+      \global\catcode"#1=13 %
+      \begingroup\lccode`\~="#1 \lowercase{\endgroup
+        \edef\rtx@tfmu@ch{\string~}\rtx@tfmu@define~}{#2}%
+    \fi
+  \fi}
+% the active character: the letter itself inside \csname and in TU, else the command
+\long\def\rtx@tfmu@define#1#2{%
+  \expandafter\rtx@tfmu@define@\expandafter{\rtx@tfmu@ch}#1{#2}}
+\long\def\rtx@tfmu@define@#1#2#3{%
+  \gdef#2{\ifincsname #1\expandafter\@gobble\else\expandafter\@firstofone\fi
+    {\ifx\f@encoding\rtx@tfmu@TU #1\expandafter\@gobble\else\expandafter\@firstofone\fi{#3}}}}
+
+% Is the code already its glyph: does the command resolve, in the default
+% encoding, to a \chardef of that code (a composite \T1\'-e, a symbol \T1\ss)?
+\newif\ifrtx@tfmu@glyph
+\def\rtx@tfmu@isglyph#1{%
+  \rtx@tfmu@glyphfalse
+  \ifnum\rtx@tfmu@code<256 \rtx@tfmu@resolve#1\@nil\fi}
+\def\rtx@tfmu@resolve#1#2\@nil{%
+  \ifx#1\@tabacckludge \rtx@tfmu@accent#2\@nil
+  \else\rtx@tfmu@lookup#1{#2}\fi}
+\def\rtx@tfmu@accent#1#2\@nil{\expandafter\rtx@tfmu@lookup\csname#1\endcsname{#2}}
+\def\rtx@tfmu@lookup#1#2{%
+  \edef\rtx@tfmu@name{\expandafter\string\csname\encodingdefault\endcsname\string#1%
+    \if\relax\detokenize{#2}\relax\else-\detokenize{#2}\fi}%
+  \expandafter\ifx\csname\rtx@tfmu@name\endcsname\relax\else
+    % on XeTeX a composite or symbol is a macro giving the slot as a character
+    \chardef\rtx@tfmu@want=\rtx@tfmu@code\relax
+    \edef\rtx@tfmu@m{\Uchar\rtx@tfmu@code}%
+    \edef\rtx@tfmu@a{\expandafter\meaning\csname\rtx@tfmu@name\endcsname}%
+    \edef\rtx@tfmu@b{\meaning\rtx@tfmu@want}%
+    \edef\rtx@tfmu@c{\meaning\rtx@tfmu@m}%
+    \ifx\rtx@tfmu@a\rtx@tfmu@b \rtx@tfmu@glyphtrue \fi
+    \ifx\rtx@tfmu@a\rtx@tfmu@c \rtx@tfmu@glyphtrue \fi
+  \fi}
+
+% every declared encoding's table (as inputenc's utf8.def reads them)
+\def\rtx@tfmu@install{%
+  \edef\rtx@tfmu@enc{\encodingdefault}% (\encodingdefault is \long: \ifx on it never equals TU)
+  \ifx\rtx@tfmu@enc\rtx@tfmu@TU\else
+    \begingroup
+      \let\DeclareUnicodeCharacter\rtx@tfmu@DUC
+      \makeatletter
+      \def\cdp@elt##1##2##3##4{\lowercase{\InputIfFileExists{##1enc.dfu}}{}{}}%
+      \cdp@list
+    \endgroup
+  \fi}
+
+% now (the class may have loaded fontenc) and after a later fontenc
+\rtx@tfmu@install
+\AddToHook{package/fontenc/after}{\rtx@tfmu@install}
+\endinput
