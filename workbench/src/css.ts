@@ -98,15 +98,18 @@ html[data-wb-theme-type="hc"] .wb-root { --rfed-tab-strip-bg: var(--rfed-page); 
    while in, 0 while out. The icon is a --wb-mark-icon square at ONE inset from the bar's left, top and bottom (after
    the show-sidebar button: the gap). The text is set as the tab text is: the same line (--wb-line, the one-line tab's)
    centred alike, its strut the UI font at the tab size, so its baseline is the tabs'; the host's face (any) takes no
-   line room (line-height 0) and is scaled to the UI font's x-height (--wb-ui-ex, measured: ui.js), its apparent size */
+   line room (line-height 0) and is scaled to the UI font's x-height (--wb-ui-ex, measured: ui.js), its apparent size.
+   line-height does not reach a replaced face (an SVG word, 8 px below its baseline): it grew the line past the strut's
+   descent (21 px with a 13 px Liberation Sans) and, centred, lifted the baseline by half of that. So the line is held
+   at --wb-line and the face overflows it downwards (the part clips sideways only, for its width motion) */
 .wb-root { --wb-line: 18px; --wb-mark-icon: 32px; }     /* the icon a button's size: [show sidebar] [icon] [home] read as one row of buttons */
 .wb-bar-fill { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; }
 .wb-bar-mark { flex: 0 0 auto; display: flex; align-items: center; pointer-events: none; transition: margin-left var(--wb-slide-ms, 220ms) var(--ui-ease); }
-.wb-mark-part { display: flex; align-items: center; overflow: clip; }
+.wb-mark-part { display: flex; align-items: center; overflow-x: clip; }
 .wb-mark-part[data-on="false"] { width: 0; }
 .wb-mark-in { flex: none; display: flex; align-items: center; padding-right: var(--wb-gap); white-space: nowrap; }
 .wb-mark-part[data-part="icon"] > .wb-mark-in { height: var(--wb-mark-icon); }
-.wb-mark-part[data-part="text"] > .wb-mark-in { display: block; font-size: var(--ui-text-md); line-height: var(--wb-line); }
+.wb-mark-part[data-part="text"] > .wb-mark-in { display: block; font-size: var(--ui-text-md); line-height: var(--wb-line); height: var(--wb-line); }
 /* keyed on the inner box's own class: a [data-part] in a rule whose subject is * made Chromium restyle the
    whole subtree of any element whose data-part changed (the editor moves data-part between panes as the focus moves) */
 .wb-mark-in--text > * { line-height: 0; font-size: inherit; font-size-adjust: ex-height var(--wb-ui-ex, 0.5); }
