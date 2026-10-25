@@ -15,7 +15,7 @@
 //   s.keepInView()   the window's visible part changed (an on-screen keyboard): the code caret kept in view
 import { signal } from '@preact/signals';
 import { morph } from '../app/motion.js';
-import { positionAt, markPreview } from './live-preview.js';
+import { positionAt, markPreview } from './live-preview.ts';
 import { renderSourcePanel, renderErrorsPanel, clearPanel } from './panel.js';
 import { remoteChange } from '../app/editor-entry.js';
 import { openMotion, closeMotion } from '../motion/popover.js';
@@ -425,7 +425,7 @@ export function createSession(core, pane) {
   }
 
   /** the box of the pane the surface is shown in, when it is a split pane's (it cuts the window): a caret revealed in a
-   *  wide display stays inside it (edit/live-preview.js revealCaret) */
+   *  wide display stays inside it (edit/live-preview.ts revealCaret) */
   const clipOf = (sf) => (core.paneScroll(pane)?.split ? sf.root.closest('main[data-pane]')?.getBoundingClientRect() ?? null : null);
 
   /** A click on the render of the block being edited: the caret goes there (the editor keeps its focus). */

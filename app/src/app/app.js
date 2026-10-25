@@ -219,7 +219,7 @@ export function createDocEditor(ctx) {
   // ── Blocks in the panes (../panes/) ─────────────────────────────
   // Each block has one STATE here (ui: its result, decor, live fields) and one VIEW per pane (panes/block-view.js),
   // all made, painted and given results the same way (panes/blocks.js). No pane's element is the block's.
-  // a click on a block's render, the rule a host of the live preview runs too (edit/live-preview.js renderClick)
+  // a click on a block's render, the rule a host of the live preview runs too (edit/live-preview.ts renderClick)
   const clickHost = { blockById: (id) => blockById(id), session: (pane) => edits.session(pane), titleForm: (id) => metaForm.open(id),
     enterEdit: (...a) => enterEdit(...a) };
   /** what a view does on a click, a focus, its + and focus icon, its handle: the same in every pane */

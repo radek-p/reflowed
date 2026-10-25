@@ -10,7 +10,7 @@
 //   v.id · v.pane · v.root · v.main · v.render · v.preview · v.source · v.errors · v.add · v.handle · v.mounted
 //   v.dispose()   the viewer view destroyed, the Preact roots cleared, the element removed
 import { mountBlockShell } from '../docview/block-shell.js';
-import { listenRender } from '../edit/live-preview.js';
+import { listenRender } from '../edit/live-preview.ts';
 
 export function createBlockView({ id, pane, action = null, on }) {
   let v = null;

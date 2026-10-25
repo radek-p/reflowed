@@ -17,19 +17,39 @@
 //                                                    a caret in a wide display revealed and marked again there
 import { screenCTM } from '../view/screen-ctm.ts';
 import { shownBlock } from '../view/shown.ts';
+// @ts-ignore: a JS module
 import { sourcePositionFor } from '../app/source-position.js';
+// @ts-ignore: a JS module
 import { besideRender } from './frame-click.js';
-import { markCaret, offsetAt } from './preview-marks.ts';
+import { markCaret, offsetAt, type PreviewResult } from './preview-marks.ts';
+
+/** A block's elements the gestures are read on: its frame (root, main: a click beside the render counts), the
+ *  render, and the source stand-in (shown while nothing is typeset). */
+export interface RenderParts { root: HTMLElement; main: HTMLElement; render: HTMLElement; preview?: HTMLElement | null }
+/** What a click resolves to: an offset in the editor's text, how it was found, the glyph's character. */
+export interface SourcePlace { offset: number; method: string; glyph: string }
+export interface ClickPoint { x: number; y: number; target?: EventTarget | null }
+/** What renderClick asks of its host. */
+export interface ClickHost {
+  blockById(id: string): { id: string; kind?: string } | null | undefined;
+  session(pane: string): { id: string | null; leave(): void };
+  titleForm(id: string): boolean;
+  enterEdit(id: string, event: Event | null, caret: number | null, line: number | null, range: unknown, pane: string): void;
+}
+/** A viewer Block as revealCaret uses it. */
+export interface RevealBlock { revealInDisplay?(display: number, x?: number, o?: { margin?: number }): boolean }
+/** A block's view as renderClick reads it. */
+export interface RenderView { id: string; render: HTMLElement; pane: string }
 
 // (a reference, a citation or a link is refnav's unit: refnav/index.js decides its click before this does)
 export const INTERACTIVE = 'a, button, [role="button"], [tabindex], .latex-action, .latex-stream[data-kind="hint"]';
 
 /** the render's listeners: a click on it (and in the frame just beside it: its padding, where a hanging full stop
  *  ends: as on the render), a double click, its focus; a click on the source stand-in */
-export function listenRender(g, on) {
-  const click = (e) => on.click?.(e), dbl = (e) => on.dblclick?.(e), foc = () => on.focus?.(), prev = (e) => on.preview?.(e);
+export function listenRender(g: RenderParts, on: { click?(e: MouseEvent): void; dblclick?(e: MouseEvent): void; focus?(): void; preview?(e: MouseEvent): void }): () => void {
+  const click = (e: MouseEvent) => on.click?.(e), dbl = (e: MouseEvent) => on.dblclick?.(e), foc = () => on.focus?.(), prev = (e: MouseEvent) => on.preview?.(e);
   g.render.addEventListener('click', click);
-  const frame = (e) => { if (besideRender(g.render, g.root, g.main, e)) click(e); };
+  const frame = (e: MouseEvent) => { if (besideRender(g.render, g.root, g.main, e)) click(e); };
   g.root.addEventListener('click', frame);
   g.render.addEventListener('dblclick', dbl);
   g.render.addEventListener('focus', foc);
@@ -45,35 +65,37 @@ export function listenRender(g, on) {
 
 /** a click on a block's render (v: { id, render, pane }): an interactive element of it is left to itself (another
  *  block's editor in this pane closes); a title block opens its form when it has one; else the block is edited here */
-export function renderClick(e, v, host) {
+export function renderClick(e: MouseEvent, v: RenderView, host: ClickHost): void {
   const b = host.blockById(v.id);
   if (!b) return;
   const s = host.session(v.pane);                                   // the editor of the pane clicked in
-  const hit = e.target.closest(INTERACTIVE);
+  const hit = (e.target as Element).closest(INTERACTIVE);
   if (hit && hit !== v.render && v.render.contains(hit)) { if (s.id && s.id !== b.id) s.leave(); return; }
   if (b.kind === 'title' && s.id !== b.id && host.titleForm(b.id)) { if (s.id) s.leave(); return; }
   host.enterEdit(b.id, e, null, null, null, v.pane);
 }
-export const renderDblclick = (e, v, host) => host.enterEdit(v.id, e, null, null, null, v.pane);
+export const renderDblclick = (e: MouseEvent, v: RenderView, host: ClickHost): void => host.enterEdit(v.id, e, null, null, null, v.pane);
 
 /** a point of the render -> a place in `text`: the text editor's hit rule on a render of `compiled` (the engine's
  *  map: offsetAt); else the fuzzy ways (app/source-position.js) on `fuzzyResult` (default: `result`) */
-export function positionAt(render, { result, compiled, text, click, fuzzyResult = result }) {
-  const hit = compiled != null ? offsetAt(render, result, compiled, text, click.x, click.y) : null;
+export function positionAt(render: HTMLElement, { result, compiled, text, click, fuzzyResult = result }:
+  { result: PreviewResult | null | undefined; compiled: string | null; text: string; click: ClickPoint; fuzzyResult?: PreviewResult | null }): SourcePlace | null {
+  const hit = compiled != null ? offsetAt(render, result ?? null, compiled, text, click.x, click.y) : null;
   return hit != null ? { offset: hit, method: 'boundary', glyph: '' } : sourcePositionFor({ source: text, el: render, result: fuzzyResult ?? null }, click);
 }
 
 /** the display the caret bar is in, scrolled so the caret is inside its visible width; true when it moved.
  *  clip(): the box of the pane the render is shown in, when that cuts the window (null: the window) */
-export function revealCaret(render, block, x, clip = () => null) {
+export function revealCaret(render: HTMLElement, block: RevealBlock | null | undefined,
+                            x: number, clip: () => DOMRect | null = () => null): boolean {
   const bar = render.querySelector('.rtx-caret-bar');
   if (!bar || !block?.revealInDisplay) return false;
   const el = shownBlock(render);
-  const shown = el ? [...el.querySelectorAll('.latex-display')].filter((d) => !d.parentElement?.closest('.latex-display')) : [];
+  const shown = el ? [...el.querySelectorAll<HTMLElement>('.latex-display')].filter((d) => !d.parentElement?.closest('.latex-display')) : [];
   const b = bar.getBoundingClientRect(), y = (b.top + b.bottom) / 2;
   const i = shown.findIndex((d) => { const r = d.getBoundingClientRect(); return y >= r.top && y <= r.bottom; });
   if (i < 0) return false;
-  const d = shown[i], svg = d.querySelector('svg'), m = screenCTM(svg);   // (CSS zoom in it in every browser)
+  const d = shown[i]!, svg = d.querySelector('svg'), m = screenCTM(svg);   // (CSS zoom in it in every browser)
   if (!m) return false;
   const p = new DOMPoint(x, y).matrixTransform(m.inverse());
   const before = d.scrollLeft;
@@ -88,8 +110,9 @@ export function revealCaret(render, block, x, clip = () => null) {
 
 /** the caret and selection marked in the render; a caret in a wide display: the display scrolls (only as far as
  *  needed, while followed) so it stays in view, marked again there */
-export function markPreview(render, { result, compiled, text, caret, sel, block, follow, clip }) {
-  const mk = markCaret(render, result, compiled, text, caret, sel);
-  if (follow && mk?.x != null && revealCaret(render, block, mk.x, clip)) markCaret(render, result, compiled, text, caret, sel);
+export function markPreview(render: HTMLElement, { result, compiled, text, caret, sel, block, follow, clip }: { result: PreviewResult | null | undefined; compiled: string | null;
+  text: string; caret: number | null; sel: { from: number; to: number } | null; block: Parameters<typeof revealCaret>[1]; follow: boolean; clip?: () => DOMRect | null }) {
+  const mk = markCaret(render, result ?? null, compiled, text, caret, sel);
+  if (follow && mk?.x != null && revealCaret(render, block, mk.x, clip)) markCaret(render, result ?? null, compiled, text, caret, sel);
   return mk;
 }
