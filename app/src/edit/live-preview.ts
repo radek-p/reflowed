@@ -6,8 +6,8 @@
 //   INTERACTIVE                                      what a click on a typeset block leaves to the element clicked
 //   listenRender({ root, main, render, preview }, on) -> detach   the gestures' listeners: on.click(e) (the render,
 //                                                    and the frame just beside it), on.dblclick(e), on.focus(), on.preview(e)
-//   renderClick(e, v, host)                          a click on a block's render: { blockById(id), session(pane) ->
-//                                                    { id, leave() }, titleForm(id) -> bool, enterEdit(id, e, …, pane) }
+//   renderClick(e, v, host)                          a click on a block's render: { blockById(id), enterEdit(id, e, …, pane),
+//                                                    session?(pane) -> { id, leave() }, titleForm?(id) -> bool }
 //   renderDblclick(e, v, host)                       a double click: host.enterEdit
 //   positionAt(render, { result, compiled, text, click, fuzzyResult })   a point of the render -> { offset, method,
 //                                                    glyph } in `text` | null: the engine's map (preview-marks offsetAt)
@@ -32,8 +32,10 @@ export interface ClickPoint { x: number; y: number; target?: EventTarget | null 
 /** What renderClick asks of its host. */
 export interface ClickHost {
   blockById(id: string): { id: string; kind?: string } | null | undefined;
-  session(pane: string): { id: string | null; leave(): void };
-  titleForm(id: string): boolean;
+  /** the editor open in that pane, if the host has editors per pane (none: no editor to leave) */
+  session?(pane: string): { id: string | null; leave(): void };
+  /** a title block's form, opened instead of its source when the host has one (none: the source) */
+  titleForm?(id: string): boolean;
   enterEdit(id: string, event: Event | null, caret: number | null, line: number | null, range: unknown, pane: string): void;
 }
 /** A viewer Block as revealCaret uses it. */
@@ -65,13 +67,14 @@ export function listenRender(g: RenderParts, on: { click?(e: MouseEvent): void; 
 
 /** a click on a block's render (v: { id, render, pane }): an interactive element of it is left to itself (another
  *  block's editor in this pane closes); a title block opens its form when it has one; else the block is edited here */
+const NO_SESSION = { id: null, leave() {} };
 export function renderClick(e: MouseEvent, v: RenderView, host: ClickHost): void {
   const b = host.blockById(v.id);
   if (!b) return;
-  const s = host.session(v.pane);                                   // the editor of the pane clicked in
+  const s = host.session?.(v.pane) ?? NO_SESSION;                   // the editor of the pane clicked in
   const hit = (e.target as Element).closest(INTERACTIVE);
   if (hit && hit !== v.render && v.render.contains(hit)) { if (s.id && s.id !== b.id) s.leave(); return; }
-  if (b.kind === 'title' && s.id !== b.id && host.titleForm(b.id)) { if (s.id) s.leave(); return; }
+  if (b.kind === 'title' && s.id !== b.id && host.titleForm?.(b.id)) { if (s.id) s.leave(); return; }
   host.enterEdit(b.id, e, null, null, null, v.pane);
 }
 export const renderDblclick = (e: MouseEvent, v: RenderView, host: ClickHost): void => host.enterEdit(v.id, e, null, null, null, v.pane);
