@@ -3,13 +3,14 @@
 //
 //   mainMenu(host) -> entries
 //     Documents · Find and replace · View › · Document › · Export › · Settings… · Keyboard shortcuts · About ReflowEd
-//   documentGroups(doc) -> { document, exports }    the Document and Export submenus' entries
+//   documentGroups(doc) -> { document, exports }    the Document and Export submenus' entries (Export › PDF: the row opens
+//                                                   it in a new tab; its actions open it so, or download it)
 //
 // The document's entries are its commands (commands/editor.js, through its registry's menuItem: label, shortcut,
-// enabled); with no document current they are there all the same, disabled, as the command definitions name them (a
+// enabled; a row's actions are the same command with another input); with no document current they are there all the same, disabled, as the command definitions name them (a
 // submenu with nothing to choose is drawn disabled: chrome/menu-model.ts inactive). The page's entries are the host's
 // actions, each with its key as people read it.
-import { item, submenu, SEP, type MenuEntry, type MenuCommand } from './menu-model.ts';
+import { item, submenu, SEP, type MenuEntry, type MenuCommand, type MenuAction } from './menu-model.ts';
 import { editorCommands } from '../commands/editor.js';
 import { usesPackage } from '../meta/model.ts';
 import type { IconName } from '../design/ui/icon-set.ts';
@@ -42,10 +43,17 @@ export interface MainMenuHost {
 
 type Def = { id: string; label: string; key?: string; shortcut?: string; icon?: IconName };
 const DEFS = new Map(editorCommands().map((c) => [c.id, c as Def]));
-type Opts = { label?: string; shortcut?: string; checked?: boolean };
-/** command `id` of the document as an entry; with no document, its definition's entry, disabled */
+/** a row's action: the row's command with this input */
+type ActionOpt = { label: string; key: string; icon: IconName; input: object };
+type Opts = { label?: string; shortcut?: string; checked?: boolean; actions?: readonly ActionOpt[] };
+/** command `id` of the document as an entry; with no document, its definition's entry, disabled (its actions too) */
 function cmd(doc: MenuDoc | null, id: string, o: Opts = {}): MenuCommand {
-  const extra = { ...(o.shortcut ? { shortcut: o.shortcut } : {}), ...(o.checked != null ? { checked: o.checked } : {}) };
+  const action = ({ label, key, icon, input }: ActionOpt): MenuAction => {
+    if (!doc) return { label, key, icon, disabled: true };
+    const m = doc.commands.menuItem(id, input);
+    return { label, key, icon, ...(m.fn ? { fn: m.fn } : {}), disabled: !!m.disabled };
+  };
+  const extra = { ...(o.shortcut ? { shortcut: o.shortcut } : {}), ...(o.checked != null ? { checked: o.checked } : {}), ...(o.actions ? { actions: o.actions.map(action) } : {}) };
   if (doc) return { ...doc.commands.menuItem(id, {}, o.label ? { label: o.label } : {}), ...extra };
   const d = DEFS.get(id);
   if (!d) throw new Error(`main menu: no command ${id}`);
@@ -66,7 +74,8 @@ export function documentGroups(doc: MenuDoc | null): { document: MenuEntry[]; ex
     exports: [
       cmd(doc, 'doc.exportTex', { label: 'LaTeX source (.tex)' }), cmd(doc, 'doc.exportZip', { label: 'LaTeX with its files (.zip)' }),
       ...(doc && usesPackage(doc.preamble) ? [cmd(doc, 'doc.exportZipPlain', { label: 'LaTeX with plain title commands (.zip)' })] : []),
-      cmd(doc, 'doc.exportPdf', { label: 'PDF' }),
+      cmd(doc, 'doc.exportPdf', { label: 'PDF', actions: [{ label: 'Open in a new tab', key: 'open', icon: 'newTab', input: {} },
+        { label: 'Download', key: 'download', icon: 'download', input: { download: true } }] }),
     ],
   };
 }

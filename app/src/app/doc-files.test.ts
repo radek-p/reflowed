@@ -11,7 +11,8 @@ const downloads: { name: string; type: string }[] = [];
 const g = globalThis as unknown as Record<string, unknown>;
 g.document = { createElement: () => ({ click() {}, remove() {} }), body: { append: (a: { download: string; href: { type: string } }) => downloads.push({ name: a.download, type: a.href.type }) } };
 g.URL = Object.assign(URL, { createObjectURL: (b: Blob) => ({ type: b.type }), revokeObjectURL: () => {} });
-g.window = { open: () => {} };
+const opened: { type: string }[] = [];
+g.window = { open: (u: { type: string }) => { opened.push(u); } };
 
 function fake(over: Partial<DocFilesHost> = {}, io: Partial<FilesIo> = {}) {
   const log: string[] = [];
@@ -48,6 +49,11 @@ function fake(over: Partial<DocFilesHost> = {}, io: Partial<FilesIo> = {}) {
   const ok = fake({ pdf: async () => ({ pdf: new Blob(['%PDF'], { type: 'application/pdf' }) }) });
   await ok.files.exportPdf();
   check('exportPdf: "Making the PDF…", then "PDF ready"', ok.log.join('|') === 'leave|status busy Making the PDF…|status ok PDF ready', ok.log);
+  check('… opened in a new tab, nothing downloaded', opened.at(-1)?.type === 'application/pdf' && downloads.at(-1)?.name !== 'My-Paper-Draft-2.pdf', { opened, downloads });
+  const n0 = opened.length, save = fake({ pdf: async () => ({ pdf: new Blob(['%PDF'], { type: 'application/pdf' }) }) });
+  await save.files.exportPdf({ download: true });
+  check('exportPdf({ download: true }): saved as <title>.pdf (io/download.ts fileName), no tab opened', downloads.at(-1)?.name === 'My-Paper-Draft-2.pdf' && downloads.at(-1)?.type === 'application/pdf'
+    && opened.length === n0 && save.log.at(-1) === 'status ok PDF ready', { downloads, opened, log: save.log });
 }
 {
   const { files, log } = fake({}, { resetToSeed: async () => { throw new Error('offline'); } });

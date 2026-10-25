@@ -7,7 +7,7 @@
 //   c.focusedPane()        the focused pane's id
 //   c.enterEdit(id, event, caret, line, range, pane)
 //   c.page                 the page's actions: find(), toggleFocus(on?), toggleSidebar(), shortcuts(), settings(open, line),
-//                          versions(), resetSeed(), importTex(), exportTex(), exportZip(o), exportPdf(), toggleSplit(),
+//                          versions(), resetSeed(), importTex(), exportTex(), exportZip(o), exportPdf({ download }), toggleSplit(),
 //                          focusSection(id | null, pane?) (section focus: docview/focus.js), gotoDefinition(k), can: { resetSeed, importTex, exportZip, exportPdf, plainTitle }
 //
 // The rows of the shortcuts dialog are the commands with `keys` and `help`, in the order defined here (the order of
@@ -100,6 +100,7 @@ export function editorCommands(platform) {
     { id: 'doc.exportTex', label: 'Export .tex', key: 'export-tex', run: (c) => c.page.exportTex() },
     { id: 'doc.exportZip', label: 'Export .zip', key: 'export-zip', when: (c) => c.page.can.exportZip(), run: (c) => c.page.exportZip() },
     { id: 'doc.exportZipPlain', label: 'Export .zip, plain title commands', key: 'export-zip-plain', when: (c) => c.page.can.exportZip(), run: (c) => c.page.exportZip({ plainTitle: true }) },
-    { id: 'doc.exportPdf', label: 'Export PDF', key: 'export-pdf', when: (c) => c.page.can.exportPdf(), run: (c) => c.page.exportPdf() },
+    // input { download: true }: saved as a file; else opened in a new tab
+    { id: 'doc.exportPdf', label: 'Export PDF', key: 'export-pdf', when: (c) => c.page.can.exportPdf(), run: (c, { download = false } = {}) => c.page.exportPdf({ download }) },
   ];
 }

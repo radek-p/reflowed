@@ -1,18 +1,20 @@
 // ── the main menu (the Re button) and the Settings panel: the menu's top level and submenus, by the pointer and the
-// keyboard (↓ ↑ → ← Escape), its keys shown; Settings… and Ctrl/⌘ , open the panel (on the right, a third of the window
+// keyboard (↓ ↑ → ← Escape), its keys shown; Export › PDF's two actions (a row with actions: → ← reach them, Enter runs
+// one; download saves <title>.pdf, open opens a tab); Settings… and Ctrl/⌘ , open the panel (on the right, a third of the window
 // within its bounds), the key again and the close on its tab close it; its sections in order; a setting changed there
 // applies; the View options keep only what a reader changes while reading ──
 //   a section of tests/test-integrate.ts: node tests/test-integrate.ts [base] --only '^main-menu$'
 import type { Harness } from './harness.ts';
+import { fileName } from '../../app/src/io/download.ts';
 
 export default async function (h: Harness): Promise<void> {
   const { check, open, idle } = h;
   const { ctx, page } = await open('#/doc/sample', { width: 1440, height: 900 });
   const menuState = () => page.evaluate(() => {
     const panels = [...document.querySelectorAll('.main-menu[role="menu"]')];
-    const rows = (p: Element) => [...p.querySelectorAll(':scope > .menu-item')].map((b: any) => b.dataset.action);
+    const rows = (p: Element) => [...p.querySelectorAll(':scope > .menu-item, :scope > .menu-row > .menu-item')].map((b: any) => b.dataset.action);
     return { panels: panels.length, root: panels[0] ? rows(panels[0]) : [], sub: panels[1] ? rows(panels[1]) : [], subLabel: panels[1]?.getAttribute('aria-label') ?? null,
-      focus: (document.activeElement as HTMLElement | null)?.dataset?.action ?? null, expanded: document.getElementById('btn-main-menu')!.getAttribute('aria-expanded') };
+      focus: (document.activeElement as HTMLElement | null)?.dataset?.action ?? null, act: (document.activeElement as HTMLElement | null)?.dataset?.act ?? null, expanded: document.getElementById('btn-main-menu')!.getAttribute('aria-expanded') };
   });
   const bar = await page.evaluate(() => ({ menu: !!document.querySelector('.wb-bar #btn-main-menu .rtx-wb-logo svg'), popup: document.getElementById('btn-main-menu')?.getAttribute('aria-haspopup'),
     oldMenu: !!document.querySelector('#btn-doc-menu'), mark: !!document.querySelector('.wb-bar .wb-bar-mark') }));
@@ -66,10 +68,43 @@ export default async function (h: Harness): Promise<void> {
   await page.waitForSelector('.main-menu.menu-sub[aria-label="Export"]');
   s = await menuState();
   check('hover on Export opens it: .tex, .zip, PDF', s.sub.join().startsWith('export-tex,export-zip') && s.sub.includes('export-pdf'), s);
+  const pdfRow = await page.evaluate(() => {
+    const g = document.querySelector('.main-menu.menu-sub [data-row="export-pdf"]');
+    return { role: g?.getAttribute('role'), label: g?.getAttribute('aria-label'), row: g?.querySelector(':scope > .menu-item')?.getAttribute('data-action'),
+      acts: [...(g?.querySelectorAll('.mi-act') ?? [])].map((b) => `${b.getAttribute('data-act')}|${b.getAttribute('role')}|${b.getAttribute('aria-label')}|${!!b.querySelector('svg')}`) };
+  });
+  check('Export › PDF: a row with two actions, each a labelled menuitem with an icon (open in a new tab, download)', pdfRow.role === 'group' && pdfRow.label === 'PDF' && pdfRow.row === 'export-pdf'
+    && pdfRow.acts.join() === 'open|menuitem|PDF: Open in a new tab|true,download|menuitem|PDF: Download|true', pdfRow);
   await page.click('.main-menu [data-action="keys"]');
   await page.waitForSelector('dialog.shortcuts[open]');
   check('a pick runs it (Keyboard shortcuts) and closes the menu', !(await page.$('.main-menu')));
   await page.keyboard.press('Escape');
+
+  // the PDF row's actions by the keyboard: End on PDF, → its actions, ← back to the row, Enter on download saves the file
+  const title: string = await page.evaluate(async () => { const E = (window as any).editorAPI; return (await E.store().getDoc(E.route().id))?.title ?? ''; });
+  await page.focus('#btn-main-menu');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.main-menu[role="menu"]');
+  await page.keyboard.press('ArrowDown');
+  for (let k = 0; k < 12 && (await menuState()).focus !== 'export'; k++) await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowRight');
+  await page.waitForSelector('.main-menu.menu-sub[aria-label="Export"]');
+  await page.keyboard.press('End');
+  const walk: string[] = [];
+  for (const k of ['ArrowRight', 'ArrowRight', 'ArrowRight', 'ArrowLeft', 'ArrowLeft']) { await page.keyboard.press(k); const m = await menuState(); walk.push(m.act ?? m.focus ?? ''); }
+  check('the PDF row by the keyboard: → open, → download, → stays, ← open, ← the row; the submenu stays open', walk.join() === 'open,download,download,open,export-pdf' && (await menuState()).panels === 2, walk);
+  await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight');
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 240000 }), page.keyboard.press('Enter')]);
+  check('Enter on download: the PDF saved as <title>.pdf (io/download.ts fileName), the menu closed', dl.suggestedFilename() === `${fileName(title)}.pdf` && !(await page.$('.main-menu')),
+    { name: dl.suggestedFilename(), title });
+  // the pointer: open opens the PDF in a new tab, as the row did before
+  await page.click('#btn-main-menu');
+  await page.hover('.main-menu [data-action="export"]');
+  await page.waitForSelector('.main-menu.menu-sub[aria-label="Export"]');
+  const [tab] = await Promise.all([ctx.waitForEvent('page', { timeout: 240000 }), page.click('.main-menu [data-row="export-pdf"] .mi-act[data-act="open"]')]);
+  await tab.waitForLoadState('domcontentloaded').catch(() => {});
+  check('open: the PDF in a new tab (its blob URL)', /^blob:/.test(tab.url()), tab.url());
+  await tab.close();
 
   // ── the Settings panel ──
   const panel = () => page.evaluate(() => {

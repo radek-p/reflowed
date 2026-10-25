@@ -7,7 +7,7 @@
 //     files.openVersions() · files.closeVersions()
 //     files.resetSeed() · files.showSeedBanner(docId) · files.removeSeedBanner()
 //     files.importTex()
-//     files.exportTex() · files.exportZip({ plain? }) · files.exportPdf()
+//     files.exportTex() · files.exportZip({ plain? }) · files.exportPdf({ download? })   (the PDF in a new tab, or saved as <title>.pdf)
 //     files.exportDoc() -> what an export writes (the stored document, SVG figures' trash left out) · files.assetOf(docId)
 import { openVersionsDialog } from '../home/versions-dialog.js';
 import { download, fileName } from '../io/download.ts';
@@ -104,15 +104,16 @@ export function createDocFiles(host: DocFilesHost) {
         download(`${base()}.zip`, await host.io()!.exportZip(await exportDoc(), assetOf(doc().id), o));
       } catch (e) { host.toast(`Export failed: ${(e as Error).message}`); }
     },
-    async exportPdf() {
+    async exportPdf({ download: save = false }: { download?: boolean } = {}) {
       host.leaveEditors();
       host.setStatus('Making the PDF…', 'busy');
+      const name = `${fileName(host.doc()?.title)}.pdf`;      // (the document asked for, whatever is current once it is made)
       try {
         const p = host.pdf();
         if (!p) { host.setStatus('No PDF', 'error'); return; }
         const r = await p;
         if (!r.pdf) { host.setStatus(r.errors?.[0]?.message ?? 'No PDF', 'error'); return; }
-        window.open(URL.createObjectURL(r.pdf), '_blank');
+        if (save) download(name, r.pdf); else window.open(URL.createObjectURL(r.pdf), '_blank');
         host.setStatus('PDF ready', 'ok');
       } catch (e) { host.setStatus(`PDF: ${(e as Error).message}`, 'error'); }
     },

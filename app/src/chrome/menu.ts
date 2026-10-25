@@ -9,9 +9,12 @@
 // A menu: placed before the first paint below the anchor when it fits (else above), and on that side for its life; align
 // 'end' puts its right edge at the anchor's. An entry may have an icon (the kit's icon set), a check (a toggle:
 // menuitemcheckbox), a shortcut at its right, a hint under its label, and entries of its own (a submenu, opened beside
-// its row: to the right, else to the left). When one row has an icon or a check, every row keeps the leading slot.
+// its row: to the right, else to the left), or actions (icon buttons at its right, each a menuitem of the row's group,
+// named for screen readers "<row>: <action>"; the row itself still runs its command). When one row has an icon or a
+// check, every row keeps the leading slot.
 // Keys: ↑ ↓ Home End move (wrapping, over what can be chosen), a letter goes to the next row it starts, → Enter or Space
-// on a submenu's row open it (its first row focused), ← or Escape in a submenu close it (the focus back on its row),
+// on a submenu's row open it (its first row focused), → on a row with actions moves to its next action and ← back (to
+// the row itself, then as below), Enter or Space runs the focused one; ← or Escape in a submenu close it (the focus back on its row),
 // Escape in the first panel closes the menu (the kit's one overlay layer, design/ui/layers.js: the focus back to what
 // had it), Tab closes it. The pointer: a submenu's row opens it on hover or a click (a touch: the tap); hovering another
 // row closes it after a short grace (the way to the submenu crosses other rows). With no room beside its panel (a phone),
@@ -21,15 +24,16 @@
 // In the slash menu ↑/↓ move, Enter picks, Escape or Backspace on an empty filter cancel, the pointer selects on move, a
 // press on an item keeps the focus in the filter.
 // Classes: .menu(.menu-sub)(.block-menu/.main-menu/.doc-menu/.slash), .menu-item[data-action|data-kind](.sel), .mi-lead,
-// .mi-icon, .mi-text, .mi-label, .mi-hint, .mi-key, .mi-sub, .menu-title, .menu-filter, .menu-list, .menu-empty, .menu-sep.
+// .mi-icon, .mi-text, .mi-label, .mi-hint, .mi-key, .mi-sub, .menu-row[data-row] (a row with actions: its .menu-item, then
+// a .mi-act[data-act] per action), .menu-title, .menu-filter, .menu-list, .menu-empty, .menu-sep.
 import { useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { VNode } from 'preact';
 import { html } from '../design/ui/core.js';
 import { Icon } from '../design/ui/icons.ts';
 import { openLayer, toggling } from '../design/ui/layers.js';
 import { visibleBox } from '../../../workbench/src/viewport.ts';
-import { isSep, inactive, step, edge, typeAhead, leads, type MenuEntry, type MenuCommand } from './menu-model.ts';
-export { item, submenu, SEP, type MenuEntry, type MenuCommand } from './menu-model.ts';
+import { isSep, inactive, step, edge, typeAhead, across, leads, type MenuEntry, type MenuCommand, type MenuAction } from './menu-model.ts';
+export { item, submenu, SEP, type MenuEntry, type MenuCommand, type MenuAction } from './menu-model.ts';
 
 /** a menu or the slash menu, open or closed */
 export interface MenuHandle {
@@ -111,18 +115,28 @@ function panelsOf(items: readonly MenuEntry[], path: readonly number[]): (readon
   return out;
 }
 
-function Row({ it, i, lead, open, onPick, onEnter }: { it: MenuCommand; i: number; lead: boolean; open: boolean; onPick: (e: MouseEvent) => void; onEnter: () => void }) {
+function Row({ it, i, lead, open, onPick, onEnter, onAct }: { it: MenuCommand; i: number; lead: boolean; open: boolean; onPick: (e: MouseEvent) => void; onEnter: () => void;
+  onAct: (a: MenuAction) => void }) {
   const off = inactive(it), sub = !!it.items;
   const L = it.checked ? Icon.check : it.icon ? Icon[it.icon] : null;
-  return html`<button type="button" class=${`menu-item${open ? ' sel' : ''}`} role=${it.checked != null ? 'menuitemcheckbox' : 'menuitem'} data-action=${it.key} data-i=${i}
+  const hover = (e: PointerEvent) => { if (e.pointerType !== 'touch') onEnter(); };
+  const row = html`<button type="button" class=${`menu-item${open ? ' sel' : ''}`} role=${it.checked != null ? 'menuitemcheckbox' : 'menuitem'} data-action=${it.key} data-i=${i}
       tabindex="-1" disabled=${off} aria-checked=${it.checked != null ? String(it.checked) : undefined}
       aria-haspopup=${sub ? 'menu' : undefined} aria-expanded=${sub ? String(open) : undefined} onClick=${onPick}
-      onPointerEnter=${(e: PointerEvent) => { if (e.pointerType !== 'touch') onEnter(); }}>
+      onPointerEnter=${hover}>
     ${lead ? html`<span class="mi-lead" aria-hidden="true">${L ? html`<${L} />` : null}</span>` : null}
     ${it.hint ? html`<span class="mi-text"><span class="mi-label">${it.label}</span><span class="mi-hint">${it.hint}</span></span>` : html`<span class="mi-label">${it.label}</span>`}
     ${it.shortcut ? html`<span class="mi-key">${it.shortcut}</span>` : null}
     ${sub ? html`<span class="mi-sub" aria-hidden="true"><${Icon.chevronRight} /></span>` : null}
   </button>`;
+  if (!it.actions?.length || sub) return row;
+  // the row and its actions: a group of menuitems (a menuitem may hold no control); each action keeps the row's data-i
+  // (↑ ↓ step from its row) and its own data-a (← → within the row)
+  return html`<div class="menu-row" role="group" aria-label=${it.label} data-row=${it.key}>${row}${it.actions.map((a, k) => {
+    const A = Icon[a.icon];
+    return html`<button key=${a.key} type="button" class="mi-act" role="menuitem" tabindex="-1" data-i=${i} data-a=${k} data-act=${a.key} disabled=${off || !!a.disabled}
+        aria-label=${`${it.label}: ${a.label}`} title=${a.label} onClick=${() => onAct(a)} onPointerEnter=${hover}><${A} /></button>`;
+  })}</div>`;
 }
 
 function MenuView({ h, anchor, cls, items, align, focus, label }: { h: MenuHandle; anchor: Element; cls: string; items: readonly MenuEntry[]; align: string; focus: boolean; label?: string }) {
@@ -152,6 +166,9 @@ function MenuView({ h, anchor, cls, items, align, focus, label }: { h: MenuHandl
   });
   const rowAt = (level: number, i: number) => panels.current[level]?.querySelector<HTMLElement>(`[data-i="${i}"]`) ?? null;
   const focused = (level: number) => { const a = document.activeElement as HTMLElement | null; return a && panels.current[level]?.contains(a) && a.dataset.i != null ? Number(a.dataset.i) : -1; };
+  /** the focused place within its row: its action's index, or -1 (the row itself) */
+  const focusedAct = () => { const a = document.activeElement as HTMLElement | null; return a?.dataset.a != null ? Number(a.dataset.a) : -1; };
+  const actAt = (level: number, i: number, k: number) => (k < 0 ? rowAt(level, i) : panels.current[level]?.querySelector<HTMLElement>(`[data-i="${i}"][data-a="${k}"]`) ?? null);
   /** submenu `i` of panel `level` open (its first row focused: from the keyboard) */
   const openSub = (level: number, i: number, first: boolean) => {
     stopTimer();
@@ -170,6 +187,7 @@ function MenuView({ h, anchor, cls, items, align, focus, label }: { h: MenuHandl
     h.close(false);
     it.fn?.();
   };
+  const act = (a: MenuAction) => { h.close(false); a.fn?.(); };
   const enter = (level: number, i: number, it: MenuCommand) => () => {
     if (it.items && !inactive(it)) { openSub(level, i, false); return; }
     if (path.length > level) { stopTimer(); timer.current = setTimeout(() => { timer.current = null; setPath((p) => p.slice(0, level)); }, GRACE); }
@@ -177,10 +195,12 @@ function MenuView({ h, anchor, cls, items, align, focus, label }: { h: MenuHandl
   const key = (level: number) => (e: KeyboardEvent) => {
     const list = levels[level]!, at = focused(level);
     const go = (i: number) => { if (i >= 0) { e.preventDefault(); rowAt(level, i)?.focus({ preventScroll: true }); } };
+    const side = e.key === 'ArrowRight' || e.key === 'ArrowLeft' ? across(list[at], focusedAct(), e.key === 'ArrowRight' ? 1 : -1) : null;   // within a row
     if (e.key === 'ArrowDown') go(step(list, at, 1));
     else if (e.key === 'ArrowUp') go(at < 0 ? edge(list, true) : step(list, at, -1));
     else if (e.key === 'Home') go(edge(list, false));
     else if (e.key === 'End') go(edge(list, true));
+    else if (side != null) { e.preventDefault(); actAt(level, at, side)?.focus({ preventScroll: true }); }
     else if (e.key === 'ArrowRight') {
       const it = list[at];
       if (it && !isSep(it) && it.items && !inactive(it)) { e.preventDefault(); openSub(level, at, true); }
@@ -199,7 +219,7 @@ function MenuView({ h, anchor, cls, items, align, focus, label }: { h: MenuHandl
         aria-label=${parent ? parent.label : label} tabindex="-1" data-level=${level} onKeyDown=${key(level)} onPointerEnter=${level ? stopTimer : undefined}>
       ${list.map((it, i) => (isSep(it) ? html`<div key=${`s${i}`} class="menu-sep" role="separator"></div>`
         : html`<${Row} key=${it.key ?? i} it=${it} i=${i} lead=${lead} open=${path[level] === i && levels.length > level + 1}
-            onPick=${pick(level, i, it)} onEnter=${enter(level, i, it)} />`))}
+            onPick=${pick(level, i, it)} onEnter=${enter(level, i, it)} onAct=${act} />`))}
     </div>`;
   })}`;
 }

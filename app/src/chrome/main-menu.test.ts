@@ -20,7 +20,7 @@ const page = (o: Partial<MainMenuHost> = {}): MainMenuHost => ({
 // a document's registry: the editor's commands, with a page that says what it can do
 const can = { resetSeed: false, exportZip: true, exportPdf: true };
 const C = createCommands({ context: () => ({ page: { can: { resetSeed: () => can.resetSeed, importTex: () => true, exportZip: () => can.exportZip, exportPdf: () => can.exportPdf },
-  find: () => ran.push('find'), exportTex: () => ran.push('tex') } }) }).define(editorCommands('mac')) as unknown as DocCommands;
+  find: () => ran.push('find'), exportTex: () => ran.push('tex'), exportPdf: (o: object) => ran.push(`pdf ${JSON.stringify(o)}`) } }) }).define(editorCommands('mac')) as unknown as DocCommands;
 const doc = (preamble = '\\documentclass{article}') => ({ commands: C, preamble });
 
 {
@@ -48,10 +48,17 @@ const doc = (preamble = '\\documentclass{article}') => ({ commands: C, preamble 
   check('focus mode on: its row checked', by(by(m, 'view').items!, 'focus').checked === true);
   by(m, 'find').fn!(); by(by(m, 'export').items!, 'export-tex').fn!();
   check('a document entry runs its command', ran.join() === 'find,tex', ran);
+  ran.length = 0;
+  const pdf = by(by(m, 'export').items!, 'export-pdf');
+  check('Export › PDF: two actions, open in a new tab and download, with their icons', pdf.actions?.map((a) => `${a.key}:${a.icon}:${a.label}`).join() === 'open:newTab:Open in a new tab,download:download:Download', pdf.actions);
+  pdf.fn!(); pdf.actions![0]!.fn!(); pdf.actions![1]!.fn!();
+  check('… the row and "open" open it in a new tab, "download" saves it: one command, its input', ran.join('|') === 'pdf {"download":false}|pdf {"download":false}|pdf {"download":true}', ran);
+  const none = by(by(mainMenu(page()), 'export').items!, 'export-pdf');
+  check('no document: the PDF row and its actions disabled', !!none.disabled && none.actions?.length === 2 && none.actions.every((a) => a.disabled && !a.fn), none);
   can.resetSeed = true; can.exportPdf = false;
   const g = documentGroups(doc('\\documentclass{article}\n\\usepackage{reflowed-meta}'));
   check('Reset to original when the document has one; the plain-title archive with the title package; PDF disabled when it cannot', keys(g.document) === 'doc-settings versions reset-seed - import-tex'
-    && keys(g.exports) === 'export-tex export-zip export-zip-plain export-pdf' && inactive(by(g.exports, 'export-pdf')), [keys(g.document), keys(g.exports)]);
+    && keys(g.exports) === 'export-tex export-zip export-zip-plain export-pdf' && inactive(by(g.exports, 'export-pdf')) && !!by(g.exports, 'export-pdf').actions?.every((a) => a.disabled), [keys(g.document), keys(g.exports)]);
 }
 
 console.log(`${n - bad}/${n} passed`);

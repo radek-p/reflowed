@@ -537,7 +537,7 @@ export function createDocEditor(ctx) {
     page: {
       find: () => find.open(), toggleFocus: (on) => toggleFocus(on), focusSection: (id, pane) => sectionFocus.set(pane ?? panes.focused().id, id), toggleSidebar: () => ctx.shell.toggleSidebar(), shortcuts: () => showShortcuts(),
       settings: (open, line) => openSettings(open, line), versions: () => files.openVersions(), resetSeed: () => files.resetSeed(), importTex: () => files.importTex(),
-      exportTex: () => files.exportTex(), exportZip: (o) => files.exportZip(o), exportPdf: () => files.exportPdf(), toggleSplit: () => (ctx.shell.toggleSplit ? ctx.shell.toggleSplit() : panes.toggle()),   /* the host splits (a tab beside) */
+      exportTex: () => files.exportTex(), exportZip: (o) => files.exportZip(o), exportPdf: (o) => files.exportPdf(o), toggleSplit: () => (ctx.shell.toggleSplit ? ctx.shell.toggleSplit() : panes.toggle()),   /* the host splits (a tab beside) */
       gotoDefinition: (k) => gotoDefinition(k), setPreamble: (s) => meta.putPreamble(s), recompileAll: () => { if (S.doc) meta.onPreamble(); },
       scrollTo: (id, pane, o) => scrollToBlock(id, pane, o), reveal: (id, range, o) => revealBlock(id, range, o), openNote: (t) => ctx.notes?.openNote(t, root) || revealBlock(t.blockId, { from: t.offset, to: t.offset + t.length }),   // the panels' commands
       can: { resetSeed: () => !!(S.doc && ctx.io?.isSeedDoc?.(S.doc.id)), importTex: () => !!ctx.io?.openImportTex,

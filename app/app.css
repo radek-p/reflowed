@@ -270,6 +270,14 @@ main[data-pane] .add-end:focus-visible { outline: none; box-shadow: var(--ui-rin
 .menu[role="menu"] .mi-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mi-sub { flex: 0 0 auto; display: grid; place-items: center; margin-left: auto; padding-left: 12px; color: var(--muted); }
 .mi-key + .mi-sub { margin-left: 0; padding-left: 4px; }
+/* a row with actions: the row's command, then an icon button per action (Export › PDF: open in a new tab, download) */
+.menu-row { display: flex; align-items: center; gap: 2px; margin: 0 4px; }
+.menu-row > .menu-item { flex: 1 1 auto; width: auto; min-width: 0; margin: 0; }
+.mi-act { flex: 0 0 auto; display: grid; place-items: center; width: var(--ui-row); min-height: var(--ui-row); padding: 0; border: 0; background: none;
+  border-radius: var(--ui-r-sm); color: var(--muted); cursor: pointer; }
+.mi-act svg { width: 16px; height: 16px; }
+.mi-act:hover, .mi-act:focus-visible { background: var(--hover); color: inherit; outline: none; }
+.mi-act:disabled { color: #c7c6c3; cursor: default; background: none; }
 .main-menu { min-width: 240px; }
 .slash .menu-title { padding-top: 6px; }
 .slash .menu-title:first-child { padding-top: 2px; }
