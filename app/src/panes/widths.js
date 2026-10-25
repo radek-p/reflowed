@@ -150,8 +150,10 @@ export function createWidths({ panes, relayout, laidAt = null, state = null, red
   }
 
   /** (window resize) pin every shown block at the width the viewer last laid it out at: written first, with no layout
-   *  read (the page is at the new viewport already: a read would lay it out unpinned), then one read pass (zoom, how
-   *  far away), then the far ones skipped. A block already marked (restyle) gets its width held too. */
+   *  read (the page is at the new viewport already: a read would lay it out unpinned), then one read pass (zoom). A
+   *  block already marked (restyle) gets its width held too. The far ones are not skipped (as pin() skips them): at a
+   *  window resize the viewer reads every block's segments (its viewport paint), and a read inside a skipped block
+   *  lays that block out there and then, one forced layout per block (a long document: 100-800 ms in one frame). */
   function pinCached(list = panes()) {
     const t0 = now();
     const todo = [];
@@ -168,17 +170,13 @@ export function createWidths({ panes, relayout, laidAt = null, state = null, red
         todo.push({ el, p, px, rec });
       }
     }
-    const cs = todo.map(({ el, p }) => {
-      const r = el.getBoundingClientRect(), b = p.box(), m = (b.bottom - b.top) * FAR;
-      return { zoom: parseFloat(getComputedStyle(el).zoom) || 1, h: r.height, far: r.height > 0 && (r.bottom < b.top - m || r.top > b.bottom + m) };
-    });
+    const zooms = todo.map(({ el }) => parseFloat(getComputedStyle(el).zoom) || 1);
     todo.forEach(({ el, p, px, rec: was }, i) => {
-      const c = cs[i];
-      if (SKIP && c.far) { el.style.containIntrinsicSize = `${px}px ${c.h / c.zoom}px`; el.classList.add('rtx-w-skip'); }
-      if (was) { Object.assign(was, { px, zoom: c.zoom, held: true, cached: true }); return; }
+      const zoom = zooms[i];
+      if (was) { Object.assign(was, { px, zoom, held: true, cached: true }); return; }
       const render = el.parentElement;
       render.classList.add('rtx-w-pin');
-      const rec = { pane: p, px, zoom: c.zoom, render, blk: render.closest('.blk'), near: false, held: true, cached: true, force: false };
+      const rec = { pane: p, px, zoom, render, blk: render.closest('.blk'), near: false, held: true, cached: true, force: false };
       pinned.set(el, rec);
       if (rec.blk) watch(p).observe(rec.blk);
     });

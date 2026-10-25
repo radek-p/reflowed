@@ -360,12 +360,7 @@ export const ARCH_STEPS: { step: number; paths: string[]; guards: string[] }[] =
 // entry has its issue, the date it was added and its owner; test-all prints each one's age, and those older than
 export interface Known { suite: RegExp; line: RegExp; why: string; issue: string; added: string; owner: string }
 export const KNOWN_REVIEW_DAYS = 14;
-export const KNOWN: Known[] = [
-  // the viewer's own resize listener (reflowtex viewer, runtime/visibility.ts scheduleViewportPaint) measures and paints
-  // block by block: each block's measuring pass after the previous block's paint forces a layout of the page, one rAF
-  // task of 70-150 ms in one pane of the long document and several hundred in split view
-  { suite: /^widths$/, line: /: the window \d+ → \d+ px( \(split\))?: no long task/, why: 'the viewer paints after a window resize block by block, a forced layout each', issue: 'viewer viewport paint on resize', added: '2026-10-25', owner: 'reflowtex viewer' },
-];
+export const KNOWN: Known[] = [];
 /** A timing suite failed and ran once more: what the pair of runs counts as. */
 export function afterRerun(again: string, loads: number[], limit: number): 'flaky' | 'unsure' | 'fail' {
   if (again === 'pass' || again === 'known') return 'flaky';
