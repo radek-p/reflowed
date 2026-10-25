@@ -381,7 +381,7 @@ const inMemory = (t: any) => t.doc.blocks.map((b: any) => `${b.kind}:${b.source}
 
 // ── the DocSession: one open document, loaded from the store, its parts composed ──
 {
-  const { createDocSession } = await imp('app/src/doc/session.js');
+  const { createDocSession } = await imp('app/src/doc/session.ts');
   const { createRefs } = await imp('app/src/refs/index.ts');
   const store = memoryStore();
   const id = await store.createDoc({ title: 'T', preamble: '\\documentclass{article}\n\\newtheorem{lemma}{Lemma}', blocks: [

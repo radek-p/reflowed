@@ -136,7 +136,7 @@ export function createDocEditor(ctx) {
     refsState: () => refs.refsState(), kindOf: (src) => kindOf(src), kindLabel: (k) => kindLabel(k, S.doc?.preamble.source ?? ''),
     texToText,
   });
-  // ── THE DOCUMENT (../doc/session.js, one per open document, no DOM): its writes (persist), block list
+  // ── THE DOCUMENT (../doc/session.ts, one per open document, no DOM): its writes (persist), block list
   // (model), undo history (history: Mod-Z in any pane undoes its last structural change; the editors close first, a
   // toast says what was undone), what its blocks compile against (derived), its results (results: the result map, the
   // preamble's problems, the word count) and its block operations (ops, each saved and one undo step); the page around

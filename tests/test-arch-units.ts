@@ -58,9 +58,9 @@ check(`app.js within its import budget (${APP_JS_IMPORTS_BUDGET} local imports)`
   // the derived state and the results are the document's (doc/derived.js, doc/results.js)
   const derivedOwn = /\blet (preHash|thmSet|contexts|contextsSig|recalls|preambleResult)\b|\bconst (assetHash|cache) = new Map\(\)|function (computeContexts|assetSig|bibKeyPart|withBibContext)\b|\bpreambleErrors\.value\s*=|\bwordCount\.value\s*=/.exec(appJs + read(join(HERE, 'app/src/app/panels.ts')))?.[0];
   check('app.js keeps no derived state or results of its own (contexts, recalls, preamble hash, theorem kinds, asset hashes, the result map, the preamble\'s problems); no page signal written with one document\'s data', !derivedOwn, derivedOwn ?? '');
-  // the document is the DocSession's (doc/session.js): app.js holds none and reads none from the store
+  // the document is the DocSession's (doc/session.ts): app.js holds none and reads none from the store
   const ownDoc = /\blet doc\b|\bstore\.getBlocks\(|\bcreate(Persist|Model|History|Derived|Results|Ops)\(/.exec(appJs)?.[0];
-  check('app.js keeps no document of its own and builds none of its parts (doc/session.js does)', !ownDoc && /createDocSession\(/.test(appJs), ownDoc ?? '');
+  check('app.js keeps no document of its own and builds none of its parts (doc/session.ts does)', !ownDoc && /createDocSession\(/.test(appJs), ownDoc ?? '');
   const dom = APP.map(rel).filter((f) => f.startsWith('app/src/doc/') || f.startsWith('app/src/commands/')).filter((f) => /\b(document|window)\.|\bHTMLElement\b|querySelector/.test(read(join(HERE, f)).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')));
   check('doc/, commands/: no DOM (Node-testable)', dom.length === 0, dom.join(', '));
   // the document layer imports nothing from the page's hub directory (texscan, kinds, cache-key

@@ -7,4 +7,4 @@ export { createHistory } from './history.js';
 export { createOps } from './ops.ts';
 export { createDerived, hash } from './derived.js';
 export { createResults } from './results.js';
-export { createDocSession } from './session.js';
+export { createDocSession } from './session.ts';

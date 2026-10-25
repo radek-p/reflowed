@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const HERE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const imp = (p: string) => import(pathToFileURL(join(HERE, p)).href);
 const { createCommands, editorCommands, createEditorKeys } = await imp('app/src/commands/index.js');
-const { createDocSession } = await imp('app/src/doc/session.js');
+const { createDocSession } = await imp('app/src/doc/session.ts');
 const { createRefs } = await imp('app/src/refs/index.ts');
 const { memoryStore, ids } = await imp('app/src/store/api.ts');
 

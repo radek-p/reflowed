@@ -2,7 +2,7 @@
 // The document editor's commands: every intent its menus, keys and editorAPI share, as
 // data (commands/registry.js). Each runs against the context the editor gives (app/app.js commandContext):
 //
-//   c.S                    the DocSession (doc/session.js): c.S.doc, c.S.ops, c.S.history, c.S.model
+//   c.S                    the DocSession (doc/session.ts): c.S.doc, c.S.ops, c.S.history, c.S.model
 //   c.selected()           the keyboard-selected block's id | null; c.select(id, o)
 //   c.focusedPane()        the focused pane's id
 //   c.enterEdit(id, event, caret, line, range, pane)
