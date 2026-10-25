@@ -35,6 +35,8 @@ for (const doc of DOCS) {
   const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
   page.setDefaultTimeout(600000);
   page.on('pageerror', (e: Error) => problems.push(`${doc}: ${e.message}`));
+  // a crashed renderer (out of memory) answers no wait: stop at once rather than at the timeout
+  page.on('crash', () => { console.error(`${doc}: the page crashed (out of memory?); nothing recorded`); process.exit(3); });
   await page.goto(`${BASE}/?${fx ? `seed=${doc}&` : ''}engine&store=memory#/doc/${doc}`);
   await page.waitForFunction(() => (window as any).editorAPI?.route?.().name === 'doc' && !!(window as any).editorAPI.currentDoc());
   await page.evaluate(() => (window as any).editorAPI.whenIdle());

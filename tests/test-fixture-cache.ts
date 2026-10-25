@@ -51,6 +51,8 @@ async function openFixture(base: string) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   page.setDefaultTimeout(300000);
   page.on('pageerror', (e: Error) => errors.push(e.message));
+  // a crashed renderer (out of memory) answers no wait: fail at once rather than at the timeout
+  page.on('crash', () => { console.log(`FAIL the page crashed (out of memory?) on ${base}`); cold.kill(); process.exit(1); });
   await page.goto(`${base}/?seed=sample&engine&store=memory#/doc/sample`);
   await page.waitForFunction(() => (window as any).editorAPI?.route?.().name === 'doc' && !!(window as any).editorAPI.currentDoc());
   await page.evaluate(() => (window as any).editorAPI.whenIdle());

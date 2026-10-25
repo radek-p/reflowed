@@ -15,6 +15,7 @@
 //            (where the release looks by default); after the open, a preamble with packages the release lacks is typeset
 //            and the tree's requests are counted: the package's files in one round of parallel requests (the worker's
 //            prefetch, loading/http.ts), not one by one
+//            --tree-latency <ms>: the round trip the tree's answers wait (default 100), so parallel requests overlap
 //   --measure: print the counts and times only, no checks
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
@@ -125,14 +126,19 @@ if (!RELEASE) {
   const TYPES: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.txt': 'text/plain' };
   const LATENCY = Number(arg('--latency') ?? 0);
   const TREE = arg('--tree') ? resolve(arg('--tree')!) : null;
+  // the tree's answers wait a round trip (at least TREE_LATENCY ms): requests the worker asks for at once then overlap
+  // here, and sequential ones (each asked for after the last answer) do not. With answers sent at once, as a local
+  // server sends them, parallel requests do not overlap either, and the waves below would count each file as one
+  const TREE_LATENCY = Math.max(LATENCY, Number(arg('--tree-latency') ?? 100));
   /** the tree's requests: path, when asked, when answered (ms, this process's clock) */
   const treeLog: { path: string; start: number; end: number }[] = [];
   const server = createServer(async (req, res) => {
     const start = Date.now();
-    if (LATENCY) await new Promise((r) => setTimeout(r, LATENCY));
     let p = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname);
     if (p.endsWith('/')) p += 'index.html';
     const inTree = !!TREE && p.startsWith('/texlive/');
+    const wait = inTree ? TREE_LATENCY : LATENCY;
+    if (wait) await new Promise((r) => setTimeout(r, wait));
     const root = inTree ? TREE! : DIR;
     const f = normalize(join(root, p));
     if (inTree) res.on('finish', () => treeLog.push({ path: p, start, end: Date.now() }));

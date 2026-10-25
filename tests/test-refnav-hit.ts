@@ -1,3 +1,4 @@
+// A reference's hover area is its own glyphs, nothing around it (the case this guards:
 // hovering the run-in heading `\paragraph*{Further work on the closed form}` opened
 // the card of the `\Cref{…}` after it — hyperref's link covered the heading).
 //
@@ -10,7 +11,7 @@
 //  2. for every unit: hovering its first glyph makes it the hot unit; hovering the glyph
 //     just before and just after it (other text) makes no unit hot;
 //  3. the reported block (a run-in heading, then a \Cref; inserted here):
-//     hovering each glyph of the heading makes no unit hot; hovering the reference opens its own card (refnav:card).
+//     hovering each glyph of the heading (its whole text) makes no unit hot; hovering the reference opens its own card (refnav:card).
 // Waits on whenIdle() and events; the hot unit is set synchronously on pointerover
 // (index.js setHot), and no hot unit means no card timer, so no fixed waits are needed.
 import { createRequire } from 'node:module';
@@ -22,7 +23,8 @@ import { fileURLToPath } from 'node:url';
 const HERE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const FILE = process.argv[2] && !process.argv[2].startsWith('--') ? resolve(process.argv[2]) : join(HERE, 'dist/reflowtex-editor.html');
 const pw = createRequire(join(HERE, 'app/package.json'))('playwright');
-const REPORTED = String.raw`\paragraph*{Further work on the closed form} As \Cref{thm:gauss} shows, the sum of the first numbers has a closed form, and more follows from it.`;
+const HEADING = 'Further work on the closed form';
+const REPORTED = String.raw`\paragraph*{${HEADING}} As \Cref{thm:gauss} shows, the sum of the first numbers has a closed form, and more follows from it.`;
 let pass = 0, fail = 0;
 const check = (name: string, ok: boolean, d: unknown = '') => { ok ? pass++ : fail++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${d !== '' ? ` — ${(typeof d === 'string' ? d : JSON.stringify(d)).slice(0, 400)}` : ''}`); };
 
@@ -94,14 +96,14 @@ async function reported(width: number) {
   check('the reported block exists', !!id);
   if (!id) return;
   await probes(id);
-  const heading = await page.evaluate((i: string) => {
+  const heading = await page.evaluate(({ i, HEADING }: { i: string; HEADING: string }) => {
     const all = [...document.querySelectorAll(`.blk[data-id="${i}"] .blk-render tspan`)] as SVGTSpanElement[];
     const s = all.map((t) => t.textContent).join('');
-    const at = s.indexOf('Further'), end = s.indexOf('Contribution') + 'Contribution 1'.length;
+    const at = s.indexOf(HEADING), end = at < 0 ? -1 : at + HEADING.length;
     let k = 0; const pts: any[] = [];
     all.forEach((t) => { const n = (t.textContent ?? '').length; if (k >= at && k < end && (t.textContent ?? '').trim()) { const r = t.getBoundingClientRect(); pts.push({ x: r.left + r.width / 2, y: r.top + r.height / 2, t: t.textContent }); } k += n; });
     return pts;
-  }, id);
+  }, { i: id, HEADING });
   const hot: string[] = [];
   for (const p of heading) { const h = await hotAt(p); if (h) hot.push(`«${p.t}» → ${h}`); }
   check(`${width} px: hovering the \\paragraph* heading «Further work on the closed form» makes no reference hot`, heading.length > 20 && hot.length === 0, `${heading.length} glyphs; ${hot.slice(0, 3).join(' | ')}`);
