@@ -100,7 +100,7 @@ export function createSvgFigureHooks(host) {
   function loaded(d) {
     svgAssets.clear();
     for (const a of d.assets ?? []) if (svgFigures.isSvgAsset(a)) svgAssets.add(a.name);
-    // installColours goes through view/colour-maps.js registerColourMap
+    // installColours goes through view/colour-maps.ts registerColourMap
     if (svgAssets.size) svgFigures.installColours(host.ctx.view?.colorMap ?? 'editor');
   }
 

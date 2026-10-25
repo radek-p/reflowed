@@ -21,7 +21,7 @@ import { createPopover } from './popover.ts';
 import { mountViewButton } from './view-button.js';
 import { installBlink } from './blink.js';
 import { blockEls, relayout, sourceWidthPt } from './viewer-host.ts';
-import { registerColourMap } from './colour-maps.js';
+import { registerColourMap } from './colour-maps.ts';
 import { createTextwidth } from './textwidth.js';
 import { decide, applyLayout, clearLayout, markCaret, slide, caretMap, keepCaretInView, updateFades, offsetAt, floatIfLarge, clearMirrors, pulse, warmMap } from './edit-layout.js';
 import { page, onChange } from '../app/page-state.ts';
@@ -68,7 +68,7 @@ export async function installView() {
   const s = loadSettings();
   const changed = signal(0);                      // bumped by apply(): the Settings panel draws its rows again
 
-  // the viewer's colour maps: ours added to whatever the page has (view/colour-maps.js)
+  // the viewer's colour maps: ours added to whatever the page has (view/colour-maps.ts)
   registerColourMap(COLOR_MAP, EDITOR_COLOURS);
 
   const shellWidth = () => {

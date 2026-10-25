@@ -185,12 +185,8 @@ async function start() {
     s.textContent = text(bytes.get(f.id)!);
     document.body.append(s);                 // an inline script runs as it is added
   }
+  // (the public viewer, added after DOMContentLoaded, sets the page up at once: src/viewer/src/index.ts)
   await import(/* @vite-ignore */ moduleName(ofType('module')[0].id));
-  // The public viewer sets the page up on DOMContentLoaded (src/viewer/src/index.ts: 'page set-up'), which came and went
-  // while these files loaded: without it the viewer's idle() never settled (the app's whenIdle waits for it). The event
-  // again, once the app has run its first part, as in the single file (a module runs before the event). A viewer that
-  // checked document.readyState would not need it.
-  if (document.readyState !== 'loading') document.dispatchEvent(new Event('DOMContentLoaded'));
 }
 
 if (!manifest || !boot) console.error('the loader found no #rtx-manifest or #boot');

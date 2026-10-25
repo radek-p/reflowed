@@ -1,4 +1,4 @@
-import { registerColourMap } from '../view/colour-maps.js';
+import { registerColourMap } from '../view/colour-maps.ts';
 // svgfig colours: the palette a figure draws with, and the substitutions that
 // make it follow the viewer's themes. The palette's colours are keys of the
 // viewer's colour map (web/src/view/index.js registers the 'editor' map; this
@@ -56,7 +56,7 @@ export const FIGURE_COLOURS = {
 };
 
 /** Add FIGURE_COLOURS to the viewer's map `name` (idempotent; keeps what is there). Through the
- *  one registration path, view/colour-maps.js: it also sets them again once the viewer has started. */
+ *  one registration path, view/colour-maps.ts. */
 export function installFigureColours(name = 'editor') {
   registerColourMap(name, FIGURE_COLOURS, { keep: true });
   return true;
