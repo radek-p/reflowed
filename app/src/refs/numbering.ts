@@ -48,9 +48,15 @@ interface NumData { s: number; c: string; r?: string; R?: string; p: string; f: 
 interface Item { data: NumData; inst: Instance; blockId: string; number: string; value: number; prefix: string; index: number }
 interface Parsed { items: { data: NumData; inst: Instance }[]; labels: LabelRec[]; refs: Set<string>; refInsts: { name: string; inst: Instance }[] }
 
+/** One step of a counter (a number TeX printed), in document order: its counter (`counter`, aliases resolved;
+ *  `raw` the name LaTeX stepped), its value after the step, the number as printed (`number`, `head` its prefix) and
+ *  the labels it carries. */
 export interface NumberedItem {
   blockId: string; counter: string; raw: string; head: string; number: string; value: number; labels: string[];
 }
+/** What a run computed. `items` (every counter step in document order, with its value) and `labels` (label → its
+ *  number, type and names) keep this shape, fields only added: a host may replay the counters into a full
+ *  compile from them (\setcounter, \newlabel). */
 export interface NumberingState {
   items: NumberedItem[];
   labels: Record<string, LabelInfo>;
