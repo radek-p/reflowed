@@ -109,15 +109,16 @@ const loadMs = Date.now() - t0;
   check('outline: sections numbered, appendix lettered, abstract and references', JSON.stringify(titles) === JSON.stringify(['Abstract', '1 Introduction', '2 Preliminaries', '3 Functors and natural transformations', 'A Omitted proofs', 'References']), titles.join(' | '));
   const n = await page.locator('#panel-outline .ol-item').count();
   check('outline: drawn in the sidebar', n === ol.length, `${n} items`);
-  // one of the last sections cannot come to the top (the page ends first): then the page is at its end and the
-  // section is the active row (the jump's target stands as the section in view until the reader scrolls)
-  const placed = () => page.evaluate(() => {
-    const id = (window as any).editorAPI.outline().find((o: any) => o.title === 'Omitted proofs').id;
-    const top = document.querySelector(`.blk[data-id="${id}"]`)!.getBoundingClientRect().top;
-    const p = document.querySelector('[data-part="page"]') as HTMLElement, max = p.scrollHeight - p.clientHeight;
-    const active = document.querySelector('#panel-outline .ol-item.active')?.textContent ?? '';
-    return { top, atEnd: p.scrollTop > 0 && p.scrollTop >= max - 2, active, scrollTop: p.scrollTop, max, h: p.clientHeight };
-  });
+  // every section comes to the pane's top, the last ones too (the pane's end space below the document's end): its
+  // heading 0–24 px under the pane's visible top (below the glass strip), and the section the active row
+  const LANDED = (t: string) => {
+    const id = (window as any).editorAPI.outline().find((o: any) => o.title === t).id;
+    const p = document.querySelector('[data-part="page"]') as HTMLElement;
+    const land = document.querySelector(`.blk[data-id="${id}"]`)!.getBoundingClientRect().top - (p.getBoundingClientRect().top + (parseFloat(getComputedStyle(p).scrollPaddingTop) || 0));
+    const active = document.querySelector('#panel-outline .ol-item.active') as HTMLElement | null;
+    return { id, land, active: active?.textContent ?? '', activeId: active?.dataset.id ?? null, scrollTop: p.scrollTop, max: p.scrollHeight - p.clientHeight };
+  };
+  const placed = (t: string) => page.evaluate(`(${LANDED})(${JSON.stringify(t)})`) as Promise<ReturnType<typeof LANDED>>;
   // The row is right in every frame drawn from the click on: each frame's rows are read after its animation callbacks
   // and layout, just before it is painted (a resize observer's turn; a read in the frame's animation callbacks, as a
   // wait polling per frame does, can come before the pane measures its section in that frame). The wait below then
@@ -135,14 +136,10 @@ const loadMs = Date.now() - t0;
     document.addEventListener('click', () => { w.__w3Frames.on = true; }, { capture: true, once: true });
   });
   await page.locator('#panel-outline .ol-item', { hasText: 'Omitted proofs' }).locator('button.ol-link').click();
-  await page.waitForFunction(() => {
-    const id = (window as any).editorAPI.outline().find((o: any) => o.title === 'Omitted proofs').id;
-    const r = document.querySelector(`.blk[data-id="${id}"]`)!.getBoundingClientRect(), p = document.querySelector('[data-part="page"]') as HTMLElement;
-    const active = (document.querySelector('#panel-outline .ol-item.active') as HTMLElement | null)?.dataset.id;
-    return r.top >= 0 && (r.top < 160 || p.scrollTop >= p.scrollHeight - p.clientHeight - 2) && active === id;
-  }, null, { timeout: 5000 }).catch(() => {});
-  const at = await placed();
-  check('outline: click scrolls to the section and marks it active', at.top >= 0 && (at.top < 160 || (at.atEnd && at.top < at.h)) && /Omitted proofs/.test(at.active), JSON.stringify(at));
+  const landed = (t: string) => page.waitForFunction(`(() => { const r = (${LANDED})(${JSON.stringify(t)}); return r.land >= -1 && r.land <= 24 && r.activeId === r.id; })()`, null, { timeout: 5000 }).catch(() => {});
+  await landed('Omitted proofs');
+  const at = await placed('Omitted proofs');
+  check('outline: click scrolls to the section, its heading at the pane\'s top (0–24 px), and marks it active', at.land >= -1 && at.land <= 24 && /Omitted proofs/.test(at.active), JSON.stringify(at));
   await page.waitForFunction(() => (window as any).__w3Frames.rows.length >= 6, null, { timeout: 5000 }).catch(() => {});   // the landing's frames too
   const frames = await page.evaluate(() => {
     const w = window as any, id = w.editorAPI.outline().find((o: any) => o.title === 'Omitted proofs').id;
@@ -165,6 +162,9 @@ const loadMs = Date.now() - t0;
     await page.waitForFunction((t: string) => { const id = (window as any).editorAPI.outline().find((o: any) => o.title === t).id; return (document.querySelector('#panel-outline .ol-item.active') as HTMLElement | null)?.dataset.id === id && (document.querySelector('.wb-tab--on .wb-tab-sec')?.textContent ?? '').includes(t); }, title, { timeout: 5000 }).catch(() => {});
     const r = await agree(title);
     check(`outline: after a click on "${title}" the active row, the crumb and the target agree`, agreeing(r, title), JSON.stringify(r));
+    await landed(title);
+    const l = await placed(title);
+    check(`outline: … "${title}" at the pane's top (0–24 px), the last section too`, l.land >= -1 && l.land <= 24, JSON.stringify(l));
   }
   await page.locator('#panel-outline .ol-item', { hasText: 'Omitted proofs' }).locator('button.ol-link').click();
   await page.waitForFunction(() => /Omitted proofs/.test(document.querySelector('#panel-outline .ol-item.active')?.textContent ?? ''), null, { timeout: 5000 }).catch(() => {});

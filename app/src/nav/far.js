@@ -12,7 +12,10 @@
 //   glide(P, toY, { ms, tail }) -> Promise: animate pane P's scroll to toY (the jump first when far); a newer glide or a
 //                         reader's wheel, touch or press ends it. tail (px): jump at once to tail before toY and animate
 //                         only that (PageDown/PageUp: a third of the pane)
-//   P: { scroller: Element | null (null: the window), top(): the pane's top y, keeper? }
+//   endOf(P) -> End's place: the scroll position at which the document's end (its last block, "Add a block" after it)
+//                         meets the pane's bottom (0 for a document shorter than the pane). Below the end the pane has one
+//                         pane height of empty space (app.css: the end space), which End does not bring into view
+//   P: { scroller: Element | null (null: the window), top(): the pane's top y, keeper?, el?, view?, box()? (panes/pane.ts) }
 import { reduced } from '../motion/reduced.ts';
 import { appScroll } from '../perf/anchor.js';
 export const FAR = 1.5;                 // farther than this many pane heights: jump, then animate the last one
@@ -29,6 +32,15 @@ const setScroll = (P, y) => {
   const top = Math.max(0, Math.min(y, maxScroll(P)));
   appScroll(P, { to: top });                     // the keeper told
 };
+
+/** End's place in pane P: the document's end (the bottom of "Add a block", else of the blocks) at the pane's bottom */
+export function endOf(P) {
+  const parts = [P.el?.querySelector(':scope > .add-end-host'), P.view?.container].filter((el) => el && el.getClientRects().length > 0);
+  if (!parts.length) return maxScroll(P);
+  const end = Math.max(...parts.map((el) => el.getBoundingClientRect().bottom));
+  const bottom = P.box ? P.box().bottom : P.scroller ? P.scroller.getBoundingClientRect().top + P.scroller.clientHeight : innerHeight;
+  return Math.max(0, Math.min(maxScroll(P), scrollOf(P) + end - bottom));
+}
 
 /** the instant part of a far scroll by `delta`: to one pane height before the target. Returns what it jumped. */
 export function approach(P, delta) {

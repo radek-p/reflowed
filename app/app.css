@@ -110,7 +110,9 @@ button { font: inherit; color: inherit; }
 .ghost.icon { font-size: 17px; line-height: 1; padding: 3px 8px 5px; }
 
 /* ── The page ── */
-.rtx-editor:not(.rtx-wb) [data-part="page"] { max-width: var(--col); margin: 0 auto; padding: 28px 24px 60vh; }   /* (the mounted editor's page: the workbench's panes are styled in wb/css.ts) */
+/* (the mounted editor's page: the workbench's panes are styled in wb/css.ts). Its end space, below the last block: the
+   pane's height (--pane-h, panes/pane.ts: the window below the top bar), so the last heading can reach the pane's top */
+.rtx-editor:not(.rtx-wb) [data-part="page"] { max-width: var(--col); margin: 0 auto; padding: 28px 24px var(--pane-h, 60vh); }
 
 .chev { display: inline-block; width: 12px; transition: transform 0.12s; font-size: 15px; }
 .hint-text { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }
@@ -343,7 +345,7 @@ dialog.shortcuts dd { margin: 0; }
   .sidebar { box-shadow: var(--shadow); }
 }
 @media (max-width: 720px) {
-  .rtx-editor:not(.rtx-wb) [data-part="page"] { padding: 20px 16px 30vh; }
+  .rtx-editor:not(.rtx-wb) [data-part="page"] { padding: 20px 16px var(--pane-h, 60vh); }
   .status { display: none; }
   .doc-title, .doc-switch { width: auto; max-width: 50vw; }
   .crumb-home, .crumb-sep { display: none; }
@@ -408,11 +410,19 @@ dialog.versions-dialog { width: min(560px, calc(100vw - 32px)) !important; max-h
 .rtx-editor[data-embedded] .shell, .rtx-editor[data-embedded] [data-part="view"].scrolls { height: 100%; }
 [data-part="view"].scrolls > .topbar, [data-part="view"].scrolls > [data-part="find"] { grid-column: 1 / -1; }
 [data-part="view"].scrolls main[data-pane] { grid-row: 4; min-width: 0; max-width: none; margin: 0; overflow: auto;
-  padding: 24px 16px 0; box-sizing: border-box; overscroll-behavior: contain; overflow-x: hidden; }
-/* the room to scroll the last block up is content, not the scroller's padding: a sticky element (the floating
-   editing popover, bottom: 10px) keeps its distance from the scroller's padding edge, so 40vh of padding held it
-   40vh above the pane's bottom */
-[data-part="view"].scrolls main[data-pane]::after { content: ''; display: block; height: 40vh; }
+  --pane-lead: 24px; padding: var(--pane-lead) 16px 0; box-sizing: border-box; overscroll-behavior: contain; overflow-x: hidden; }
+/* THE END SPACE: below the last block (and "Add a block"), empty space of exactly the pane's visible height, so the
+   document's end can scroll up to the pane's top and every heading, of the last and smallest section too, can reach
+   the reading line (docview/in-view.ts). 100 % is the pane's content box (its height less the lead above the text),
+   so it follows every resize in the same layout. Content, not the scroller's padding: a sticky element (the floating
+   editing popover, bottom: 10px) keeps its distance from the scroller's padding edge, so padding held it that far
+   above the pane's bottom. End (nav/keys.js) brings the document's end to the pane's bottom, not this space */
+[data-part="view"].scrolls main[data-pane]::after { content: ''; display: block; height: calc(100% + var(--pane-lead)); }
+/* printed: no end space (over the workbench's more specific rule, wb/css.ts) */
+@media print {
+  main[data-pane]::after { display: none !important; }
+  .rtx-editor:not(.rtx-wb) [data-part="page"] { padding-bottom: 0; }
+}
 /* the column centred in its pane, at most the pane's width less small margins (no horizontal scroll);
    the controls' mode (docview/controls.js) decides whether the gutter is beside it or a floating bar over it */
 /* no [data-part] here: with * as the subject, a data-part change (doc-tabs moves it with the focus) restyled

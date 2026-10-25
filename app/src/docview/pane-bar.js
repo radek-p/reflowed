@@ -58,13 +58,11 @@ export function createPaneBars(host) {
   // ── the section in view ── (the rule: docview/in-view.ts; measured here)
   function inView(s) {
     const p = s.p, items = host.outline();
-    // a heading in the top band of the pane is the section you read; at the end of the scroll, the last one shown
-    const sc = host.scroller(p) ?? document.scrollingElement;
-    const atEnd = !!sc && sc.scrollTop > 0 && sc.scrollTop >= sc.scrollHeight - sc.clientHeight - 2;
-    const end = (host.scroller(p)?.getBoundingClientRect().bottom ?? innerHeight) - 48;
+    // the last heading in or above the top band of the pane is the section you read (the end of the document too: the
+    // pane's end space lets every heading reach the line)
     const tops = items.map((it) => { const el = host.elementIn(p, it.id); return el && el.offsetParent !== null ? el.getBoundingClientRect().top : null; });
     const t = s.target, k = t ? items.findIndex((it) => it.id === t.id) : -1;
-    const at = sectionInView({ tops, line: host.paneTop(p) + 64, atEnd, end, target: k >= 0 ? { k, top: t.top } : null });
+    const at = sectionInView({ tops, line: host.paneTop(p) + 64, target: k >= 0 ? { k, top: t.top } : null });
     if (t && t.top != null && at !== k) s.target = null;          // the reader scrolled: the jump's target is over
     return items[at] ?? null;
   }

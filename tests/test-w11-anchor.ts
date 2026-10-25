@@ -181,7 +181,7 @@ const report: any = { browser: BROWSER, html: HTML, motion: MOTION };
     // the jump itself: until it has ended (SETTLE), so the measurement starts where it put the heading
     const st: any = await page.evaluate(`(${SETTLE})('${sel}', ${y0})`);
     report.jumpSettle = st;
-    check('jump: the heading arrived at the top, below the top bar (≤ 4 px)', st.begun && (Math.abs(st.y - st.want) <= 4 || st.maxed), st);
+    check('jump: the heading arrived at the top, below the top bar (≤ 4 px)', st.begun && Math.abs(st.y - st.want) <= 4, st);
     const s: any = await page.evaluate(`(${SAMPLE})('.blk[data-id="${target.id}"]')`);
     const d = deviation(s.ys, s.states);
     report.jump = { target, ...d, scrolls: s.scrolls, why: whyOf(s) };
@@ -246,19 +246,17 @@ const report: any = { browser: BROWSER, html: HTML, motion: MOTION };
   const landed: any[] = [];
   for (const it of items) {
     const r: any = await clickRest(it);
-    // the end of the document cannot scroll a late heading to the top: the most it can
-    const maxed = await page.evaluate(() => Math.abs(PANE().scrollTop + PANE().clientHeight - PANE().scrollHeight) < 2);
     // held: the next 60 painted frames (blocks above still typesetting) keep it within 1 px, and the page
     // has stopped (no slow scroll that the "at rest" wait, 3 frames within 0.5 px, would let through)
     const s: any = await page.evaluate(`(${SAMPLE})('.blk[data-id="${it.id}"]', 60)`);
     const d = deviation(s.ys, s.states);
     const drift = Math.abs(s.ys[s.ys.length - 1] - s.ys[0]);
-    landed.push({ title: it.title, off: Math.round((r.y - r.want) * 10) / 10, pending: r.pending, maxed, held: d.max, drift });
+    landed.push({ title: it.title, off: Math.round((r.y - r.want) * 10) / 10, pending: r.pending, held: d.max, drift });   // (every heading can come to the top, the last ones too: the pane's end space)
   }
   // drift ≤ 1 px, as held: a held heading jitters by ±0.5 px between frames (sub-pixel corrections
   // while blocks above typeset: ys 63.6 … 64.5), so the first and last samples can differ by up to 1 px at rest;
   // a page still scrolling slowly moves more than that in 60 frames
-  const bad = landed.filter((x) => (Math.abs(x.off) > 4 && !x.maxed) || x.held > 1 || x.drift > 1);
+  const bad = landed.filter((x) => Math.abs(x.off) > 4 || x.held > 1 || x.drift > 1);
   report.outline = { landed };
   check('outline: every heading lands at the top, below the top bar (≤ 4 px), is held there (±1 px, 60 frames) and the page stops, while typesetting', items.length > 5 && !bad.length, bad.length ? bad : `${landed.length} entries, ${landed.filter((x) => x.pending).length} with blocks pending`);
   // (a regression guard) clicking an entry already reached is idempotent: the same entry

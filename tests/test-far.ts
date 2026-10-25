@@ -7,10 +7,15 @@
 // height: what is seen of it, below the glass strip):
 //   - the outline's jump from the top to the last section: the blocks that came into view on the way are at most two
 //     pane heights' worth (the target's neighbourhood), no long task (> 50 ms), the heading lands under the pane's top
-//     (or as high as the pane's end lets it); the last stretch moves towards the target (one way); Back returns to the top the same way
-//   - End and Home, five times each, with the focus on the page: the same bound, the bottom / the top reached
+//     (every heading can: the pane's end space); the last stretch moves towards the target (one way); Back returns to the top the same way
+//   - End and Home, five times each, with the focus on the page: the same bound; End: the document's end at the pane's
+//     bottom (not the end space below it), Home: the top
 //   - one PageDown: one step, of which at most a third of the pane animates (the rest jumps at once)
 //   - PageDown held (five presses in a row): one step each, no long task
+//   - the end space: below the document's end, empty space of the pane's visible height (±1 px), in pane A and in pane B,
+//     and after a window resize; scrolled to the end, the last section's heading can be at the reading line, and the
+//     crumb names it until References' heading reaches the line (no rule of its own for the end of the scroll); End from
+//     the very end comes back to the document's end at the pane's bottom
 //   - End in a text field (the find bar) is left to the field
 // Each document starts from the default layout (?fresh): its tab alone, pane A.
 // Waits on events (nav:jumped, nav:back, nav:scrolled), whenIdle() and frames; never on fixed times. Long tasks are
@@ -107,6 +112,25 @@ const over = (long: number[]) => long.some((d) => d > LONG());
 const firstArrivalOk = (long: number[]) => long.every((d) => d <= FIRST());
 const bound = (r: any) => r.seenPx <= 2.05 * r.paneH;          // about two pane heights of the document came into view, at most (the window counts from the top bar)
 
+// a pane's scroll position and where the document's end ("Add a block" after the last block) is: its bottom less the
+// pane's bottom (0: End's place), less the pane's visible top (0: as far as the pane scrolls); the space below it
+// and the pane's visible height (below the glass strip)
+const END_AT = (s: string) => {
+  const sc = document.querySelector(s) as HTMLElement, end = sc.querySelector(':scope > .add-end-host')!.getBoundingClientRect().bottom;
+  const r = sc.getBoundingClientRect(), pad = parseFloat(getComputedStyle(sc).scrollPaddingTop || '0');
+  return { y: sc.scrollTop, max: sc.scrollHeight - sc.clientHeight, end: end - (r.top + sc.clientHeight), fromTop: end - (r.top + pad),
+    space: sc.scrollHeight - (end - r.top + sc.scrollTop), seenH: sc.clientHeight - pad };
+};
+// pane sel's crumb (its tab's section: one line or two); a heading put dy px under the pane's visible top (where it went)
+const crumbOf = (s: string) => page.evaluate((t: string) => document.querySelector(`[data-tab="${t}"] :is(.wb-tab-sec, .wb-tab-sub-label)`)?.textContent?.trim() ?? '', idOf(s));
+const scrollHeadingTo = (s: string, id: string, dy: number) => page.evaluate(([q, i, d]: any) => {
+  const sc = document.querySelector(q) as HTMLElement, el = sc.querySelector(`.blk[data-id="${i}"]`)!;
+  const top = sc.getBoundingClientRect().top + (parseFloat(getComputedStyle(sc).scrollPaddingTop || '0') || 0);
+  sc.scrollTop += el.getBoundingClientRect().top - (top + d);
+  return el.getBoundingClientRect().top - top;
+}, [s, id, dy]);
+const READ_LINE = 64;   // the reading line under the pane's visible top (docview/pane-bar.js)
+
 for (const doc of docsHere(['long', 'intro'])) {
   await page.goto('about:blank');
   // ?fresh: the default layout, this document's tab alone. Without it the page restores the last layout (the
@@ -126,11 +150,10 @@ for (const doc of docsHere(['long', 'intro'])) {
     // the outline's jump to the last section, from the top
     const last = await page.evaluate(() => { const o = (window as any).editorAPI.outline().filter((x: any) => !x.special && x.level === 1); return o[o.length - 1]?.id; });
     const r = await measure(sel, () => onEvent('nav:jumped', () => page.evaluate(([i, pp]: string[]) => (window as any).editorAPI.nav().goTo(i, { pane: pp }), [last, P[p]])));
-    // (the last section of a short ending cannot come to the top: the pane's end is as far as it scrolls, the heading in view there)
-    const { land, atEnd, seenH } = await page.evaluate(([s, i]: string[]) => { const sc = document.querySelector(s) as HTMLElement; const el = sc.querySelector(`.blk[data-id="${i}"]`)!; const pad = parseFloat(getComputedStyle(sc).scrollPaddingTop || '0'); const top = sc.getBoundingClientRect().top + pad; return { land: el.getBoundingClientRect().top - top, atEnd: sc.scrollTop >= sc.scrollHeight - sc.clientHeight - 1, seenH: sc.clientHeight - pad }; }, [sel, last]);
+    const land = await page.evaluate(([s, i]: string[]) => { const sc = document.querySelector(s) as HTMLElement; const el = sc.querySelector(`.blk[data-id="${i}"]`)!; const pad = parseFloat(getComputedStyle(sc).scrollPaddingTop || '0'); return el.getBoundingClientRect().top - (sc.getBoundingClientRect().top + pad); }, [sel, last]);
     check(`${tag}: a jump to the last section passes no blocks on the way (${Math.round(r.seenPx)} px of blocks seen, pane ${Math.round(r.paneH)} px; ${r.paints} paints)`, bound(r), { seen: r.seen, seenPx: Math.round(r.seenPx) });
     gate(check, `${tag}: … no long task on the way (a first arrival: at most one, ≤ ${L(100)})`, firstArrivalOk(r.long), r.long.map(Math.round));
-    check(`${tag}: … the heading lands under the pane's top (0–24 px), or as high as the pane's end lets it, in view`, land >= -1 && (land <= 24 || (atEnd && land < seenH - 24)), { land, atEnd, seenH });
+    check(`${tag}: … the heading lands under the pane's top (0–24 px)`, land >= -1 && land <= 24, { land });
     const anim = r.ys.slice(r.ys.findIndex((y: number, i: number) => i > 0 && Math.abs(y - r.ys[i - 1]) > 200) + 1);
     check(`${tag}: … the last stretch moves towards the target, one way`, oneWay(anim) <= 1 && anim.length > 3, { back: oneWay(anim), frames: anim.length });
     const b = await measure(sel, () => onEvent('nav:back', () => page.evaluate(() => (window as any).editorAPI.nav().back())));
@@ -146,14 +169,14 @@ for (const doc of docsHere(['long', 'intro'])) {
       for (const key of ['End', 'Home']) {
         await focusPage();
         const m = await measure(sel, () => onEvent('nav:scrolled', () => page.keyboard.press(key)));
-        const at = await page.evaluate((s: string) => { const sc = document.querySelector(s) as HTMLElement; return sc ? { y: sc.scrollTop, max: sc.scrollHeight - sc.clientHeight } : { y: scrollY, max: document.documentElement.scrollHeight - innerHeight }; }, sel);
-        const reached = key === 'End' ? Math.abs(at.max - at.y) <= 2 : at.y <= 2;
+        const at = await page.evaluate(END_AT, sel);
+        const reached = key === 'End' ? Math.abs(at.end) <= 2 : at.y <= 2;
         const row = { k, key, seenPx: Math.round(m.seenPx), long: m.long.map(Math.round), at };
         if (!bound(m) || !reached) bad.push(row);
         else if (k === 0 ? !firstArrivalOk(m.long) : over(m.long)) slow.push(row);
       }
     }
-    gate(check, `${tag}: End and Home ×5: no blocks passed, no long task (> ${L(50)}; the first End: its arrival, ≤ ${L(100)}), the bottom / top reached`, slow.length === 0, [...bad, ...slow].slice(0, 3), { behaviourOk: bad.length === 0 });
+    gate(check, `${tag}: End and Home ×5: no blocks passed, no long task (> ${L(50)}; the first End: its arrival, ≤ ${L(100)}), the document's end at the pane's bottom / the top reached`, slow.length === 0, [...bad, ...slow].slice(0, 3), { behaviourOk: bad.length === 0 });
     // one PageDown: jumps, then animates only the last third of a pane
     await focusPage();
     const one = await measure(sel, () => onEvent('nav:scrolled', () => page.keyboard.press('PageDown')));
@@ -173,6 +196,35 @@ for (const doc of docsHere(['long', 'intro'])) {
     await frames(3);
     const pd2 = await held();
     gate(check, `${tag}: … the same five steps again: no long task (> ${L(50)})`, !over(pd2.long), pd2.long);
+    // the end space, here and after a window resize (the pane's visible height follows it)
+    for (const size of [null, { width: 1180, height: 720 }]) {
+      if (size) { await page.setViewportSize(size); await idle(); await frames(4); }
+      const e = await page.evaluate(END_AT, sel);
+      check(`${tag}: the end space is the pane's visible height (±1 px)${size ? `, after a resize to ${size.width}×${size.height}` : ''}`, Math.abs(e.space - e.seenH) <= 1, e);
+    }
+    await page.setViewportSize({ width: 1440, height: 900 }); await idle(); await frames(4);
+    // scrolled to the end: the last section's heading at the reading line is the crumb's section; References' heading
+    // just under the line: still the last section; at the line: References; the very end: the end at the pane's top
+    const ol = await page.evaluate(() => (window as any).editorAPI.outline().map((o: any) => ({ id: o.id, title: o.title, special: !!o.special, level: o.level })));
+    const sec = [...ol].reverse().find((o: any) => !o.special && o.level === 1), refs = ol[ol.length - 1];
+    const crumbs: Record<string, unknown> = {};
+    for (const [name, id, dy] of [['last section at the line', sec.id, READ_LINE - 2], ['References under the line', refs.id, READ_LINE + 20], ['References at the line', refs.id, READ_LINE - 2]] as const) {
+      const at = await scrollHeadingTo(sel, id, dy); await frames(3);
+      crumbs[name] = { at: Math.round(at), crumb: await crumbOf(sel) };
+    }
+    await page.evaluate((s: string) => { const sc = document.querySelector(s) as HTMLElement; sc.scrollTop = sc.scrollHeight; }, sel); await frames(3);
+    const maxed = await page.evaluate(END_AT, sel);
+    crumbs.end = { fromTop: Math.round(maxed.fromTop), crumb: await crumbOf(sel) };
+    const c = crumbs as Record<string, { at?: number; crumb: string; fromTop?: number }>;
+    check(`${tag}: the end: "${sec.title}" reaches the reading line and is the crumb's section until References' heading reaches the line`,
+      refs.special && Math.abs(c['last section at the line'].at! - (READ_LINE - 2)) <= 1 && c['last section at the line'].crumb.includes(sec.title)
+      && c['References under the line'].crumb.includes(sec.title) && /References/.test(c['References at the line'].crumb)
+      && /References/.test(c.end.crumb) && Math.abs(c.end.fromTop!) <= 1, crumbs);
+    // End from the very end: back to the document's end at the pane's bottom
+    await focusPage();
+    await onEvent('nav:scrolled', () => page.keyboard.press('End'));
+    const back = await page.evaluate(END_AT, sel);
+    check(`${tag}: End from the very end: the document's end at the pane's bottom (±2 px)`, Math.abs(back.end) <= 2 && back.y < back.max - 100, back);
     if (p === 'b') { await closePane(page, SEL.b); await idle(); }
   }
   // End in a text field is the field's
