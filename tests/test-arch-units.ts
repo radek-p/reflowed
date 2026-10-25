@@ -46,11 +46,11 @@ const appImports = [...appJs.matchAll(/^import .* from '(\.[^']+)'/gm)].length;
 check(`app.js within its line budget (${APP_JS_BUDGET})`, appLines <= APP_JS_BUDGET, `${appLines} lines`);
 check(`app.js within its import budget (${APP_JS_IMPORTS_BUDGET} local imports)`, appImports <= APP_JS_IMPORTS_BUDGET, `${appImports}`);
 
-// ── 1b. app.js writes nothing to the store itself: doc/persist.js does ──
+// ── 1b. app.js writes nothing to the store itself: doc/persist.ts does ──
 {
   const writes = [...appJs.matchAll(/\bstore\.(put\w*|delete\w*|appendOps|createDoc)\(/g)].map((m) => m[1]);
   const own = /\b(createWriter|typingTimers|savedSource|titleTimer|lastSafety)\b/.exec(appJs)?.[1];
-  check('app.js: no store writes of its own (doc/persist.js); no writer, typing timers or stored sources', writes.length === 0 && !own, `${writes.join()} ${own ?? ''}`);
+  check('app.js: no store writes of its own (doc/persist.ts); no writer, typing timers or stored sources', writes.length === 0 && !own, `${writes.join()} ${own ?? ''}`);
   // the undo history and the block operations are doc/'s: no stack, no list surgery in app.js
   const hist = /\b(undoStack|redoStack)\b/.exec(appJs)?.[1] ?? /\bdoc\.blocks\.splice\(/.exec(appJs)?.[0] ?? /function (insertBlock|removeBlock|moveBlocks|applyBlocks|splitBlock|mergeBlock|setSource|rekey)\b/.exec(appJs)?.[1];
   const raw = APP.map(rel).filter((f) => f !== 'app/src/doc/history.js' && /\bundoStack\b/.test(read(join(HERE, f))) && !/svgfig\/editor\.js$/.test(f));

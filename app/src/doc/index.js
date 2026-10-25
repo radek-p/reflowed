@@ -1,7 +1,7 @@
 // @ts-check
 // One document's model (the DocSession's parts, no DOM); the editor (app/app.js)
 // makes each part itself, from here.
-export { createPersist, splice } from './persist.js';
+export { createPersist, splice } from './persist.ts';
 export { createModel } from './model.js';
 export { createHistory } from './history.js';
 export { createOps } from './ops.ts';

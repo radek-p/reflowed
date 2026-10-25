@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const HERE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const imp = (p: string) => import(pathToFileURL(join(HERE, p)).href);
 const { memoryStore, ids, blankDoc } = await imp('app/src/store/api.ts');
-const { createPersist, splice } = await imp('app/src/doc/persist.js');
+const { createPersist, splice } = await imp('app/src/doc/persist.ts');
 const { createModel } = await imp('app/src/doc/model.js');
 
 let failed = 0, n = 0;

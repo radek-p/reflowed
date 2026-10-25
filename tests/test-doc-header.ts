@@ -62,7 +62,7 @@ await page.keyboard.type('Renamed paper');
 await page.keyboard.press('Enter');
 await page.waitForFunction(() => !document.querySelector('.wb-rename'));
 await page.waitForFunction(() => (window as any).editorAPI.currentDoc().title === 'Renamed paper');
-// (the title is written after 400 ms of quiet, doc/persist.js: the store waited on)
+// (the title is written after 400 ms of quiet, doc/persist.ts: the store waited on)
 // (waitForFunction does not await a promise: the store polled from here, on its state)
 for (let k = 0; k < 600 && (await page.evaluate(async (i: string) => (await (window as any).editorAPI.store().getDoc(i)).title, id)) !== 'Renamed paper'; k++) await page.evaluate(() => new Promise((r) => setTimeout(r, 50)));
 const kept = { title: await title(), stored: await page.evaluate(async (i: string) => (await (window as any).editorAPI.store().getDoc(i)).title, id), names: await names(),

@@ -12,7 +12,7 @@
 //     S.unload()                    the document closed: its results and history go
 //     S.persist · S.model · S.history · S.derived · S.results · S.ops · S.refs · S.backend()
 //   hooks: { saveChanged(), saveFailed(e), unplaced(id), beforeUndo(entry, how), afterUndo(entry, how), ops: (doc/ops.ts hooks) }
-import { createPersist } from './persist.js';
+import { createPersist, type PersistStore } from './persist.ts';
 import { createModel } from './model.js';
 import { createHistory } from './history.js';
 import { createDerived } from './derived.js';
@@ -22,7 +22,7 @@ import { createOps, type Block, type Doc, type OpsHooks, type OpsNest } from './
 /** the open document as the session holds it: the store's OpenDoc, its blocks sorted */
 export interface OpenDoc extends Doc { assets: unknown[]; readOnly?: string; deletedAt?: number; [k: string]: unknown }
 /** what the session reads from the store (contracts.d.ts DocStore; the writes are persist's) */
-export interface SessionStore {
+export interface SessionStore extends PersistStore {
   getDoc(id: string): Promise<(Omit<OpenDoc, 'blocks' | 'assets'> & { blocks?: Block[]; assets?: unknown[] }) | null>;
   getBlocks(id: string): Promise<Block[]>;
   [k: string]: unknown;

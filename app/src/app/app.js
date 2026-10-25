@@ -162,7 +162,7 @@ export function createDocEditor(ctx) {
   const { contextOf, enginePreamble, compileSource, ck, viewKey, viewResult, kindOf, computeContexts } = derived;
   const { moveBlocks, moveBlock, applyBlocks, setSource } = ops;   // (the hosts of nesting, find, the outline and the References pane; the rest goes through commands)
 
-  // ── Saving through the store (../doc/persist.js, app/save-state.js) ──
+  // ── Saving through the store (../doc/persist.ts, app/save-state.js) ──
   // writes in order; a failed one is kept and retried until it succeeds. The one save indicator is the
   // document's tab: its unsaved dot in the × slot while a write has failed (the status's unsaved, also the tab's status
   // word for a screen reader). The bar's save status ("Saving…", "Saved", "Not saved" with Retry, "Read-only") is gone;

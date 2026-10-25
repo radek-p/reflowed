@@ -1,5 +1,5 @@
 // One document's block operations: insert, remove, duplicate, move, split, merge, set a
-// source, and a structural change as a new block list (applyBlocks), each saved (doc/persist.js through
+// source, and a structural change as a new block list (applyBlocks), each saved (doc/persist.ts through
 // doc/model.js) and one undo step (doc/history.js) AS DATA: `change(label, do)` does it and records what
 // it changed, { order, blocks: { id: record | null }, meta: { title | preamble | bib } } before and after, and the
 // history's 'doc' applier restores either side (restore). No closures are kept. No DOM: what the page does around an
@@ -26,7 +26,7 @@
 //     duplicateOwned(id) -> boolean (svgfig: a block with drawn figures), gone(id) (a block left: the selection),
 //     meta(field, value) (the page sets the title, the preamble or the bibliography: an undo of one)
 //   }
-import { splice } from './persist.js';
+import { splice } from './persist.ts';
 
 export interface Block {
   id: string; pos: string; kind: string; source: string; file?: string; parentId?: string | null;
