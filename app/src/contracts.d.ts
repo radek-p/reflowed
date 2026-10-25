@@ -288,6 +288,12 @@ export interface BlockResult {
     links?: string[];              // link targets used
   };
   transient?: boolean;             // an infrastructure error (not the source's fault): not cached, compiled again when asked
+  /** what the block's runs read of the document: every file of it TeX opened (a figure a macro places too) and
+   *  every name TeX looked for that nothing had, in the order asked (the engine's record; a block fact) */
+  files?: string[];
+  /** the signature each of those files had when the block compiled (name -> hash+rendition; a name not here was
+   *  not in the document): a stored result is used only while they still hold */
+  fileSigs?: Record<string, string>;
 }
 
 export interface BlockRequest {
@@ -310,7 +316,8 @@ export interface CompileRequest {
 
 export interface CompileResponse {
   blocks: Record<ULID, BlockResult>;
-  preamble: { errors: Problem[]; warnings: Problem[] };
+  /** the preamble's problems; files: what its warm read of the document (as BlockResult.files) */
+  preamble: { errors: Problem[]; warnings: Problem[]; files?: string[] };
   fonts: Record<string, string>;   // original -> served (server backends); {} when the backend installs fonts itself
   stats: { compiled: number; cached: number; runs: number; ms: number };
 }
@@ -329,7 +336,9 @@ export interface Backend {
    *  - the promise rejects only when the engine cannot run: its worker did not start
    *    (Error & { dead: true }) or its files are missing or damaged (the single file: Error &
    *    { fatal: true }, and every later call rejects at once with the same message);
-   *  - a stored result that is damaged is a miss (compiled again), never shown. */
+   *  - a stored result that is damaged is a miss (compiled again), never shown;
+   *  - a stored result whose files (BlockResult.files) are no longer as they were is a miss too (a figure a
+   *    macro places, replaced). */
   compile(req: CompileRequest): Promise<CompileResponse>;
   /** A label/minipage for a figure (FigureEditor), not part of the doc: the
    *  current preamble; `widthBp` sets \hsize (minipage). */
@@ -337,7 +346,7 @@ export interface Backend {
   /** Full compile with capture off → a PDF. `log` is the TeX log. */
   pdf(req: { preamble: string; blocks: BlockRequest[]; title?: string; /** the names of the document's files: all go to the engine */ files?: string[] }): Promise<{ pdf: Blob | null; log: string; errors: Problem[] }>;
   /** Re-warm for a new preamble; answers the preamble's own problems. */
-  setPreamble(preamble: string): Promise<{ errors: Problem[]; warnings: Problem[] }>;
+  setPreamble(preamble: string): Promise<{ errors: Problem[]; warnings: Problem[]; files?: string[] }>;
   setBib(bib: Doc['bib']): Promise<void>;
   /** What \includegraphics may find (picture shim). */
   setAssets?(lookup: (name: string) => Promise<Asset | null>): void;

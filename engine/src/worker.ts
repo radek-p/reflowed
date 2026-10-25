@@ -17,9 +17,11 @@
 //   engine      { packs?: Uint8Array[], format?: Uint8Array, wasm?: Uint8Array } -> { ms }: the engine made (the wasm
 //               compiled, an instance) from these or from what init's packs had; once (again: nothing). setPreamble,
 //               compile, tikz and pdf need it first (the backend sends it before the first of them)
-//   setPreamble { preamble, bbl? } -> { ok, errors, warnings, adapted, ms, pkey }
+//   setPreamble { preamble, bbl? } -> { ok, errors, warnings, adapted, ms, pkey, files }   (files: as a block's)
 //   setAssets   { assets: [{ name, mime, bytes?, svg? }], replace? }
 //   compile     { blocks: [{ id, source, context? }] } -> { blocks: { id: Result }, fonts, fontFiles, stats }
+//               (Result.files: the document's files the block's runs opened, and the names they looked for that
+//               nothing had, in the order asked; the backend checks a stored result's against the document's)
 //   fonts       { reqs: [FontReqs] } -> { fonts, fontFiles }   (results restored from a cache)
 //   tikz        { source, extra? } -> { svg, widthBp, heightBp, depthBp, errors }   (Ipe renditions)
 //   pdf         { preamble, body, bbl? } -> { pdf: Uint8Array | null, log, errors }
@@ -68,6 +70,9 @@ const assets = new Map<string, AssetEntry>();
 /** names TeX asked for that neither the embedded set nor the document's sent files have
  *  (the backend looks them up in the document, sends what it finds and runs again) */
 const misses = new Set<string>();
+/** the run's record of the document's files: every name answered from `assets`, and every name nothing had (a
+ *  block's runs, the resampling ones too, or the preamble's warm; null between them) */
+let opened: Set<string> | null = null;
 
 // Where TeX files come from (loading/provider.ts): the embedded set (the single file's pack; on a dev page, the
 // bundle server's files on demand), then the TeX resource server when one is set. The engine asks the chain and
@@ -113,10 +118,11 @@ async function setResources({ base = '', cached = {}, quiet = false }: { base?: 
 // article.cls wins over the embedded pack's copy of the same name.
 function getFile(name: string): Uint8Array | null {
   const a = assets.get(name);
-  if (a?.bytes) return a.bytes;
+  if (a?.bytes) { opened?.add(name); return a.bytes; }
   const hit = tex.resolveFrom(name);
   if (hit) { if (hit.from === 'embedded') used.add(name); return hit.bytes; }
   if (misses.size < 400) misses.add(name);
+  if (opened && opened.size < 400) opened.add(name);
   return null;
 }
 /** a file the engine can open (the embedded set, the document's assets, what the server already gave) */
@@ -151,7 +157,7 @@ function bytesToBase64(b: Uint8Array): string {
 // ── The engine ───────────────────────────────────────────────────────────────
 let eng: WarmEngine;
 let host: Host | null = null;
-let pre = { preamble: '', bbl: '', pkey: '', ok: false, errors: [] as Problem[], warnings: [] as Problem[], adapted: [] as string[], missing: [] as string[], textwidthPt: 0 };
+let pre = { preamble: '', bbl: '', pkey: '', ok: false, errors: [] as Problem[], warnings: [] as Problem[], adapted: [] as string[], missing: [] as string[], files: [] as string[], textwidthPt: 0 };
 // \textwidth as the document has it at \begin{document}: the page sets its paper column from it
 // before any block is typeset (the warm's log; cached with the preamble's result, so a cached page knows it at once)
 const TEXTWIDTH_PROBE = '\\typeout{rtx-textwidth=\\the\\textwidth}';
@@ -271,8 +277,12 @@ function warm(): void {
   eng.addFile('input.tex', host.main);
   const t = performance.now();
   misses.clear();
+  const outer = opened;                     // (a block's run that recovers from a crash warms again: its record is kept)
+  opened = new Set();
   const w = eng.warm('input.tex');
   pre.missing = [...misses];
+  pre.files = [...opened];
+  opened = outer;
   const p = preambleProblems(w.ok ? eng.preambleLog : eng.text('input.log'), host);
   nameMissing(p.errors, known, whereElse);
   pre.ok = w.ok;
@@ -287,14 +297,14 @@ let warmMs = 0;
 // class or package warms again; force: warm again anyway (files TeX missed were sent)
 async function setPreamble({ preamble, bbl = '', sig = '', force = false }: { preamble: string; bbl?: string; sig?: string; force?: boolean }) {
   const pkey = preambleKey(preamble, sig ? `${bbl}\u0000${sig}` : bbl);
-  if (!force && pkey === pre.pkey && eng.warmed) return { ok: pre.ok, errors: pre.errors, warnings: pre.warnings, adapted: pre.adapted, ms: 0, pkey, missing: [], textwidthPt: pre.textwidthPt };
+  if (!force && pkey === pre.pkey && eng.warmed) return { ok: pre.ok, errors: pre.errors, warnings: pre.warnings, adapted: pre.adapted, ms: 0, pkey, missing: [], files: pre.files, textwidthPt: pre.textwidthPt };
   // the packages it names that the TeX tree has, fetched in parallel before TeX runs (loading/http.ts
   // prefetch): TeX's synchronous reads then find them
   if (server) await server.prefetch(texRequires(preamble), { skip: (n) => names.has(n) || files.has(n) || !!findAssetByName(n) });
   host = buildHost(preamble, { preload: TEXTWIDTH_PROBE });
-  pre = { preamble, bbl, pkey, ok: false, errors: [], warnings: [], adapted: host.adapted, missing: [], textwidthPt: 0 };
+  pre = { preamble, bbl, pkey, ok: false, errors: [], warnings: [], adapted: host.adapted, missing: [], files: [], textwidthPt: 0 };
   warm();
-  return { ok: pre.ok, errors: pre.errors, warnings: pre.warnings, adapted: pre.adapted, ms: warmMs, pkey, missing: pre.missing ?? [], textwidthPt: pre.textwidthPt };
+  return { ok: pre.ok, errors: pre.errors, warnings: pre.warnings, adapted: pre.adapted, ms: warmMs, pkey, missing: pre.missing ?? [], files: pre.files, textwidthPt: pre.textwidthPt };
 }
 
 async function setAssets({ assets: list, replace }: { assets: AssetEntry[]; replace?: boolean }) {
@@ -316,6 +326,9 @@ interface Result {
   fontReqs?: FontReqs; ms: number; timing: Record<string, number>; transient?: boolean;
   /** files TeX asked for that were not there (the backend looks for them in the document) */
   missing?: string[];
+  /** the document's files the block's runs opened (answered from the assets), and the names they looked for that
+   *  nothing had: what the block uses, as TeX saw it (a figure placed by a macro too) */
+  files?: string[];
 }
 
 let pipe: Pipeline;
@@ -324,7 +337,12 @@ const plog = (s: string) => { pipeLog.push(s); if (pipeLog.length > 400) pipeLog
 const results = new Map<string, Result>();
 let runs = 0;
 
+/** one block typeset, with the record of the document's files its runs opened (Result.files) */
 async function build(source: string, context: string, key: string): Promise<Result> {
+  opened = new Set();
+  try { const res = await typeset(source, context, key); res.files = [...opened]; return res; } finally { opened = null; }
+}
+async function typeset(source: string, context: string, key: string): Promise<Result> {
   const t0 = performance.now();
   const f = blockFile(source, context);
   const res: Result = { key, status: 'error', errors: [], warnings: [], nodelist: null, capture: { engine: 'tectonic', build: ENGINE_BUILD, id: `${key}#${++runs}` }, ms: 0, timing: {} };

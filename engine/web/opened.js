@@ -2,7 +2,9 @@
 // What a source makes TeX open from the document's own files (the asset
 // store): pictures, and the project's TeX files (a paper's own class or
 // package, an \input table, an edited figure's .tikz). [pattern, the
-// extensions TeX tries]
+// extensions TeX tries]. What a source names, read before it runs: the files sent ahead and part of the keys; what
+// a run really opened (a figure a macro places too) is the run's own record (worker.ts Result.files), checked when a
+// stored result is used (backend.js). Also a document file's signature, and which names can be document files.
 import { stripComments } from '../../loading/tex-comment.ts';   // the comment rule (\\% a line break, then a comment)
 /** @type {[RegExp, string[]][]} */
 const OPENS = [
@@ -17,6 +19,13 @@ const OPENS = [
 const FONT_SHAPE = /\\DeclareFontShape\s*(?:\{[^}]*\}\s*){4}\{([^}]*)\}/g;
 export const PICTURE = /\.(pdf|png|jpe?g|gif|eps|svg)$/i;
 export const TEXT_ASSET = /\.(tex|sty|cls|clo|def|cfg|ltx|tikz|bst|bbx|cbx|lbx|fd)$/i;
+/** a document file's signature, as keys and a result's file record (BlockResult.fileSigs) hold it: its content's
+ *  hash (or size) and its rendition's (an edited figure); null: no such file
+ * @param {{ hash?: string, size?: number, rendition?: { hash?: string } | null } | null | undefined} a @returns {string | null} */
+export const fileSig = (a) => (a ? `${a.hash ?? a.size ?? ''}+${a.rendition?.hash ?? ''}` : null);
+/** a name TeX asked for that can be a document file (looked up in the document; others are the TeX tree's)
+ * @param {string} n */
+export const docName = (n) => /^[\w][\w./+-]*$/.test(n) && !n.includes('..');
 /** [name as written, extensions] for every file a source names
  * @param {string} src @returns {[string, string[]][]} */
 export function opened(src) {

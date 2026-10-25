@@ -25,6 +25,11 @@
 // the seed's own (installed in the page at once; the worker checks them later), and other cached results' fonts wait
 // for 'init' only.
 //
+// A stored result (this page's, the seed's, the persistent cache's) is used only while the document's files it read
+// are as they were: the worker records what each block's runs opened of them (Result.files, a figure a macro places
+// too), the backend adds each file's signature then (fileSigs), and a lookup checks them against the document's now
+// (make's dependency rule: a key is a function of the block's text and context; the files are checked, not keyed).
+//
 // Beyond the contract:
 //   compile(req).onBlock(id, result)   each block's result as soon as it is ready (fonts installed)
 //   setVisible(ids)                    blocks to compile first (the rest after, in document order)
@@ -39,7 +44,7 @@
 import { hash, preambleKey } from './key.js';
 import { createIdbCache } from './idb-cache.js';
 import { reportQuota } from './quota.js';
-import { opened, PICTURE, TEXT_ASSET } from './opened.js';
+import { opened, PICTURE, TEXT_ASSET, fileSig, docName } from './opened.js';
 import { createKeys, VersionedMap } from './keys.js';
 import { createKept } from './kept-docs.js';               // released documents' states, the last 2
 import { evictCache } from './cache-evict.ts';               // (the engine's own, its keys are the engine's)
@@ -201,6 +206,7 @@ export function createBackend(opts = {}) {
   /** f() with S = st (synchronous) */
   const inDoc = (st, f) => { const prev = S; S = st; try { return f(); } finally { S = prev; } };
   const workerHas = new Map();                // name -> the state whose file of that name the worker has
+  const workerSig = new Map();                // name -> the signature of the file of that name the worker has (what a run read)
   // a document closed in its last pane keeps its state (the last 2, unless memory is tight): opened
   // again, nothing is rebuilt; a state dropped takes the worker's record of its files with it
   const kept = createKept({ max: opts.keepReleased ?? 2, onDrop: (st) => { for (const [n, s] of workerHas) if (s === st) workerHas.delete(n); } });
@@ -267,6 +273,7 @@ export function createBackend(opts = {}) {
     S.assetsSent.clear();
     S.texLooked.clear();
     workerHas.clear();                        // other documents' files are sent again when they compile
+    workerSig.clear();
     return ready;
   }
   /** @param {Worker} w */
@@ -402,7 +409,8 @@ export function createBackend(opts = {}) {
       // through a macro): the ones the document has go to the worker, and the preamble warms again
       if (await sendMissing(r.missing)) r = await call('setPreamble', { preamble: S.preamble, bbl: S.bbl, sig: sigOf(S.preamble), force: true });
       warmedFor = pkey();
-      S.preResult = { errors: r.errors, warnings: r.warnings, adapted: r.adapted, ...(r.textwidthPt ? { textwidthPt: r.textwidthPt } : {}) };
+      // files: what the warm read of the document (the Files panel's preamble uses)
+      S.preResult = { errors: r.errors, warnings: r.warnings, adapted: r.adapted, files: r.files ?? [], ...(r.textwidthPt ? { textwidthPt: r.textwidthPt } : {}) };
       const k = preKey();
       mem.set(k, S.preResult);
       if (cache) { try { await cache.put(k, S.preResult); } catch (e) { reportQuota(e); } }
@@ -516,11 +524,11 @@ export function createBackend(opts = {}) {
     for (const [n, exts] of want) S.wantedExts.set(n, exts);
     const list = [];
     for (const [name, exts] of want) {
-      const pictures = exts.includes('.pdf');
+      const pictures = exts.includes('.pdf') || PICTURE.test(name);      // a picture is looked up each time (edited in place)
       if (!pictures && S.texLooked.has(name) && !all && sentHere(name, S.texLooked.get(name))) continue;
       let a = null;
       for (const ext of exts) { a = await lookupAsset(name + ext); if (a) break; }
-      const sig = a ? `${a.hash ?? a.size ?? ''}+${a.rendition?.hash ?? ''}` : null;
+      const sig = fileSig(a);
       if (!pictures) S.texLooked.set(name, sig);
       if (!all && S.assetsSent.get(name) === sig && sentHere(name, sig)) continue;
       S.assetsSent.set(name, sig);
@@ -528,27 +536,27 @@ export function createBackend(opts = {}) {
         let bytes = a.bytes;
         if (!bytes && a.base64) bytes = Uint8Array.from(atob(a.base64), (c) => c.charCodeAt(0));
         if (!pictures && bytes && TEXT_ASSET.test(a.name)) scan(new TextDecoder().decode(bytes));
-        outbox.set(a.name, { a, bytes, pictures, st: S });
+        outbox.set(a.name, { a, bytes, pictures, st: S, sig });
       }
     }
   }
   /** Names TeX asked for and did not find (a run's `missing`): looked up in the document once
    *  per page; the ones found are sent. Returns how many were found (the run is then made again).
-   *  They are not part of any key (a key never depends on a run), so a later change to such a file
-   *  (a logo a class opens by a macro) shows after the next edit of the block or the preamble. */
+   *  They are not part of any key (a key never depends on a run): a later change to such a file reaches a block
+   *  through its result's file record (filesHold), and the preamble after its next edit. */
   async function sendMissing(names) {
     let found = 0;
     for (const n of names ?? []) {
-      if (S.texLooked.has(n) || S.assetsSent.has(n) || !/^[\w][\w./+-]*$/.test(n) || n.includes('..')) continue;
+      if (S.texLooked.has(n) || S.assetsSent.has(n) || !docName(n)) continue;
       const a = await lookupAsset(n);
-      const sig = a ? `${a.hash ?? a.size ?? ''}+${a.rendition?.hash ?? ''}` : null;
+      const sig = fileSig(a);
       S.texLooked.set(n, sig);
       if (!a) continue;
       S.assetsSent.set(n, sig);
       S.wantedExts.set(n, ['']);
       let bytes = a.bytes;
       if (!bytes && a.base64) bytes = Uint8Array.from(atob(a.base64), (c) => c.charCodeAt(0));
-      outbox.set(a.name, { a, bytes, pictures: PICTURE.test(a.name), st: S });
+      outbox.set(a.name, { a, bytes, pictures: PICTURE.test(a.name), st: S, sig });
       found++;
     }
     if (found) { counters.missingFound = (counters.missingFound ?? 0) + found; await flushAssets(); }
@@ -563,18 +571,44 @@ export function createBackend(opts = {}) {
   async function flushFontAssets() {
     if (!worker) return;
     const list = [];
-    for (const [k, { a, bytes, st }] of outbox) if (FONT_ASSET.test(a.name)) { list.push({ name: a.name, mime: a.mime, bytes }); workerHas.set(a.name, st); outbox.delete(k); }
+    for (const [k, { a, bytes, st, sig }] of outbox) if (FONT_ASSET.test(a.name)) { list.push({ name: a.name, mime: a.mime, bytes }); workerHas.set(a.name, st); workerSig.set(a.name, sig); outbox.delete(k); }
     if (list.length) await call('setAssets', { assets: list });
   }
   async function flushAssets() {
     if (!outbox.size || !worker) return;
     const list = [];
-    for (const { a, bytes, pictures, st } of outbox.values()) {
+    for (const { a, bytes, pictures, st, sig } of outbox.values()) {
       workerHas.set(a.name, st);
+      workerSig.set(a.name, sig);
       list.push({ name: a.name, mime: a.mime, bytes, svg: pictures ? await renditionOf({ ...a, bytes }) ?? undefined : undefined });
     }
     outbox.clear();
     await call('setAssets', { assets: list });
+  }
+
+  /** The document's files of these names (what results' runs read), looked up now: S.assetsSent then holds each
+   *  one's signature (null: not in the document), and a changed one goes to the worker before anything compiles.
+   *  looked: the names done in this request (each is looked up once per request) */
+  async function lookUpFiles(names, looked) {
+    const todo = [];
+    for (const n of names ?? []) if (!looked.has(n) && docName(n)) { looked.add(n); todo.push(n); }
+    if (todo.length) await sendAssets(false, [], todo);
+  }
+  /** each document file a run read, with the signature of the file the worker gave it (BlockResult.fileSigs); the
+   *  names it looked for in vain are left out */
+  function sigsOf(files) {
+    const out = {};
+    for (const n of files ?? []) { const s = docName(n) ? workerSig.get(n) : null; if (s) out[n] = s; }
+    return out;
+  }
+  /** A stored result was made with the document's files as they are now: each file its runs read has the signature
+   *  it had then, and each name they looked for in vain is still not in the document. A result without a record
+   *  (another engine's) stands. */
+  async function filesHold(r, looked) {
+    const names = (r.files ?? []).filter(docName);
+    if (!names.length) return true;
+    await lookUpFiles(names, looked);
+    return names.every((n) => (r.fileSigs?.[n] ?? null) === (S.assetsSent.get(n) ?? null));
   }
 
   // Keys: the preamble's own files in the preamble key, a block's in its
@@ -638,22 +672,30 @@ export function createBackend(opts = {}) {
     const seedFiles = seedFontsInPage();
     const out = {}, todo = [], restored = [], seeded = [];
     let cachedN = 0;
+    const looked = new Set();                 // the document's files looked up for this request (results' records)
     for (const b of req.blocks) {
       const key = keyOf(b);
-      let r = mem.get(key);
+      // a stored result whose files changed since (a figure replaced in place) is not used: the block typesets
+      // again, fresh (the worker's own copy of the result is stale too)
+      let stale = false;
+      const holds = async (x) => { if (x && !(await filesHold(x, looked))) { stale = true; return null; } return x; };
+      let r = await holds(mem.get(key));
       if (r) counters.memHits++;
       else {
         r = seedGet(key);
         if (r && !usable(r)) { counters.corrupt++; r = null; }
+        r = await holds(r);
         if (r) { counters.seedHits++; mem.set(key, r); if (r.fontReqs) (seedFiles ? seeded : restored).push(r.fontReqs); }
         else if (cache) {
           try { r = await cache.get(key); } catch { r = null; }
           // a damaged record (a partial write, an older shape) is a miss, and it goes
           if (r && !usable(r)) { counters.corrupt++; r = null; try { await cache.delete?.(key); } catch { /* kept */ } }
+          r = await holds(r);
           if (r) { counters.cacheHits++; mem.set(key, r); if (r.fontReqs) restored.push(r.fontReqs); }
         }
       }
       if (r) { out[b.id] = { ...r, cached: true }; cachedN++; }
+      else if (stale) { counters.staleFiles = (counters.staleFiles ?? 0) + 1; todo.push({ ...b, fresh: true }); }
       else todo.push(b);
     }
     // results from a cache: their fonts, in one request (only fonts that gained glyphs are patched); the worker's
@@ -676,6 +718,8 @@ export function createBackend(opts = {}) {
       // files the block's run missed that the document has: sent, and the block run once more
       if (r.missing?.length && await sendMissing(r.missing)) r = (await compileOne({ ...b, fresh: true })).blocks[b.id];
       delete r.missing;
+      // the document's files the run read, with the signatures of what the worker gave it
+      if (r.files?.length) r.fileSigs = sigsOf(r.files);
       runs++; counters.compiled++;
       const f = await call('fonts', {});
       applyFonts(f.fonts, f.fontFiles);
@@ -693,6 +737,7 @@ export function createBackend(opts = {}) {
     if (!Array.isArray(r.errors ?? []) || !Array.isArray(r.warnings ?? [])) return false;
     if (r.status === 'ok' && (typeof r.nodelist !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(r.nodelist.slice(-64)))) return false;
     if (r.fontReqs != null && typeof r.fontReqs !== 'object') return false;
+    if (r.files != null && !Array.isArray(r.files)) return false;
     return true;
   }
   let running = false;                        // a compile request is in its loop
