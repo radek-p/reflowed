@@ -260,6 +260,20 @@ for (const f of APP.filter((p) => /app\/src\/(refs|bib)\//.test(rel(p)))) {
 const newLets = refsLets.filter((x) => !REFS_LETS_ALLOWED.has(x));
 check(`refs/, bib/: no module-level document state beyond the ${REFS_LETS_ALLOWED.size} page-wide lets`, newLets.length === 0 && refsLets.length === REFS_LETS_ALLOWED.size, newLets.join(', ') || refsLets.join(', '));
 
+// ── 6b. the numbering core is plain logic over the host it is given: its modules import only refs/, tex/ and bib/
+// (nothing from app/, view/, store/ or the viewer's internals; the viewer sets texts inside boxes itself) ──
+{
+  const CORE = ['numbering', 'cref', 'scan', 'tex-text', 'context'].map((m) => `app/src/refs/${m}.ts`);
+  const out: string[] = [];
+  for (const f of CORE) {
+    for (const m of read(join(HERE, f)).matchAll(/(?:from\s*|import\(\s*)['"]([^'"]+)['"]/g)) {
+      const target = m[1].startsWith('.') ? rel(resolve(dirname(join(HERE, f)), m[1])) : m[1];
+      if (!/^app\/src\/(refs|tex|bib)\//.test(target)) out.push(`${f} -> ${target}`);
+    }
+  }
+  check('refs/{numbering,cref,scan,tex-text,context}.ts import only from refs/, tex/ and bib/', out.length === 0, out.join(', '));
+}
+
 // ── 7. the v1 backend is gone, and nothing loads from experiments/ ──
 // every code file in app/, tests/ and scripts/ (not node_modules or built output): no v1 name anywhere; outside
 // comments no `experiments/` path. The allowed: test-select's path rule for experiments/** (selects no suite)
