@@ -35,7 +35,7 @@ for (const theme of THEMES) {
   await page.goto(`${BASE}gallery.html?theme=${theme}`);
   await page.waitForSelector('html[data-gallery-ready]');
   const s = await page.evaluate(() => {
-    const secs = [...document.querySelectorAll('[data-section]')] as HTMLElement[];
+    const secs = [...document.querySelectorAll('.gal-sec[data-section]')] as HTMLElement[];   // (the gallery's own: a component drawn in it may have sections of its own)
     const css = getComputedStyle(document.body);
     return {
       sections: secs.map((x) => x.dataset.section), notReady: secs.filter((x) => !x.hasAttribute('data-ready')).map((x) => x.dataset.section),

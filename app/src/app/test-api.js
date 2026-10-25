@@ -71,7 +71,6 @@ export function createTestApi(x) {
     merge: (id) => x.command('block.merge', { id }, 'test') ?? false,
     setPreamble: (s) => x.command('doc.setPreamble', { source: s }, 'test'),
     commands: () => x.commands,                                          // (tests) the registry: list, recent
-    settings: () => x.settings,                                           // tests
     outline: () => x.panels.outline(),
     outlineRuns: () => x.panels.outlineRuns(),                          // tests: the outline is memoised
     diagnostics: () => x.panels.diagnostics(),

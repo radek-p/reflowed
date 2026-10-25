@@ -16,7 +16,9 @@
 import { applyTheme } from '../design/theme.ts';
 import { loadSettings, saveSettings, stepZoom, resolveTheme, WIDTHS, SLIDER, PX_PER_PT, DEFAULTS } from './settings.js';
 import { installStyle } from './style.js';
-import { signal } from '@preact/signals';
+import { signal, untracked } from '@preact/signals';
+import { inForce } from '../settings/registry.ts';
+import { advanced } from '../settings/advanced.js';
 import { createPopover } from './popover.ts';
 import { mountViewButton } from './view-button.js';
 import { installBlink } from './blink.js';
@@ -167,8 +169,9 @@ export async function installView() {
       apply.t = setTimeout(() => root.classList.remove('rtx-width-anim'), 400);
     }
     setOn(zoomOn(), '--rtx-view-zoom', String(l.eff));
-    // justification: the viewer's --latex-align, read at every layout; lay the blocks out again
-    const { align, handles } = s;
+    // justification: the viewer's --latex-align, read at every layout; lay the blocks out again. Line ends are an
+    // advanced setting: with the switch off the default (justified) is in force (settings/registry.ts inForce)
+    const align = untracked(() => inForce('view-align', s.align)), { handles } = s;
     const alignWas = root.style.getPropertyValue('--latex-align') || 'justify';
     if (align === 'left') root.style.setProperty('--latex-align', 'left'); else root.style.removeProperty('--latex-align');
     if (alignWas !== align) relayoutAll();
@@ -209,6 +212,8 @@ export async function installView() {
     return { columnPx, measurePt, zoom: s.zoom, effectiveZoom: l.eff, fitted: l.fitted, limited: l.limited, textwidthPt: tw.get() || findTextwidth() };
   }
 
+  // the advanced switch: an advanced setting's value in force changes with it (line ends)
+  onChange(advanced, () => apply());
   // System follows the OS as it changes
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (s.theme === 'system') apply(); }); } catch { /* old browser */ }
   // fit and paper follow the window and the sidebar; paper learns \textwidth from the first block typeset

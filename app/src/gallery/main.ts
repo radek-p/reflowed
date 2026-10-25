@@ -7,11 +7,11 @@
 //   kit        the editor's design kit (app/src/design/ui)                        gallery/kit.ts
 //   wb-kit     the workbench's kit (workbench/src/kit)                             gallery/wb-kit.ts
 //   widgets    the editor's own widgets apart from a document (fixture data)        gallery/widgets.ts
-//   sheets     Document settings, the title form, View options (their content in a pane container)   gallery/widgets.ts
+//   sheets     the Settings panel's document tab, the title form, View options (their content in a pane container)   gallery/widgets.ts
 //   editor     the editor mounted on the fixture document (mountEditor, backend none), its panels, the code popover
 //   tabs       the workbench's tabs with each document status                      gallery/live.ts
 //
-// Every section says when it is drawn: [data-section=<id>][data-ready]; the page when all are: html[data-gallery-ready].
+// Every section says when it is drawn: .gal-sec[data-section=<id>][data-ready]; the page when all are: html[data-gallery-ready].
 // tests/test-gallery.ts checks them in every theme and shoots each into test-results/gallery/.
 import { signal, type Signal } from '@preact/signals';
 import { html, render, Segmented } from '../design/ui/index.js';
@@ -104,7 +104,7 @@ async function start() {
       history.replaceState(null, '', u);
     },
     ready(id) {
-      document.querySelector(`[data-section="${id}"]`)?.setAttribute('data-ready', '');
+      document.querySelector(`.gal-sec[data-section="${id}"]`)?.setAttribute('data-ready', '');
       done.add(id);
       if (SECTIONS.every(([s]) => done.has(s))) document.documentElement.dataset.galleryReady = '';
     },

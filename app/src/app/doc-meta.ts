@@ -1,5 +1,5 @@
 // A document's preamble and bibliography (out of app.js): written, saved, the engine told, and
-// every block's context and key recomputed. Document settings (settings/) and the References pane (bibpane/) call these;
+// every block's context and key recomputed. The Settings panel's document tab (settings/document.ts) and the References pane (bibpane/) call these;
 // an undo of either comes back through setMeta (app.js).
 //
 //   const meta = createDocMeta(host)
@@ -9,7 +9,7 @@
 //     meta.applyBib(bib, after?)         doc.bib set and saved, the engine told, every block's context recomputed
 //     meta.setBibliography(bib, label, after?)   the same, as one undo step
 //     meta.bibAgain(bib, { save }?)      an undo or a redo of it (the pane's last follow-up again); another tab's (not saved)
-//     meta.bibInfo()                     the bibliography in a few words (Document settings)
+//     meta.bibInfo()                     the bibliography in a few words (the Settings panel's document tab)
 
 /** What the preamble and bibliography need of the open document. */
 export interface MetaDoc { preamble: { source: string; rev?: number }; bib?: Bib | null; blocks: unknown[] }
@@ -32,7 +32,7 @@ export interface DocMetaHost {
   statusFull(): void;
   /** the preamble's problems, from the engine (cleared by a new preamble) */
   setPreambleResult(r: PreambleResult): void;
-  /** the preamble's problems shown (Document settings' list, the outline entry's badge) */
+  /** the preamble's problems shown (the Settings panel's list, the outline entry's badge) */
   showPreambleState(): void;
   /** every block's context and key recomputed, every view displayed again, the page refreshed (a change of what all
    *  blocks compile against) */

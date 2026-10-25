@@ -140,6 +140,7 @@ export async function startWorkbench({ el, params }: { el: HTMLElement; params: 
   const shell = {
     toggleSidebar: () => { wb.toggleSide('left'); },
     toggleSplit: () => { wb.run('splitRight'); },
+    showPanel: (id: string) => { wb.showPanel(id); },
   };
   // drawn into its own element inside [data-part=view]
   const mountEl = document.createElement('div');
@@ -239,8 +240,8 @@ export async function startWorkbench({ el, params }: { el: HTMLElement; params: 
     }), onClosed: () => { anchor.setAttribute('aria-expanded', 'false'); } });
     if (menu.open) anchor.setAttribute('aria-expanded', 'true');
   }
-  /** the Settings panel opened (registered: docked on its side) and shown, focused */
-  const showSettings = () => { openSettings(); wb.showPanel(SETTINGS_PANEL, { focus: true }); };
+  /** the Settings panel opened on General (registered: docked on its side) and shown, focused */
+  const showSettings = () => { openSettings('general'); wb.showPanel(SETTINGS_PANEL, { focus: true }); };
   /** the Settings panel shown in its column now (its column open, its tab the active one) */
   const settingsShown = () => {
     const l = wb.layout.peek(), d = M.dockOf(l, SETTINGS_PANEL);
@@ -418,7 +419,7 @@ function registerPanels(wb: WorkbenchStore, root: ReturnType<typeof createEditor
       for (const id of [...M.sidePanels(M.sides(wb.layout.peek()).left), ...M.sidePanels(M.sides(wb.layout.peek()).right)]) if (!wb.viewType(id)) wb.removePanel(id);
     });
   });
-  // a request to show a panel (slots.show: the References pane from a citation, Document settings' links): the workbench
+  // a request to show a panel (slots.show: the References pane from a citation or the Settings panel's Open References): the workbench
   // shows it where it is docked; the request is consumed, so the same one later shows it again
   const want = slots.active('sidebar');
   const stopShow = effect(() => { const id = want.value; if (!id) return; untracked(() => { want.value = null; if (wb.viewType(id)) wb.showPanel(id); }); });

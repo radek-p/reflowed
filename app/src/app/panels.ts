@@ -14,7 +14,7 @@
 //   const panels = createPanels(c)
 //   panels.host · panels.refresh() · panels.setTab(name) · panels.outline() · panels.diagnostics() · panels.todos()
 //   panels.problems() (the last list) · panels.activeId() · panels.locator(id) · panels.labelOptions(cmd)
-//   panels.citeOptions() · panels.hoverCard(k) · panels.marksFor(blockId, text) · panels.dispose()
+//   panels.citeOptions() · panels.hoverCard(k) · panels.marksFor(blockId, text) · panels.flushPreamble() · panels.dispose()
 import { computed, signal, type ReadonlySignal, type Signal } from '@preact/signals';
 import { scanRefs, scanCites, texToText } from '../tex/texscan.js';
 import { view, slotsOf } from '../design/ui/views.ts';   // the sidebar's tabs as views (the container's)
@@ -23,8 +23,8 @@ import { html, render } from '../design/ui/core.js';                  // the hov
 import { outlineOf, diagnosticsOf, todosOf, labelsOf, bibOf, PROBLEM_GROUPS,
   type Block, type BibEntry, type Diagnostic, type OutlineItem, type PanelSource, type Problem, type RefsState, type Todo } from '../doc/panels.ts';
 import type { EditorRoot } from './editor-root.ts';
-import type { Commands, PanelHost } from './panel-host.ts';
-import type { WordCount } from './page-state.ts';
+import type { Commands, PanelHost, PreambleHost } from './panel-host.ts';
+import type { PreambleError, WordCount } from './page-state.ts';
 
 const AUTHOR_COLOURS = ['#2383e2', '#0f9d58', '#b35c00', '#8a3ea3', '#d44c47', '#3558a8', '#1d7a55'];
 
@@ -50,7 +50,12 @@ export interface PanelsContext {
   thmSet(): Set<string> | null;
   counts(): WordCount;
   indexOf(id: string): number;
-  preambleEntry: { problems: ReadonlySignal<number> } | null;
+  /** the document's title (a signal: the editor's) */
+  title: ReadonlySignal<string>;
+  /** its preamble: its problems (doc/results.js), whether it can change, a change (one undo step) */
+  preamble: { errors: ReadonlySignal<PreambleError[]>; readOnly(): boolean; apply(text: string): void } | null;
+  /** the bibliography in a few words (app/doc-meta.ts) */
+  bibInfo(): string;
   noteColour?: ((author: string) => string | undefined) | null;
   extraBib?: (() => Record<string, BibEntry> | null) | null;
   problemAction?: ((p: Diagnostic) => HTMLElement | null) | null;
@@ -118,13 +123,25 @@ export function createPanels(c: PanelsContext) {
     active: computed<string | null>(() => c.inView?.()?.id ?? null) };
 
   const report = c.problemReport ? (p: Diagnostic) => reportOf(p) : null;
+  // the preamble and the bibliography as the Settings panel shows them (their values set by refresh(), as the lists)
+  const preSource = signal(''), bibInfo = signal('');
+  let draft: string | null = null;
+  const pre = c.preamble;
+  const preamble: PreambleHost | null = pre ? {
+    problems: computed(() => pre.errors.value.length), errors: pre.errors, source: preSource, readOnly: pre.readOnly,
+    blocks: () => doc()?.blocks.length ?? 0,
+    draft: (t) => { draft = t; },
+    apply: (t) => { draft = null; if (!pre.readOnly() && t !== doc()?.preamble.source) pre.apply(t); },
+  } : null;
   const host: PanelHost = {
     get docId() { return doc()?.id ?? null; },
     commands: c.commands,
     lists,
     blocks: () => doc()?.blocks ?? [],
     locators: () => { const items = outline(); return (id) => locator(id, items); },
-    preamble: c.preambleEntry,
+    title: c.title,
+    preamble,
+    bibliography: { info: bibInfo, get openReferences() { return view('references') ? () => setTab('references') : null; } },
     groups: PROBLEM_GROUPS,
     report,
     problemAction: c.problemAction ?? null,
@@ -158,6 +175,8 @@ export function createPanels(c: PanelsContext) {
     const nProb = probs.filter((x) => x.kind !== 'unused-label').length;
     const td = todos();
     if (!isActive()) { markers(probs, td); return; }        // another document is the current one: its lists stay
+    preSource.value = doc()!.preamble.source;
+    bibInfo.value = c.bibInfo();
     // the tabs' counts: the views' badges (chrome/sidebar-chrome.ts draws them)
     slots.badge('problems').value = nProb ? { n: nProb, tone: probs.some((x) => x.kind === 'error') ? 'danger' : undefined } : null;
     slots.badge('todos').value = td.length ? { n: td.length } : null;
@@ -241,10 +260,12 @@ export function createPanels(c: PanelsContext) {
     return out;
   }
 
+  /** the preamble typed in the Settings panel and not applied yet: applied now (the document is closing) */
+  function flushPreamble() { if (draft != null) preamble?.apply(draft); }
   /** the listeners this module added; the container stops showing its host */
   function dispose() {
     if (root.state.panels.peek() === host) root.state.panels.value = null;
   }
   return { host, refresh, outline, outlineRuns: () => outlineRuns, diagnostics, todos, labelOptions, citeOptions, hoverCard: card, marksFor, setTab, locator: (id: string) => locator(id),   // the Files panel's "where"
-    problems: () => lastProblems, activeId: () => lists.active.peek(), dispose };
+    problems: () => lastProblems, activeId: () => lists.active.peek(), flushPreamble, dispose };
 }

@@ -14,7 +14,6 @@
 //   root.state.widths       { moving }: the panes' widths are changing (panes/widths.js)
 //   root.state.sectionFocus { n, pane, id }: a pane's section focus changed (docview/focus.js, close-split.js)
 //   root.state.words        the current document's word count signal (doc/results.js: app/panels.ts shows it)
-//   root.state.preambleErrors  the current document's preamble problems signal (doc/results.js: app/app.js shows it)
 //   root.state.panels the current document's side panels' host (app/panels.ts: app/app.js activate())
 //   page.route              { name: 'doc', id } | { name: 'home' }: the route as opened (main.js)          ↔ editor:route
 //
@@ -40,8 +39,6 @@ export interface EditorState {
   readonly sectionFocus: Signal<SectionFocus>;
   /** the current document's word count (its DocSession's signal), or null */
   readonly words: Signal<ReadonlySignal<WordCount | null> | null>;
-  /** the current document's preamble problems (its DocSession's signal), or null */
-  readonly preambleErrors: Signal<ReadonlySignal<PreambleError[]> | null>;
   /** the current document's side panels' host (app/panels.ts): what the container's panels follow */
   readonly panels: Signal<PanelHost | null>;
 }
@@ -54,7 +51,6 @@ export function createEditorState(): EditorState {
     widths: signal({ moving: false }),
     sectionFocus: signal({ n: 0, pane: null, id: null }),
     words: signal(null),
-    preambleErrors: signal(null),
     panels: signal(null),
   };
 }

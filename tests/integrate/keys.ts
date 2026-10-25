@@ -26,16 +26,27 @@ export default async function (h: Harness): Promise<void> {
   await idle(page);
   const outside = await page.evaluate(() => (window as any).editorAPI.workbench().sides.peek().left.collapsed);
   check('keys: Ctrl/⌘B outside a field shows or hides the left sidebar', outside === !side0, { side0, outside });
-  // an overlay keeps its keys: in Document settings (a sheet) the workbench's keys do nothing; Escape closes the sheet
-  await page.evaluate(async () => { const E = (window as any).editorAPI; E.commands().call('doc.settings', {}); await E.whenIdle(); });
-  await page.waitForSelector('dialog.ui-sheet[open]');
-  await page.evaluate(() => ((document.querySelector('dialog.ui-sheet[open]') as HTMLElement).querySelector('button, input, [tabindex]') as HTMLElement | null)?.focus());
+  // the preamble's editor (the Settings panel's document tab) with a block still open: Ctrl/⌘B there bolds nothing in
+  // the block (only the source with the focus)
+  const bid = await page.evaluate(async () => { const E = (window as any).editorAPI; const b = E.blocks().find((x: any) => x.kind === 'paragraph' && x.source.length > 20); E.edit(b.id, 0); await E.whenIdle(); return b.id; });
+  const src0 = await page.evaluate((i: string) => (window as any).editorAPI.blocks().find((b: any) => b.id === i).source, bid);
+  await page.evaluate(() => (window as any).editorAPI.commands().call('doc.settings', {}));
+  await page.waitForFunction(() => !!document.activeElement?.closest('[data-panel-view="app-settings"] .rtx-set-editor'));
+  await page.keyboard.press(`${mod}+b`);
+  const pre = await page.evaluate(() => (document.querySelector('[data-panel-view="app-settings"] .rtx-set-editor .cm-content') as HTMLElement).innerText);
+  await page.evaluate(async () => { const E = (window as any).editorAPI; E.leave(); await E.whenIdle(); });
+  const src1 = await page.evaluate((i: string) => (window as any).editorAPI.blocks().find((b: any) => b.id === i).source, bid);
+  check('keys: Ctrl/⌘B in the preamble (the Settings panel) leaves the open block alone and types nothing there', src1 === src0 && !pre.includes('\\textbf'), { src0: src0.slice(0, 30), src1: src1.slice(0, 30) });
+  // an overlay keeps its keys: in a modal dialog (Versions) the workbench's keys do nothing; Escape closes it
+  await page.evaluate(async () => { const E = (window as any).editorAPI; E.commands().call('doc.versions', {}); await E.whenIdle(); });
+  await page.waitForSelector('dialog[open]');
+  await page.evaluate(() => ((document.querySelector('dialog[open]') as HTMLElement).querySelector('button, input, [tabindex]') as HTMLElement | null)?.focus());
   const sideIn = await page.evaluate(() => (window as any).editorAPI.workbench().sides.peek().left.collapsed);
   await page.keyboard.press(`${mod}+b`);
   const sideAfter = await page.evaluate(() => (window as any).editorAPI.workbench().sides.peek().left.collapsed);
-  check('keys: in a sheet (Document settings) Ctrl/⌘B leaves the sidebar alone', sideIn === sideAfter, { sideIn, sideAfter });
+  check('keys: in a modal dialog (Versions) Ctrl/⌘B leaves the sidebar alone', sideIn === sideAfter, { sideIn, sideAfter });
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => !document.querySelector('dialog.ui-sheet[open]'));
-  check('keys: Escape closes the sheet', true);
+  await page.waitForFunction(() => !document.querySelector('dialog[open]'));
+  check('keys: Escape closes the dialog', true);
   await ctx.close();
 }

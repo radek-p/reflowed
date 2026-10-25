@@ -56,7 +56,7 @@ function Floating() {
       The document and its versions go. This cannot be undone.<//>` : null}
     ${modal === 'sheet' ? html`<${Sheet} title="A sheet" onClose=${() => setModal(null)} note="No changes"
       footer=${html`<${Button} variant="primary" onClick=${() => setModal(null)}>Done<//>`}>
-      <p>The one side sheet: Document settings and the title form are drawn in it.</p><//>` : null}`;
+      <p>The one side sheet: the title form is drawn in it.</p><//>` : null}`;
 }
 
 export function KitSection({ g }: { g: Gallery }) {

@@ -15,7 +15,7 @@
 // One editor per open DOCUMENT: main.js's workspace makes the first one (the route's document, pane A and
 // any pane showing it) and one for a pane that shows another document (ctx.only: that pane's <main>, made by the
 // first editor's panes registry; ctx.widths: the page's width governor). The page's UI (top bar, sidebar panels,
-// find, keys, Document settings) is the CURRENT editor's: ctx.active() says whether this one is (the focused
+// find, keys, the Settings panel's document tab) is the CURRENT editor's: ctx.active() says whether this one is (the focused
 // pane's document); activate() / deactivate() hand the page over.
 // the document is shown in N equal panes (../panes/: the layout model, each pane its own views of
 // the blocks); this core owns the document and each block's STATE (ui), never an element.
@@ -56,7 +56,7 @@ import { createSectionFocus } from '../docview/focus.js';
 import { createNavigator, createReveal } from '../nav/navigate.js';
 import { installScrollKeys } from '../nav/keys.js';               // End/Home/PageUp/PageDown without passing every block
 import { wirePaneBars } from '../docview/pane-bar.js';                // the panes' breadcrumb bars
-import { createSettings, showPreambleErrors, preambleProblemsOf } from '../settings/index.js';   // Document settings: a side sheet
+import { openSettings as openSettingsPanel, SETTINGS_PANEL } from '../settings/panel.ts';   // the Settings panel: its document tab
 import { createWarmer } from '../perf/warm.js';
 import { splitMeta, blockSource } from '../meta/compile.ts';           // the title data compiles with the title block
 import { createMetaForm } from '../meta/form/index.js';               // the title and authors sheet
@@ -310,7 +310,7 @@ export function createDocEditor(ctx) {
 
   function showErrors(box, problems, id) {
     // rows of selectable text (a click that ends a selection does not jump), and Copy; Preact, edit/panel.js
-    renderErrors(box, problems, { report: (p) => problemReport(id, p), open: (p) => { if (id) enterEdit(id, null, null, p.line); else openSettings(true, p.line); } });
+    renderErrors(box, problems, { report: (p) => problemReport(id, p), open: (p) => { if (id) enterEdit(id, null, null, p.line); else openSettings(p.line); } });
   }
 
   /** a plain-text report of a problem (view/copy-errors.js): the block, the line, the source, TeX's context */
@@ -527,7 +527,7 @@ export function createDocEditor(ctx) {
     slashBelow: (id, pane) => { const P = panes.get(pane) ?? panes.focused(); openSlashMenu(P.viewOf(id)?.root ?? P.el, (t) => command('block.insertBelow', { id, kind: t.kind, source: t.source, caret: t.caret, pane: P.id })); },
     page: {
       find: () => find.open(), toggleFocus: (on) => toggleFocus(on), focusSection: (id, pane) => sectionFocus.set(pane ?? panes.focused().id, id), toggleSidebar: () => ctx.shell.toggleSidebar(), shortcuts: () => showShortcuts(),
-      settings: (open, line) => openSettings(open, line), versions: () => files.openVersions(), resetSeed: () => files.resetSeed(), importTex: () => files.importTex(),
+      settings: (line) => openSettings(line), versions: () => files.openVersions(), resetSeed: () => files.resetSeed(), importTex: () => files.importTex(),
       exportTex: () => files.exportTex(), exportZip: (o) => files.exportZip(o), exportPdf: (o) => files.exportPdf(o), toggleSplit: () => (ctx.shell.toggleSplit ? ctx.shell.toggleSplit() : panes.toggle()),   /* the host splits (a tab beside) */
       gotoDefinition: (k) => gotoDefinition(k), setPreamble: (s) => meta.putPreamble(s), recompileAll: () => { if (S.doc) meta.onPreamble(); },
       scrollTo: (id, pane, o) => scrollToBlock(id, pane, o), reveal: (id, range, o) => revealBlock(id, range, o), openNote: (t) => ctx.notes?.openNote(t, root) || revealBlock(t.blockId, { from: t.offset, to: t.offset + t.length }),   // the panels' commands
@@ -586,17 +586,9 @@ export function createDocEditor(ctx) {
   const meta = createDocMeta({ doc: () => S.doc, saveMeta, backend: () => backend, enginePreamble: () => enginePreamble(), preambleChanged: () => derived.preambleChanged(),
     statusFull: () => results.status.full(), setPreambleResult: (r) => { results.preamble.value = r; }, showPreambleState: () => showPreambleState(),
     everyBlockChanged: () => { sourcesChanged(); compileSoon(); }, compileSoon: () => compileSoon(), warm: () => warmer.idle(), perform });
-  function showPreambleState() {
-    if (active()) showPreambleErrors(root, results.preambleErrors);    // the sheet's list and the outline entry's badge (it does not open by itself)
-    panels.refresh();
-  }
-  // the preamble is in no pane: Document settings, a side sheet (settings/) the outline's first entry opens
-  const settings = createSettings({ root,
-    doc: () => S.doc, readOnly: () => isReadOnly(S.doc), bibInfo: () => meta.bibInfo(),
-    backends: () => ctx.backends.map((b) => ({ id: b.id, label: b.label })), backend: () => backend.id, setBackend: (id) => setBackend(id),
-    applyPreamble: (text) => { perform('Edit the preamble', () => meta.putPreamble(text)); },
-  });
-  function openSettings(open, line = null) { if (open) settings.open({ tab: 'preamble', line }); else settings.close(); }
+  function showPreambleState() { panels.refresh(); }   // its problems: the outline entry's badge, the Settings panel's list
+  // the preamble is in no pane: the Settings panel's document tab (settings/document.ts), at the preamble (its line)
+  function openSettings(line = null) { openSettingsPanel('document', { owner: root, line }); ctx.shell.showPanel(SETTINGS_PANEL); }
 
   // ── Wiring the static page ─────────────────────────────────────────────────
   if (!guest) {
@@ -640,9 +632,10 @@ export function createDocEditor(ctx) {
     topbar.on.split = () => panes.toggle();
     topbar.on.title = (text) => setTitle(text);
   }
+  // the engine: the page's one choice (ctx.engine: settings/engine.ts); a change typesets every block again
+  if (ctx.engine) owned.push(ctx.engine.subscribe((id) => { if (id && id !== backend.id) setBackend(id); }));
   function setBackend(id) {
     base = ctx.backends.find((b) => b.id === id) ?? base; bindBackend(S.doc?.id ?? null);
-    safeSet('rtx-editor.backend', backend.id);
     if (S.doc) { const id = S.doc.id; backend.setAssets?.((name) => store.getAssetByName?.(id, name) ?? Promise.resolve(null), () => derived.assetHash.keys()); backend.setBib?.(S.doc.bib); }
     meta.onPreamble();
   }
@@ -654,7 +647,8 @@ export function createDocEditor(ctx) {
     preambleProblems: () => results.preamble.peek().errors ?? [], words: results.words,
     thmSet: () => derived.thmSet,
     indexOf, commands: { call: (id, input) => command(id, input), enabled: (id, input) => commands.enabled(id, input) },   // the panels act through commands
-    preambleEntry: { problems: preambleProblemsOf(root) }, get files() { return filesHost; },   // the preamble's entry;
+    title, preamble: { errors: results.preambleErrors, readOnly: () => isReadOnly(S.doc), apply: (text) => perform('Edit the preamble', () => meta.putPreamble(text)) },
+    bibInfo: () => meta.bibInfo(), get files() { return filesHost; },
     counts: () => countDoc(), noteColour: ctx.notes?.colour,
     extraBib: ctx.bibpane?.extraBib ? () => ctx.bibpane.extraBib(S.doc) : null, problemAction: ctx.bibpane?.problemAction,
     problemReport,                                                      // Copy / Copy all
@@ -720,7 +714,6 @@ export function createDocEditor(ctx) {
     persist.opened();
     if (guest) title.value = S.doc.title ?? ''; else topbar.setTitle(S.doc.title ?? '');
     if (active()) document.title = `${S.doc.title || 'Untitled'} · ReflowEd`;
-    settings.close({ apply: false });
     // (integration) \includegraphics names → this document's assets in the store (contract Backend.setAssets)
     backend.setAssets?.((name) => store.getAssetByName?.(id, name) ?? Promise.resolve(null), () => derived.assetHash.keys());
     await Promise.resolve(backend.setBib?.(S.doc.bib)).catch(() => {});
@@ -743,7 +736,7 @@ export function createDocEditor(ctx) {
   }
   function close() {
     if (!S.doc) return;
-    settings.close();                                      // an open sheet's changes apply to this document first
+    panels.flushPreamble();                                // the preamble typed in the Settings panel applies to this document first
     panes.closeAll();                                      // split view ends with the document (its editor with it)
     panes.stop();
     closeOlderCorePrompt();
@@ -775,7 +768,7 @@ export function createDocEditor(ctx) {
   }
 
   // ── The test surface (contracts.d.ts EditorAPI, the doc part) ─────────────
-  const api = createTestApi({ S, edits, queue, ui, viewResult, viewKey, blocks, root, writer, panes, snapshotDoc, refs, nest, cache, ck, counters, enterEdit, paneStates, command, commands, settings, panels, find, countDoc,
+  const api = createTestApi({ S, edits, queue, ui, viewResult, viewKey, blocks, root, writer, panes, snapshotDoc, refs, nest, cache, ck, counters, enterEdit, paneStates, command, commands, panels, find, countDoc,
     status, selectedId, editFigure, feats, metaForm, layout, warmer, sectionFocus, nav, drag, moveBlock, indexOf, derived, get backend() { return backend; }, get refreshTimer() { return refresh.pending; } });   // app/test-api.js
 
   /** the editor's page listeners, its panes, its editing registry: gone (a second editor instance, a hot reload) */
@@ -798,7 +791,7 @@ export function createDocEditor(ctx) {
     if (S.doc) document.title = `${S.doc.title || 'Untitled'} · ReflowEd`;
     showSave();
     const sh = status.shown(); topbar.setStatus(sh.text, sh.kind);
-    showPreambleErrors(root, results.preambleErrors); root.state.panels.value = panels.host;   // the container's panels follow this document
+    root.state.panels.value = panels.host;               // the container's panels follow this document
     if (S.doc) panels.refresh();
   }
   function deactivate() {

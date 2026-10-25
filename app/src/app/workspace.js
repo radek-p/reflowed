@@ -1,6 +1,6 @@
 // THE WORKSPACE: the open documents, one document editor each (app/app.js, which
 // makes the document's DocSession), and which one is CURRENT: the focused pane's document's. The page's UI — the top
-// bar, the sidebar's panels, find, the keys, Document settings, the References pane, the Files panel — is the current
+// bar, the sidebar's panels (the Settings panel's document tab too), find, the keys, the References pane, the Files panel — is the current
 // editor's: it is handed over (activate / deactivate) when the focus moves to a pane of another document, and
 // root.state.current (the container's: app/page-state.ts) says so to whoever reads it. Out of main.js.
 //

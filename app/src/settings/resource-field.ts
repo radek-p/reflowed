@@ -19,7 +19,7 @@ function ResourceServerField() {
   const hint = `Packages, classes and fonts the editor does not carry come from this address (a TeX Live tree on a web server) `
     + `the first time a document needs them, then stay in this browser. ${DEFAULT_RESOURCE_SERVER ? 'Empty: the tree beside this page (texlive/2022/), when it is there.' : 'Empty: none.'} `
     + `Type ${NONE} for no server.${resourceChoice.value.url ? '' : ' Now: none.'}`;
-  return html`<${Row} id="resource-server" label="TeX resource server" for="ss-resource-server" hint=${hint}>
+  return html`<${Row} id="resource-server" label="TeX resource server" for="ss-resource-server" hint=${hint} wide=${true}>
     <${Input} id="ss-resource-server" class="rtx-set-url" mono=${true} type="url" spellcheck=${false} placeholder=${DEFAULT_RESOURCE_SERVER ? 'beside this page (texlive/2022/)' : NONE} value=${text}
       aria-invalid=${problem ? 'true' : 'false'}
       onInput=${(e: Event) => { setText((e.currentTarget as HTMLInputElement).value); if (problem) setProblem(''); }} onChange=${commit}
@@ -28,4 +28,4 @@ function ResourceServerField() {
   <//>`;
 }
 
-registerSetting({ id: 'resource-server', where: 'advanced', order: 20, advanced: true, Control: () => html`<${ResourceServerField} />` });
+registerSetting({ id: 'resource-server', where: 'advanced', order: 20, advanced: true, default: null, Control: () => html`<${ResourceServerField} />` });

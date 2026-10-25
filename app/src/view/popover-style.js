@@ -8,7 +8,6 @@ const CSS = String.raw`
 .rtx-vp-cap { display: flex; justify-content: space-between; align-items: baseline; gap: var(--ui-2); margin: 0 0 var(--ui-2); font-size: var(--ui-text-xs); font-weight: var(--ui-medium); color: var(--ui-ink-2); }
 .rtx-vp-cap output, .rtx-vp-cap > span + span { font-weight: 400; font-variant-numeric: tabular-nums; color: var(--ui-ink-2); }
 .rtx-vp-hint { margin: calc(-1 * var(--ui-1)) 0 var(--ui-2); font-size: var(--ui-text-xs); color: var(--ui-ink-2); }
-.rtx-vp-align { margin-top: var(--ui-2); }
 .rtx-vp-seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; box-sizing: border-box; }
 .rtx-vp-seg > button { padding: 0 2px; font-size: var(--ui-text-sm); white-space: nowrap; }
 .rtx-vp-range { width: 100%; margin: var(--ui-2) 0 0; accent-color: var(--ui-accent); }

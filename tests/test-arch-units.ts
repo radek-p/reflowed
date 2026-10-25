@@ -130,11 +130,11 @@ check('engine → app allow-list has no stale entries (remove an import, remove 
 // ── 3. CustomEvent types the app dispatches ──
 // The viewer's own (reflowtex:*) are the public viewer's and not counted here.
 // the in-app ones are the page's signals (app/page-state.js). Left: what tests wait on (main.js's
-// dispatchForTests: route, current, displayed, refreshed; the sheets' and the title form's close/open; nav, refnav),
+// dispatchForTests: route, current, displayed, refreshed; the title form's close/open; nav, refnav),
 // the engine's editor:quota (its edge, app/quota.js listens) and the page's editor:ready.
 const EVENTS_ALLOWED = new Set([
   'editor:current', 'editor:displayed', 'editor:meta-closed', 'editor:meta-opened', 'editor:quota', 'editor:ready',
-  'editor:refreshed', 'editor:route', 'editor:settings-closed', 'nav:back', 'nav:jumped', 'nav:scrolled', 'refnav:back', 'refnav:card',
+  'editor:refreshed', 'editor:route', 'nav:back', 'nav:jumped', 'nav:scrolled', 'refnav:back', 'refnav:card',
 ]);
 const events = new Map<string, string[]>();
 for (const f of [...APP, ...ENGINE]) {

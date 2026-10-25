@@ -1,5 +1,5 @@
 // the View popover, opened from the top bar ("Aa", ⌥⌘V / Ctrl+Alt+V): what a reader changes while reading, the column
-// width, the text (its size, its line ends: justified or ragged right) and the colours. Every control applies at once;
+// width, the text size, its line ends (justified or ragged right: an advanced setting) and the colours. Every control applies at once;
 // the rest of the preferences are the Settings panel's (settings/panel.ts; the key line names its key).
 // On Preact and the design kit, behaviour kept: one element #rtx-view-pop that stays in the
 // page (hidden when closed), the kit's Segmented controls (role radio, aria-checked, the data-w/-a/-e hooks), kit
@@ -15,7 +15,7 @@ import { useLayoutEffect, useRef } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { html, render, Segmented, IconButton, place } from '../design/ui/index.js';
 import { pushLayer } from '../design/ui/layers.js';
-import { WIDTHS, SLIDER, THEMES, EDIT_LAYOUTS, layoutsDebug } from './settings.js';
+import { WIDTHS, SLIDER, THEMES, EDIT_LAYOUTS, DEFAULTS, layoutsDebug } from './settings.js';
 import { installPopoverStyle } from './popover-style.js';
 import { registerSetting, visibleAt } from '../settings/registry.ts';
 import { SwitchRow } from '../settings/rows.ts';
@@ -62,13 +62,18 @@ registerSetting({ id: 'view-width', where: 'view', order: 10, Control: ({ view, 
 } });
 
 registerSetting({ id: 'view-text', where: 'view', order: 20, Control: ({ view, detail }: ViewCtx) => html`<div class="rtx-vp-row" data-setting="view-text">
-    <${Caption} id="rtx-view-text" hint=${detail ? `Its size, and how its lines end: justified, or ragged right (even spaces).` : null}>Text<//>
+    <${Caption} id="rtx-view-text" hint=${detail ? 'Its size.' : null}>Text<//>
     <div class="rtx-vp-zoom" role="group" aria-label="Text size">
       <${IconButton} icon="minus" label="Smaller text" title=${`Smaller (${k('−')})`} data-z="-1" onClick=${() => view.zoomBy(-1)} />
       <button type="button" class="ui-btn ui-btn--ghost" data-z="0" title=${`Reset (${k('0')})`} aria-label="Reset text size" onClick=${() => view.zoomBy(0)}>${Math.round(view.settings.zoom * 100)} %</button>
       <${IconButton} icon="plus" label="Larger text" title=${`Larger (${k('=')})`} data-z="1" onClick=${() => view.zoomBy(1)} />
     </div>
-    <${Segmented} class="rtx-vp-seg rtx-vp-align" label="Line ends" options=${seg([{ name: 'justify', label: 'Justified' }, { name: 'left', label: 'Ragged right' }], 'a')} value=${view.settings.align} onChange=${(a: string) => view.set({ align: a })} />
+  </div>` });
+
+// line ends: an advanced setting (with the switch off it is not drawn and the text is justified: settings/registry.ts)
+registerSetting({ id: 'view-align', where: 'view', order: 25, advanced: true, default: DEFAULTS.align, Control: ({ view, detail }: ViewCtx) => html`<div class="rtx-vp-row" data-setting="view-align">
+    <${Caption} id="rtx-view-a" hint=${detail ? 'Justified, or ragged right (even spaces).' : null}>Line ends<//>
+    <${Segmented} class="rtx-vp-seg rtx-vp-align" labelledby="rtx-view-a" options=${seg([{ name: 'justify', label: 'Justified' }, { name: 'left', label: 'Ragged right' }], 'a')} value=${view.settings.align} onChange=${(a: string) => view.set({ align: a })} />
   </div>` });
 
 registerSetting({ id: 'view-theme', where: 'view', order: 30, Control: ({ view, detail }: ViewCtx) => html`<div class="rtx-vp-row" data-setting="view-theme">

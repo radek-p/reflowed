@@ -95,7 +95,7 @@ export interface DocTabsOptions {
   topbar: TopBarModel;
   router: Router;
   /** the page's sidebar toggle (the command view.sidebar) */
-  shell: { toggleSidebar(open?: boolean): void; toggleSplit?(): void };
+  shell: { toggleSidebar(open?: boolean): void; toggleSplit?(): void; showPanel(id: string): void };
   /** document `docId` was deleted in another tab: the host closes its tabs */
   gone?(docId: string): void;
 }

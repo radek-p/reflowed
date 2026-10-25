@@ -133,7 +133,7 @@ export function Dialog({ open = true, title, onClose, footer, wide = false, clas
   </dialog>`;
 }
 
-/** THE side sheet: one for every right-edge panel (Document settings, the title form). A native modal
+/** THE side sheet: one for every right-edge modal panel (the title form). A native modal
  *  <dialog> at the right edge, one width (--ui-sheet-w), one header (title, close), optional tabs under the header
  *  (outside the scrolling body), one body layout (a flex column, one gap), one footer (a note at the left, the
  *  actions at the right), the scrim, the motion. Behaviour:

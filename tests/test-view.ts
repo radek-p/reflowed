@@ -6,7 +6,8 @@
 //
 // The button (labelled, aria-haspopup/expanded, at the top bar's right); opening (click, ⌥⌘V) puts the focus
 // on the chosen option; the popover under the button, inside the window; every control applies at once and shows
-// its state (width segments, the slider, text size, line ends, colours; no switches: the Settings panel's); Esc closes it with
+// its state (width segments, the slider, text size, line ends with advanced features on, colours; no switches: the
+// Settings panel's); line ends are an advanced setting (off: no row, justified whatever is stored); Esc closes it with
 // the focus back on the button, a press outside closes it; light and dark readable; 390 px.
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -79,7 +80,7 @@ const state = () => page.evaluate(() => {
     && (await page.getAttribute('#rtx-view-pop', 'role')) === 'dialog' && (await page.getAttribute('#rtx-view-pop', 'aria-label')) === 'View options', { s: s.focus, exp });
   // (the button is the bar's last control: right-aligned with it, but kept 8 px inside the window's edge: the kit's place())
   check('under its button, right-aligned with it, inside the window', s.box.top >= s.btn.bottom && s.box.top - s.btn.bottom < 12 && Math.abs(s.box.right - Math.min(s.btn.right, 1280 - 8)) < 2 && s.box.left >= 0, s);
-  check('its options: the widths, the line ends, the colours', ['Narrow', 'Medium', 'Wide', 'Paper', 'Fit', 'Justified', 'Ragged right', 'Light', 'Dark'].every((l) => s.radios.some((r) => r.includes(l))), s.radios);
+  check('its options: the widths, the colours (no line ends: advanced features are off)', ['Narrow', 'Medium', 'Wide', 'Paper', 'Fit', 'Light', 'Dark'].every((l) => s.radios.some((r) => r.includes(l))) && !s.radios.some((r) => /Justified|Ragged/.test(r)), s.radios);
   await page.screenshot({ path: join(OUT, '01-open.png') });
   await page.keyboard.press('Escape');
   const after = await page.evaluate(() => ({ focus: document.activeElement?.id, exp: document.getElementById('btn-view')!.getAttribute('aria-expanded') }));
@@ -122,21 +123,32 @@ const state = () => page.evaluate(() => {
   await page.click('#rtx-view-pop [data-t="sepia"]');
   s = await state();
   check('colours: Sepia applies (the page\'s class), its swatch checked', (await settings()).theme === 'sepia' && s.t.join() === 'sepia' && (await page.evaluate(() => document.documentElement.classList.contains('sepia'))), s.t);
-  // the line ends: Justified / Ragged right, always there (no switch gates them, none is here: the Settings panel has
-  // the rest); a stored ragged right and hidden handles apply as they are
+  // the line ends: Justified / Ragged right, an advanced setting (drawn with advanced features on; off, the default,
+  // justified, is in force whatever is stored); no switch is here (the Settings panel has the rest)
   check('no switches in the View options (block handles, note chips and the advanced switch are the Settings panel\'s)', s.toggles.length === 0, s.toggles);
+  check('advanced features off: no line ends here', s.a.length === 0 && (await page.locator('#rtx-view-pop [data-a]').count()) === 0, s.a);
+  await page.evaluate(() => (window as any).editorAPI.advanced(true));
+  await page.waitForSelector('#rtx-view-pop [data-a="left"]');
   await page.click('#rtx-view-pop [data-a="left"]');
   s = await state();
   const ragged = await page.evaluate(() => document.documentElement.style.getPropertyValue('--latex-align'));
-  check('line ends: Ragged right applies, checked', (await settings()).align === 'left' && s.a.join() === 'left' && ragged === 'left', { a: s.a, ragged });
+  check('advanced on: line ends shown; Ragged right applies, checked', (await settings()).align === 'left' && s.a.join() === 'left' && ragged === 'left', { a: s.a, ragged });
+  await page.evaluate(() => (window as any).editorAPI.advanced(false));
+  await idle();
+  const offAlign = await page.evaluate(() => ({ css: document.documentElement.style.getPropertyValue('--latex-align') || 'justify', rows: document.querySelectorAll('#rtx-view-pop [data-a]').length }));
+  check('… advanced off again: the row goes, the text is justified, the stored ragged right kept', offAlign.css === 'justify' && offAlign.rows === 0 && (await settings()).align === 'left', offAlign);
+  await page.evaluate(() => (window as any).editorAPI.advanced(true));
+  await page.waitForSelector('#rtx-view-pop [data-a="justify"]');
+  check('… on again: ragged right in force again', await page.evaluate(() => document.documentElement.style.getPropertyValue('--latex-align')) === 'left');
   await page.click('#rtx-view-pop [data-a="justify"]');
   s = await state();
   check('… and Justified again', (await settings()).align === 'justify' && s.a.join() === 'justify');
-  await page.evaluate(() => (window as any).editorAPI.view().set({ align: 'left', handles: false }));
+  await page.evaluate(() => (window as any).editorAPI.advanced(false));
+  await page.evaluate(() => (window as any).editorAPI.view().set({ handles: false }));
   await idle();
-  const stored = await page.evaluate(() => ({ align: document.documentElement.style.getPropertyValue('--latex-align') || 'justify', noHandles: document.documentElement.hasAttribute('data-no-handles') }));
-  check('a stored ragged right and hidden handles apply as they are (no advanced switch gates them)', stored.align === 'left' && stored.noHandles, stored);
-  await page.evaluate(() => (window as any).editorAPI.view().set({ align: 'justify', handles: true }));
+  const stored = await page.evaluate(() => ({ noHandles: document.documentElement.hasAttribute('data-no-handles') }));
+  check('hidden handles apply as they are (an ordinary setting: no advanced switch gates it)', stored.noHandles, stored);
+  await page.evaluate(() => (window as any).editorAPI.view().set({ handles: true }));
   await idle();
   check('the popover stays open while its controls are used', await isOpen());
   await page.keyboard.press('Escape');

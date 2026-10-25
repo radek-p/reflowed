@@ -14,7 +14,8 @@
 //   DEFAULT_RESOURCE_SERVER · defaultServerFor(location) · chooseServer(…) · checkServerAddress(text) -> '' | why not
 //   connectResources(backend, onChange)   the backend follows the choice; onChange() after a change (not at start)
 import { signal, computed, effect } from '@preact/signals';
-import { advanced, registerAdvanced } from './advanced.js';
+import { registerAdvanced } from './advanced.js';
+import { inForce } from './registry.ts';
 import { pageParams } from '../app/release-mode.js';
 import { BESIDE_PAGE, NONE, isNone, defaultServerFor, chooseServer } from './resource-choice.ts';
 export { BESIDE_PAGE, NONE, defaultServerFor, chooseServer, type ServerChoice } from './resource-choice.ts';
@@ -29,7 +30,8 @@ const load = (): string | null => { try { return localStorage.getItem(KEY); } ca
 export const storedServer = signal<string | null>(load());
 
 const fromPage = ((): string | null => { try { return pageParams().get('resources'); } catch { return null; } })();
-export const resourceChoice = computed(() => chooseServer({ fromPage, stored: storedServer.value, advancedOn: !!advanced.value, fallback: DEFAULT_RESOURCE_SERVER }));
+// an advanced setting: with the switch off what was typed is not in force (settings/registry.ts inForce: its default, null)
+export const resourceChoice = computed(() => chooseServer({ fromPage, stored: inForce('resource-server', storedServer.value), fallback: DEFAULT_RESOURCE_SERVER }));
 export const resourceServer = computed(() => resourceChoice.value.url);
 
 registerAdvanced({ id: 'resource-server', label: 'The TeX resource server', where: 'Settings, Advanced' });

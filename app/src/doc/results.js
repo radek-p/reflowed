@@ -7,7 +7,7 @@
 //   const results = createResults()
 //     results.cache            Map: compile key -> BlockResult
 //     results.preamble         signal: { errors, warnings } (the warm-up's answer)
-//     results.preambleErrors   computed: its errors (the Document settings sheet, the outline entry's badge)
+//     results.preambleErrors   computed: its errors (the Settings panel's document tab, the outline entry's badge)
 //     results.words            signal: { words, blocks, inline, displays, characters } | null (the sidebar's footer)
 //     results.status the document's status as data (doc/status.ts): typesetting k of n, errors, unsaved
 //     results.files            each block's last result's record of the files it used (doc/block-files.ts)

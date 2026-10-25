@@ -1,7 +1,8 @@
 // THE EDITOR, MOUNTED INTO A GIVEN ELEMENT: the editor's own parts — its container
 // (app/editor-root.ts), the document column, the layout and the panes, the top bar, the sidebar with its panels, the
 // find bar, the References pane, the Files panel, reference navigation, the block controls — made in `el` and gone
-// with unmount(). What the page shares between its editors comes in as `services`: the store, the backends (one engine
+// with unmount(). The Settings panel (settings/panel.ts) is a tab of its sidebar once a document's entry point opens it
+// (the outline's preamble entry, a preamble problem: shell.showPanel shows the tab, the sidebar open). What the page shares between its editors comes in as `services`: the store, the backends (one engine
 // worker per page), the refs module, notes (the viewer's kind and the compile wrapper), the View options and the
 // inspector (one public panel). main.js is the standalone page's host: it makes the services, mounts one editor on
 // its markup and adds the Documents view, the URL and window.editorAPI; a workbench tab or a VS Code webview is
@@ -34,6 +35,7 @@ import { installRefNav } from '../refnav/index.ts';
 import '../files/index.ts';                     // the Files panel (advanced): a registered side panel
 import { featureFailed } from './release-mode.js';
 import { computed, type ReadonlySignal } from '@preact/signals';
+import { slotsOf } from '../design/ui/views.ts';
 import { crumbsOf, type Crumbs } from '../docview/crumbs.ts';
 import type { DocStatus } from '../doc/status.ts';
 import type { OutlineItem } from '../doc/panels.ts';
@@ -138,6 +140,8 @@ export function mountEditor(el: HTMLElement, services: EditorServices, o: MountO
       else change();
       o.onSidebar?.(open);
     },
+    /** a side panel shown (the Settings panel from a document's entry point): its tab, the sidebar open */
+    showPanel(id: string) { slotsOf(root).show(id); if (root.has('sidebar-closed')) shell.toggleSidebar(true); },
   };
   const topbar = mountTopBar(root.part('topbar'), { ids: (n: string) => root.id(n) });
   topbar.on.sidebar = () => shell.toggleSidebar();

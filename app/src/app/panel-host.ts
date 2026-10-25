@@ -4,8 +4,27 @@
 // in root.state.panels (app/page-state.ts); a panel's ViewContext.current is that signal.
 import type { ReadonlySignal } from '@preact/signals';
 import type { Diagnostic, OutlineItem, ProblemKind, Todo, Block } from '../doc/panels.ts';
+import type { PreambleError } from './page-state.ts';
 
 export interface Commands { call(id: string, input?: object): unknown; enabled(id: string, input?: object): boolean }
+
+/** the document's preamble, as its panels see it */
+export interface PreambleHost {
+  /** its problems' count (the outline entry's badge) */
+  readonly problems: ReadonlySignal<number>;
+  /** its problems, from the engine (doc/results.js) */
+  readonly errors: ReadonlySignal<PreambleError[]>;
+  /** the saved source: it follows every change (an edit, an undo, another tab's) */
+  readonly source: ReadonlySignal<string>;
+  /** a read-only document's (app/read-only.js): shown, never changed */
+  readOnly(): boolean;
+  /** how many blocks a change typesets again */
+  blocks(): number;
+  /** text typed and not applied yet (null: none): applied if the document closes first */
+  draft(text: string | null): void;
+  /** the source set: one undoable edit, every block typesets again */
+  apply(text: string): void;
+}
 
 export interface PanelHost {
   /** the document (null while none is open) */
@@ -25,8 +44,17 @@ export interface PanelHost {
   blocks(): Block[];
   /** where a block is, in words ("§2.1 · Lemma", else its first words), from the outline as it is now */
   locators(): (blockId: string) => string;
-  /** the preamble's entry above the outline: its problems' count */
-  readonly preamble: { readonly problems: ReadonlySignal<number> } | null;
+  /** the document's title (the Settings panel's document tab is named after it) */
+  readonly title: ReadonlySignal<string>;
+  /** the preamble: its entry above the outline (its problems' count) and its editor in the Settings panel */
+  readonly preamble: PreambleHost | null;
+  /** the bibliography, for the Settings panel */
+  readonly bibliography: {
+    /** in a few words ("bbl · 4 entries") */
+    readonly info: ReadonlySignal<string>;
+    /** the References pane shown; null: the page has none */
+    readonly openReferences: (() => void) | null;
+  } | null;
   /** the Problems list's groups, in order */
   readonly groups: [ProblemKind, string][];
   /** a problem's report, to copy; null: no reports */

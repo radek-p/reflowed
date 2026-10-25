@@ -27,16 +27,17 @@ export function Select({ size = 'md', class: c = '', children, ...rest }) {
   return html`<select class=${cx('ui-input', size !== 'md' && `ui-input--${size}`, c)} ...${rest}>${children}</select>`;
 }
 
-/** items: [{ id, label, count?, tone? }]; value: the selected id; variant: 'seg' (default) | 'strip' */
+/** items: [{ id, label, count?, tone?, attrs? }]; value: the selected id; variant: 'seg' (default) | 'strip'; ← → (wrapping),
+ *  Home and End select and focus a tab */
 export function Tabs({ items, value, onChange, variant = 'seg', fill = false, label, class: c = '', idPrefix }) {
   const ref = useRef(null);
   const pre = useRef(idPrefix ?? nextId('tab')).current;
   const key = (e) => {
     const k = items.findIndex((t) => t.id === value);
-    const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-    if (!d) return;
+    const to = e.key === 'ArrowRight' ? k + 1 : e.key === 'ArrowLeft' ? k - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : null;
+    if (to == null) return;
     e.preventDefault();
-    const n = items[(k + d + items.length) % items.length];
+    const n = items[(to + items.length) % items.length];
     onChange?.(n.id);
     ref.current?.querySelector(`[data-tab="${n.id}"]`)?.focus();
   };

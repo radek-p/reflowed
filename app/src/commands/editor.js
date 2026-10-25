@@ -93,7 +93,7 @@ export function editorCommands(platform) {
       run: (c, { pane = null }) => { const nb = c.S.ops.insertBlock(c.S.doc.blocks.length, 'paragraph', ''); c.enterEdit(nb.id, null, null, null, null, pane); return nb.id; } },
     { id: 'view.shortcuts', label: 'Keyboard shortcuts', key: 'keys', icon: 'keyboard', shortcut: '?', run: (c) => c.page.shortcuts() },
     { id: 'view.split', label: 'Split view', key: 'split', run: (c) => c.page.toggleSplit() },
-    { id: 'doc.settings', label: 'Document settings', key: 'doc-settings', run: (c, { line = null } = {}) => c.page.settings(true, line) },
+    { id: 'doc.settings', label: 'Document settings', key: 'doc-settings', run: (c, { line = null } = {}) => c.page.settings(line) },   // the Settings panel's document tab, at the preamble (line: selected)
     { id: 'doc.versions', label: 'Versions…', key: 'versions', run: (c) => c.page.versions() },
     { id: 'doc.resetSeed', label: 'Reset to original', key: 'reset-seed', destructive: true, when: (c) => c.page.can.resetSeed(), run: (c) => c.page.resetSeed() },
     { id: 'doc.importTex', label: 'Import .tex…', key: 'import-tex', destructive: true, when: (c) => c.page.can.importTex(), run: (c) => c.page.importTex() },

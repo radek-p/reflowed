@@ -113,6 +113,11 @@ function historyKey(e) {
   return null;
 }
 
+/**
+ * @param {HTMLElement | null} parent
+ * @param {{ doc?: string, onChange?: (text: string) => void, onKey?: (name: string, view: EditorView) => boolean, placeholder?: string,
+ *   complete?: object | null, hover?: object | null, goto?: object | null, onSelect?: object | null, carry?: object | null }} [options]
+ */
 export function createEditor(parent, { doc = '', onChange = () => {}, onKey = () => false, placeholder = '',
   complete = null, hover = null, goto = null, onSelect = null, carry = null } = {}) {
   const ask = (name) => (view) => onKey(name, view) === true;

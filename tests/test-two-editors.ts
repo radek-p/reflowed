@@ -1,6 +1,7 @@
 // Two editors mounted side by side in one page, in two plain divs (app/two-editors.html, the
 // harness app/src/harness/two-editors.ts), each with its own document, on one page's services: both work, and
-// neither touches the other — typing, undo, the outline, notes, find, the inspector — and an editor unmounted
+// neither touches the other — typing, undo, the outline, notes, find, the inspector, the document's settings (the Settings
+// panel in its own sidebar) — and an editor unmounted
 // leaves nothing behind (listeners on document and window, DOM nodes, the viewer's blocks, the heap, layers).
 //
 //   node tests/test-two-editors.ts [base=http://localhost:8151/] [--only <regex>]
@@ -188,6 +189,19 @@ if (section('two')) {
   await page.click('#ed-b .sb-top button, #ed-b [id$="btn-sidebar-close"]');
   const side = await page.evaluate(() => ({ a: document.getElementById('ed-a')!.hasAttribute('data-sidebar-closed'), b: document.getElementById('ed-b')!.hasAttribute('data-sidebar-closed') }));
   check('state: focus mode (⌘⇧F) in the left editor only; the right sidebar closed, the left one not', focus.a && !focus.b && side.b && !side.a, { focus, side });
+  // ── the document's settings in an embedded editor: the Settings panel as a tab of its sidebar (opened, the sidebar
+  // shown), on the document tab, its own document's preamble focused; the other editor's tab names its own document ──
+  await page.evaluate(() => (window as any).twoEditors.api('b').commands().call('doc.settings', {}));
+  await page.waitForFunction(() => !!document.activeElement?.closest('#ed-b .rtx-set-editor'), null, { timeout: 20000 }).catch(() => {});
+  const ds = await page.evaluate(() => {
+    const of = (s: string) => { const el = document.querySelector(`#ed-${s} .sb-panel .rtx-settings`); const host = el?.closest('.sb-panel') as HTMLElement | null;
+      return { drawn: !!el, shown: !!host && !host.hidden, tab: el?.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute('data-tab') ?? null,
+        name: el?.querySelector('[role="tab"][data-tab="document"]')?.textContent?.trim() ?? null, pre: (el?.querySelector('.rtx-set-editor .cm-content') as HTMLElement | null)?.innerText.length ?? 0 }; };
+    return { a: of('a'), b: of('b'), sidebarB: !document.getElementById('ed-b')!.hasAttribute('data-sidebar-closed'), focus: !!document.activeElement?.closest('#ed-b .rtx-set-editor') };
+  });
+  check('embedded: Document settings opens the Settings panel in the editor\'s own sidebar (shown again), on its document\'s tab, the preamble focused',
+    ds.b.drawn && ds.b.shown && ds.sidebarB && ds.b.tab === 'document' && ds.b.name === 'Right document' && ds.b.pre > 0 && ds.focus, ds);
+  check('embedded: the other editor\'s Settings tab names its own document', !ds.a.drawn || ds.a.name === 'Left document', ds.a);
   // ── status and crumbs as data: each editor's own ──
   const data = await page.evaluate(() => {
     const h = (window as any).twoEditors;

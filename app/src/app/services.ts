@@ -24,13 +24,14 @@ import { devSeedCache } from './dev-seed.js';
 import { installNotes } from '../notes/index.js';
 import { installView } from '../view/index.js';
 import { providePreferences, type Preferences } from '../settings/panel.ts';
+import { provideEngines, engine } from '../settings/engine.ts';
 import type { EditorServices, InspectorService, NotesService, ViewService } from './mount.ts';
 
 const MODULES = ['store', 'io', 'home', 'refs', 'backend'] as const;
 type ModuleName = typeof MODULES[number];
 export type Kinds = Record<ModuleName, 'real' | 'stub'>;
 
-interface Backend { id: string; webFeatures?: boolean; available?(): Promise<boolean>; warm?(): void }
+interface Backend { id: string; label?: string; webFeatures?: boolean; available?(): Promise<boolean>; warm?(): void }
 type BackendOptions = NonNullable<Parameters<typeof backendReal.createBackend>[0]>;
 export type Route = { name: string; id?: string } | null;
 /** what the services read of the store module (the rest of it goes to the editors as it is) */
@@ -38,8 +39,6 @@ interface StoreModule { createDocStore?(o?: { kind?: 'memory' }): Promise<{ cach
 interface IoModule { io?: object; setMetaPackage?(text: string): void }
 
 interface RefsModule { refs?: object; createRefs?(): object; recallsOf?: unknown; numberingState?: () => unknown }
-
-function safeGet(k: string): string | null { try { return localStorage.getItem(k); } catch { return null; } }
 
 /** the viewer is on the page (its host), and the companion package draws its kinds in the blocks mounted after it */
 export async function pageReady(): Promise<void> {
@@ -83,8 +82,9 @@ export async function createPageServices({ params, route = () => null, store: st
   let notes: NotesService | null = null;            // note chips; ?backend=lua adds its dev backend
   try { notes = installNotes({ backends, params }); } catch (e) { notes = featureFailed('notes', e); }
   backends.push(stubs.noneBackend);
-  const want = params.get('backend') ?? safeGet('rtx-editor.backend');
-  const backend = backends.find((b) => b.id === want) ?? backends[0];
+  // the engine: the page's one choice (settings/engine.ts), every editor follows it
+  provideEngines(backends.map((b) => ({ id: b.id, label: b.label ?? b.id })), params.get('backend'));
+  const backend = backends.find((b) => b.id === engine.peek()) ?? backends[0];
   backend.warm?.();
   let view: ViewService | null = null;              // view options: width, text size, colours, edit layout (the page's)
   try { view = await installView(); } catch (e) { view = featureFailed('view', e); }
@@ -100,6 +100,7 @@ export async function createPageServices({ params, route = () => null, store: st
   const services: EditorServices = {
     store, ids, refs, makeRefs, backends, backend, io, notes, view, inspector, numberingState: refsMod.numberingState ?? null,
     editorContext: {
+      engine,                                       // the page's engine choice: every document editor follows it
       recallsOf: refsMod.recallsOf ?? null,
       AutoSnapshots: storeMod.AutoSnapshots ?? null, beforeDestructive: storeMod.beforeDestructive ?? stubs.beforeDestructive,
       modulesReal: Object.fromEntries(MODULES.map((k) => [k, kinds[k] === 'real'])),

@@ -2,7 +2,7 @@
 // signals, this file what tests can run in Node.
 //
 //   defaultServerFor(location) -> the tree beside an http(s) page, '' elsewhere
-//   chooseServer({ fromPage, stored, advancedOn, fallback }) -> { url, quiet, from }
+//   chooseServer({ fromPage, stored, fallback }) -> { url, quiet, from }
 //   isNone(text) · BESIDE_PAGE · NONE
 import { treeBase } from '../../../loading/tree.ts';
 
@@ -25,11 +25,11 @@ export interface ServerChoice {
   quiet: boolean;
   from: 'page' | 'setting' | 'default';
 }
-/** the address in force: ?resources= (dev pages), then the setting (only while advanced features show), then
- *  the default */
-export function chooseServer(o: { fromPage: string | null; stored: string | null; advancedOn: boolean; fallback: string }): ServerChoice {
+/** the address in force: ?resources= (dev pages), then the setting in force (null while advanced features are hidden:
+ *  settings/resources.ts), then the default */
+export function chooseServer(o: { fromPage: string | null; stored: string | null; fallback: string }): ServerChoice {
   if (o.fromPage != null) return { url: isNone(o.fromPage) ? '' : o.fromPage.trim(), quiet: false, from: 'page' };
   const typed = (o.stored ?? '').trim();
-  if (o.advancedOn && typed) return { url: isNone(typed) ? '' : typed, quiet: false, from: 'setting' };
+  if (typed) return { url: isNone(typed) ? '' : typed, quiet: false, from: 'setting' };
   return { url: o.fallback, quiet: !!o.fallback, from: 'default' };
 }

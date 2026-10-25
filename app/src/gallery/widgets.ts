@@ -1,8 +1,9 @@
 // The gallery: the editor's own widgets apart from a document, from their real components with fixture data —
 // note chips (every kind) and the note popover, the find bar (every count state), the citation, reference and link cards,
-// a block's error rows and the live error note (the code popover's chrome) — and the sheets' content (Document
-// settings in each tab, the title form: its conversion offer and the form) in a pane container instead of the modal
-// Sheet (a view's content is apart from its container: design/ui/views.ts FrameContext).
+// a block's error rows and the live error note (the code popover's chrome) — the Settings panel's document tab (the
+// preamble with problems, a read-only one, no document) and the title form's content (its conversion offer and the
+// form) in a pane container instead of the modal Sheet (a view's content is apart from its container:
+// design/ui/views.ts FrameContext).
 import { useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import type { ComponentChildren } from 'preact';
@@ -16,13 +17,14 @@ import { CardContent, cardTitle } from '../refnav/card.js';
 import { linkTitle } from '../refnav/rule.ts';
 import { installStyle as installRefNavStyle } from '../refnav/style.js';
 import { ErrorRows, LiveNote } from '../edit/panel.js';
-import { SettingsPanel } from '../settings/sheet.js';
-import { installSettingsStyle } from '../settings/style.js';
+import { DocumentSettings } from '../settings/document.ts';
+import { installSettingsStyle } from '../settings/panel.ts';
 import { TitleForm } from '../meta/form/sheet.js';
 import { convertPreamble } from '../meta/import.ts';
 import { testFixtureDocument } from '../app/test-fixture.js';
 import { Section, Group, Cell, useInView } from './parts.ts';
 import type { Gallery } from './main.ts';
+import type { PreambleError } from '../app/page-state.ts';
 
 // ── note chips ──
 interface NoteInfo { from: 'todo' | 'comment' | 'figure'; author: string; colour: string; inline?: boolean }
@@ -163,23 +165,15 @@ function InPane({ children }: { children?: ComponentChildren }) {
   return html`<${FrameContext.Provider} value=${PaneFrame}>${children}<//>`;
 }
 
-interface SettingsApi { setTab(t: string): void }
-function Settings({ g, tab, errors }: { g: Gallery; tab: string; errors: { line: number; message: string }[] }) {
+/** the Settings panel's document tab on the fixture's preamble (a host of its own: nothing is applied) */
+function DocTab({ errors, readOnly = false, none = false }: { errors: PreambleError[]; readOnly?: boolean; none?: boolean }) {
   const doc = testFixtureDocument() as { preamble: string; blocks: unknown[] };
-  // the panel's host (settings/index.js gives the editor's): the fixture's preamble and blocks, the page's engines
   const host = useRef({
-    doc: () => ({ preamble: { source: doc.preamble }, blocks: doc.blocks }),
-    readOnly: () => false,
-    errors: signal(errors),
-    backends: () => [{ id: 'engine', label: 'In browser · Tectonic' }, { id: 'none', label: 'None (the sources only)' }],
-    backend: () => 'engine',
-    bibInfo: () => '4 entries (refs.bib), 3 cited',
-    openReferences: () => {},
+    preamble: { problems: signal(errors.length), errors: signal(errors), source: signal(doc.preamble), readOnly: () => readOnly, blocks: () => doc.blocks.length,
+      draft: () => {}, apply: () => {} },
+    bibliography: { info: signal('bbl · 4 entries'), openReferences: () => {} },
   }).current;
-  const api = useRef<SettingsApi | null>(null);
-  // opened at another tab, then moved to its own: the preamble's editor takes no focus (the page stays where it is)
-  useLayoutEffect(() => { api.current?.setTab(tab); }, []);
-  return html`<${InPane}><${SettingsPanel} host=${host} start=${{ tab: 'engine' }} done=${() => {}} api=${api} /><//>`;
+  return html`<div class="rtx-settings gal-settings"><${DocumentSettings} host=${none ? null : host} ask=${() => null} /></div>`;
 }
 
 const TITLE_PREAMBLE = String.raw`\documentclass{article}
@@ -197,12 +191,12 @@ function Title({ convert }: { convert: boolean }) {
 
 export function SheetsSection({ g }: { g: Gallery }) {
   useLayoutEffect(() => { installSettingsStyle(); }, []);
-  return html`<${Section} g=${g} id="sheets" title="Sheets" lead="Document settings and the title form: their content (settings/sheet.js, meta/form/sheet.js) in a pane container; in the editor they open in the kit's side Sheet.">
-    <${Group} title="Document settings" g="settings">
+  return html`<${Section} g=${g} id="sheets" title="Settings and sheets" lead="The Settings panel's document tab (settings/document.ts) and the title form's content (meta/form/sheet.js) in a pane container; in the editor the title form opens in the kit's side Sheet.">
+    <${Group} title="The Settings panel's document tab" g="settings">
       <div class="gal-cells gal-cells--top">
-        <${Cell} label="Preamble, with two problems"><${Settings} g=${g} tab="preamble" errors=${[{ line: 3, message: 'Undefined control sequence \\usepackag.' }, { line: 9, message: 'LaTeX Error: Missing \\begin{document}.' }]} /><//>
-        <${Cell} label="Bibliography"><${Settings} g=${g} tab="bib" errors=${[]} /><//>
-        <${Cell} label="Engine"><${Settings} g=${g} tab="engine" errors=${[]} /><//>
+        <${Cell} label="the preamble, with two problems"><${DocTab} errors=${[{ line: 3, message: 'Undefined control sequence \\usepackag.' }, { line: 9, message: 'LaTeX Error: Missing \\begin{document}.' }]} /><//>
+        <${Cell} label="a read-only document"><${DocTab} errors=${[]} readOnly=${true} /><//>
+        <${Cell} label="no document open"><${DocTab} errors=${[]} none=${true} /><//>
       </div>
     <//>
     <${Group} title="The title form" g="title-form">

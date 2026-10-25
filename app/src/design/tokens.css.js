@@ -58,7 +58,7 @@ export default `
   --ui-shadow-pop: 0 0 0 0.5px color-mix(in srgb, #000 10%, transparent), 0 4px 12px color-mix(in srgb, #000 10%, transparent), 0 12px 32px color-mix(in srgb, #000 10%, transparent);
   --ui-shadow-dialog: 0 0 0 0.5px color-mix(in srgb, #000 10%, transparent), 0 8px 24px color-mix(in srgb, #000 12%, transparent), 0 24px 64px color-mix(in srgb, #000 14%, transparent);
 
-  /* ── surfaces: THE side sheet's width (Document settings and the title form alike) ── */
+  /* ── surfaces: THE side sheet's width (the title form's) ── */
   /* responsive: 600 px at a 1280 px window (as before), growing with it to 820 px (from about 1830 px), not
      below 480 px; full width on phones (below) */
   --ui-sheet-w: clamp(480px, calc(40vw + 88px), 820px);

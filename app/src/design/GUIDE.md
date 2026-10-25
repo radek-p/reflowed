@@ -97,8 +97,8 @@ home menus), the View popover, the reference card, Dialogs and Sheets (as `modal
 
 A panel's content is a component that renders `<Frame title tabs note footer onClose …>` and never imports Sheet; the
 container it is opened in supplies the Frame (THE Sheet today; a pane or a tab later). Panels are registered with ids:
-`registerView({ id, title, slot, Component })`, opened with `openView(id, props)`; `views(slot)` lists them. Document
-settings (`settings`) and the title form (`title-form`) are views. No workbench yet: the layout is not data.
+`registerView({ id, title, slot, Component })`, opened with `openView(id, props)`; `views(slot)` lists them. The title
+form (`title-form`) is a view in the sheet; the side panels (Outline, Problems, Settings …) are views with a `panel`.
 
 ## Checking
 

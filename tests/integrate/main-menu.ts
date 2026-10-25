@@ -1,8 +1,9 @@
 // ── the main menu (the Re button) and the Settings panel: the menu's top level and submenus, by the pointer and the
 // keyboard (↓ ↑ → ← Escape), its keys shown; Export › PDF's two actions (a row with actions: → ← reach them, Enter runs
 // one; download saves <title>.pdf, open opens a tab); Settings… and Ctrl/⌘ , open the panel (on the right, a third of the window
-// within its bounds), the key again and the close on its tab close it; its sections in order; a setting changed there
-// applies; the View options keep only what a reader changes while reading ──
+// within its bounds) on General, the key again and the close on its tab close it; its sections in order, a hairline
+// between them; a setting changed there applies; an advanced setting (line ends) is drawn only with advanced features
+// on, its default in force while they are off; the View options keep only what a reader changes while reading ──
 //   a section of tests/test-integrate.ts: node tests/test-integrate.ts [base] --only '^main-menu$'
 import type { Harness } from './harness.ts';
 import { fileName } from '../../app/src/io/download.ts';
@@ -112,25 +113,44 @@ export default async function (h: Harness): Promise<void> {
   const panel = () => page.evaluate(() => {
     const el = document.querySelector('[data-panel-view="app-settings"] .rtx-settings');
     const aside = el?.closest('aside[data-side]');
+    const page = el?.querySelector('[role="tabpanel"]:not([hidden])');
+    const secs = page ? [...page.querySelectorAll('.rtx-set-section')] : [];
     return { open: !!el, side: aside?.getAttribute('data-side') ?? null, w: aside ? Math.round(aside.getBoundingClientRect().width) : 0, area: Math.round(document.querySelector('.wb-root')!.getBoundingClientRect().width),
-      sections: el ? [...el.querySelectorAll('.rtx-set-section')].map((x: any) => x.dataset.section) : [], hints: el ? el.querySelectorAll('.rtx-set-hint, .rtx-vp-hint').length : 0,
+      tab: (el?.querySelector('[role="tab"][aria-selected="true"]') as HTMLElement | null)?.dataset.tab ?? null,
+      sections: secs.map((x: any) => x.dataset.section), hints: page ? page.querySelectorAll('.rtx-set-hint, .rtx-vp-hint').length : 0,
+      rules: secs.map((x) => getComputedStyle(x).borderTopWidth),
       focusIn: !!el && !!document.activeElement?.closest('aside[data-side]') };
   });
   await page.click('#btn-main-menu');
   await page.click('.main-menu [data-action="settings"]');
   await page.waitForSelector('[data-panel-view="app-settings"] .rtx-settings');
   await idle(page);
-  let p = await panel();
-  check('Settings… opens the Settings panel, on the right, focused', p.open && p.side === 'right' && p.focusIn, p);
+  const p = await panel();
+  check('Settings… opens the Settings panel, on the right, focused, on General', p.open && p.side === 'right' && p.focusIn && p.tab === 'general', p);
   check('its column: a third of the window, between 380 and 560 px', Math.abs(p.w - Math.max(380, Math.min(560, p.area / 3))) <= 2, p);
-  check('its sections in order: Reading, Editing, Notes, This document, Advanced; every row explained', p.sections.join() === 'view,editing,notes,document,advanced' && p.hints >= 7, p);
-  // a setting changed there applies: ragged right (the viewer's alignment), block handles off
-  await page.click('[data-panel-view="app-settings"] [data-a="left"]');
+  check('General\'s sections in order: Reading, Editing, Notes, Advanced; every row explained; a hairline between sections, none above the first',
+    p.sections.join() === 'view,editing,notes,advanced' && p.hints >= 7 && p.rules[0] === '0px' && p.rules.slice(1).every((r) => r === '1px'), p);
+  // a setting changed there applies: block handles off
   await page.click('[data-panel-view="app-settings"] #set-handles');
-  const applied = await page.evaluate(() => ({ align: document.documentElement.style.getPropertyValue('--latex-align'), noHandles: document.documentElement.hasAttribute('data-no-handles'),
-    s: (window as any).editorAPI.view().settings }));
-  check('a setting changed there applies at once (ragged right, block handles off)', applied.align === 'left' && applied.noHandles && applied.s.align === 'left' && applied.s.handles === false, applied);
-  await page.evaluate(() => (window as any).editorAPI.view().set({ align: 'justify', handles: true }));
+  const applied = await page.evaluate(() => ({ noHandles: document.documentElement.hasAttribute('data-no-handles'), s: (window as any).editorAPI.view().settings }));
+  check('a setting changed there applies at once (block handles off)', applied.noHandles && applied.s.handles === false, applied);
+  await page.evaluate(() => (window as any).editorAPI.view().set({ handles: true }));
+  // line ends: an advanced setting. Off: no row here nor in the View options, justified whatever is stored; on: the row
+  // back, the stored choice in force; a change there applies
+  const align = () => page.evaluate(() => ({ css: document.documentElement.style.getPropertyValue('--latex-align') || 'justify', stored: (window as any).editorAPI.view().settings.align,
+    row: document.querySelectorAll('[data-panel-view="app-settings"] [data-setting="view-align"]').length }));
+  await page.evaluate(() => { const E = (window as any).editorAPI; E.advanced(false); E.view().set({ align: 'left' }); });
+  await idle(page);
+  const off = await align();
+  check('advanced off: no Line ends row in Reading; ragged right stored, the text justified (the default in force)', off.row === 0 && off.stored === 'left' && off.css === 'justify', off);
+  await page.evaluate(() => (window as any).editorAPI.advanced(true));
+  await page.waitForSelector('[data-panel-view="app-settings"] [data-setting="view-align"]');
+  const on = await align();
+  check('advanced on: the row is back, the stored ragged right in force', on.row === 1 && on.css === 'left', on);
+  await page.click('[data-panel-view="app-settings"] [data-a="justify"]');
+  const set = await align();
+  check('… a change there applies at once (Justified)', set.stored === 'justify' && set.css === 'justify', set);
+  await page.evaluate(() => (window as any).editorAPI.advanced(false));
   // the close on its own tab closes it; the key opens and closes it
   const close = await page.evaluate(() => document.querySelectorAll('[data-ptab="app-settings"] [data-action="close-panel"]').length);
   check('its close is on its own tab', close === 1, close);
@@ -148,10 +168,18 @@ export default async function (h: Harness): Promise<void> {
   // ── the View options: a reader's options only ──
   await page.click('#btn-view');
   await page.waitForFunction(() => !document.getElementById('rtx-view-pop')!.hidden);
-  const vp = await page.evaluate(() => { const p = document.getElementById('rtx-view-pop')!;
+  const vpRows = () => page.evaluate(() => { const p = document.getElementById('rtx-view-pop')!;
     return { rows: [...p.querySelectorAll('[data-setting]')].map((x: any) => x.dataset.setting), checks: p.querySelectorAll('input[type=checkbox]').length, align: p.querySelectorAll('[data-a]').length }; });
-  check('the View options: Column width, Text (size, Justified / Ragged right), Colours; no switches', vp.rows.join() === 'view-width,view-text,view-theme' && vp.checks === 0 && vp.align === 2, vp);
+  const vp = await vpRows();
+  check('the View options: Column width, Text size, Colours; no switches; no line ends while advanced features are off', vp.rows.join() === 'view-width,view-text,view-theme' && vp.checks === 0 && vp.align === 0, vp);
   await page.keyboard.press('Escape');
+  await page.evaluate(() => (window as any).editorAPI.advanced(true));
+  await page.click('#btn-view');
+  await page.waitForFunction(() => !document.getElementById('rtx-view-pop')!.hidden);
+  const vp2 = await vpRows();
+  check('… with them on: Line ends (Justified / Ragged right) after the text size', vp2.rows.join() === 'view-width,view-text,view-align,view-theme' && vp2.align === 2, vp2);
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => (window as any).editorAPI.advanced(false));
   await ctx.close();
 
   // a phone: the Settings panel takes the whole width
