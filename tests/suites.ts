@@ -98,6 +98,7 @@ export const SUITES: Suite[] = [
   S('intro-dev', 'dev', 5, (c) => node('tests/test-intro.ts', 'dev', `${c.dev}/`)),   // the introduction: on Home, typesets, its pictures drawn, refs, edit + undo
   S('w10', 'dev', 15, (c) => node('tests/test-w10.ts', `${c.dev}/`, '--no-shots')),   // reference navigation (card, Back) on the dev app
   S('w3', 'dev', 25, (c) => node('tests/test-w3.ts', `${c.dev}/`, '--no-shots')),
+  S('offered-kinds', 'dev', 5, (c) => node('tests/test-offered-kinds.ts', `${c.dev}/`)),   // the slash menu and the kind switcher list only the kinds the preamble and class define
   S('e2e-dev', 'dev', 30, (c) => node('tests/test-e2e.ts', 'dev', `${c.dev}/`, '--no-shots'), { cold: true, note: 'acceptance from a first open: every block compiles' }),
   S('panes', 'dev', 20, (c) => node('tests/test-panes.ts', `${c.dev}/`), { alone: true, note: 'the leak check reads the heap' }),   // the two panes are equal
   S('public-bundles', 'unit', 1, () => node('tests/test-public-bundles.ts')),   // the public checkout (REFLOWTEX, else a sibling checkout); its bundles built on demand (a fresh clone builds the app)
@@ -182,7 +183,7 @@ export const EST_SECONDS: Record<string, number> = {
   typecheck: 1, select: 1, browsers: 1, 'static-server': 1, 'engine-stamp': 1, 'engine-build-id': 1, 'seed-title-form': 1, 'intro-versions': 1, 'site-intro': 1, 'w15-units': 1, 'arch-units': 1, 'doc-units': 1, 'commands-units': 1, kit: 3,
   'pdf-svg': 1, 'file-deps': 1, 'loading-units': 1, resources: 40, 'resources-setting': 25, 'resources-origin': 90, 'workbench-units': 2, workbench: 120, keys: 1, 'motion-units': 1, 'view-units': 1, minify: 1, tex: 1, 'tex-lex': 1, 'tex-calls': 1,
   provenance: 1, brand: 1, 'w4-units': 1, 'cite-units': 1, 'cite-engine': 38, 'bundle-cache': 3, 'engine-node': 90,
-  'app-bundle': 1, 'dev-seed': 12, 'webkit-open': 11, 'fmt-early': 60, 'fewer-requests': 30, 'fewer-requests-release': 40, 'fmt-early-release': 180, 'fixture-cache': 20, recovery: 18, 'fonts-dump': 2, 'editor-frame': 3, 'page-fonts': 25, 'live-preview': 30, 'colour-maps': 15, home: 2, 'reset-dev': 1, 'home-samples-dev': 29, w10: 37, w3: 27, 'e2e-dev': 140,
+  'app-bundle': 1, 'dev-seed': 12, 'webkit-open': 11, 'fmt-early': 60, 'fewer-requests': 30, 'fewer-requests-release': 40, 'fmt-early-release': 180, 'fixture-cache': 20, recovery: 18, 'fonts-dump': 2, 'editor-frame': 3, 'page-fonts': 25, 'live-preview': 30, 'colour-maps': 15, home: 2, 'offered-kinds': 15, 'reset-dev': 1, 'home-samples-dev': 29, w10: 37, w3: 27, 'e2e-dev': 140,
   panes: 82, 'two-editors': 60, follow: 40, 'popover-keys': 40, 'kept-docs': 1, motion: 142, widths: 240, notes: 19, settings: 18, view: 7, files: 10, chrome: 60,
   sidebar: 11, inspector: 10, 'refs-panel': 30, 'selection-dev': 21, 'cref-dev': 3, 'popover-hold': 45, 'ios-zoom': 30, 'mobile-fit': 60, 'far-dev': 100, 'cite-card-dev': 226,
   'cite-dev': 76, sheets: 4, 'caret-bounds': 1289, boot: 54,
@@ -215,6 +216,7 @@ export const RULES: Rule[] = [
   { why: 'the core (app.js, main.js)', paths: ['app/src/app/app.js', 'app/src/main.js', 'app/src/app/editor-root.ts', 'app/src/rtx-modules.d.ts', 'app/src/app/editor-entry.js', 'app/src/doc/kinds.ts', 'app/src/app/stubs.js', 'app/src/app/model.js', 'app/src/app/panels.ts', 'app/src/app/source-position.js', 'app/src/tex/texscan.js', 'app/src/app/test-fixture.js', 'app/src/contracts.d.ts', 'app/index.html', 'app/app.css', 'app/package.json', 'app/package-lock.json'], suites: WIDE },
   { why: 'the core, other parts', paths: ['app/src/app/**'], suites: WIDE },
   { why: 'the two-editors harness', paths: ['app/src/harness/**', 'app/two-editors.html', 'tests/test-two-editors.ts'], suites: ['two-editors', 'typecheck', 'arch-units'] },
+  { why: 'the kinds a document offers: the slash menu, the kind switcher', paths: ['app/src/doc/kinds.ts', 'app/src/doc/kind-probe.ts', 'app/src/app/doc-menus.ts', 'app/src/chrome/menu.ts', 'app/src/io/split.ts'], suites: ['offered-kinds'] },
   { why: 'the document model', paths: ['app/src/doc/**'], suites: [...WIDE, 'replay-dev', 'readonly-dev', 'w15-units', 'cache', 'keys', 'doc-units', 'follow'] },
   { why: 'commands', paths: ['app/src/commands/**'], suites: [...WIDE, 'selection-dev', 'chrome', 'sidebar', 'commands-units'] },
   { why: 'the dev seed cache', paths: ['app/src/app/dev-seed.js'], suites: ['dev-seed'] },

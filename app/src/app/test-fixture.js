@@ -2,7 +2,7 @@
 // tests (tests/test-w3.ts, test-w6.ts), which check its labels, theorem
 // kinds, citations and TODO macros. It is never seeded by default (the
 // default document is the introduction, app/seeds.ts).
-import { guessKind } from '../doc/kinds.ts';
+import { guessKind, offeredKinds } from '../doc/kinds.ts';
 
 /** Title, abstract, sections with labels and references, theorem kinds, a
  *  TikZ figure, a table, todos, an appendix and a bibliography. Compiles on
@@ -106,7 +106,8 @@ In a locally small category $\mathcal{C}$, an arrow $f\colon a \to b$ is an isom
 \bibitem[Arr09]{Arr09} A test reference (not a real publication). 2009.
 \end{thebibliography}`,
   ];
+  const offered = offeredKinds(preamble);
   return { title: 'Editor test fixture (not a paper)', preamble, bib: { kind: 'none', source: '' },
     meta: { authors: ['Test Author'], tags: ['sample'] },
-    blocks: blocks.map((source) => ({ source, kind: guessKind(source), file: 'main.tex' })) };
+    blocks: blocks.map((source) => ({ source, kind: guessKind(source, offered), file: 'main.tex' })) };
 }

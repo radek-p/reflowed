@@ -1,9 +1,10 @@
 // The built-in example document, and a plain .tex round trip for the io
 // stub. The document itself
 // is the store's (contracts.d.ts: Doc, Block), kinds are in doc/kinds.ts.
-import { guessKind } from '../doc/kinds.ts';
+import { guessKind as guess, offeredKinds } from '../doc/kinds.ts';
 import { commentStart } from '../tex/lex.ts';
-export { guessKind };
+/** a block's kind from its source, with what `preamble` offers (doc/kinds.ts) @param {string} source @param {string} preamble */
+export const guessKind = (source, preamble) => guess(source, offeredKinds(preamble));
 
 export const DEFAULT_PREAMBLE = String.raw`\usepackage{amsmath,amssymb,amsthm}
 \usepackage{reflowtex}
@@ -24,7 +25,8 @@ export function toTex(doc) {
   const pre = typeof doc.preamble === 'string' ? doc.preamble : doc.preamble.source;
   if (!/^[ \t]*\\documentclass\b/m.test(pre)) out.push(DEFAULT_CLASS);
   out.push(pre.replace(/\s+$/, ''), '', '\\begin{document}', '');
-  for (const b of doc.blocks) out.push(`${MARK}: ${b.kind || guessKind(b.source)} ----`, b.source.replace(/\s+$/, ''), '');
+  const offered = offeredKinds(pre);
+  for (const b of doc.blocks) out.push(`${MARK}: ${b.kind || guess(b.source, offered)} ----`, b.source.replace(/\s+$/, ''), '');
   out.push('\\end{document}', '');
   return out.join('\n');
 }
@@ -44,17 +46,17 @@ export function parseTex(tex, title = '') {
     preamble = preamble.split('\n').filter((l, i) => !(l === DEFAULT_CLASS || (ours && i < 3 && /^% /.test(l)))).join('\n').trim();
   }
   const lines = body.split('\n');
-  const blocks = [];
+  const blocks = [], offered = offeredKinds(preamble);
   if (lines.some((l) => MARK_RE.test(l))) {
     let cur = { kind: null, lines: [] };
-    const flush = () => { const s = cur.lines.join('\n').trim(); if (s) blocks.push({ kind: cur.kind || guessKind(s), source: s }); };
+    const flush = () => { const s = cur.lines.join('\n').trim(); if (s) blocks.push({ kind: cur.kind || guess(s, offered), source: s }); };
     for (const l of lines) {
       const m = MARK_RE.exec(l);
       if (m) { flush(); cur = { kind: m[1], lines: [] }; } else cur.lines.push(l);
     }
     flush();
   } else {
-    for (const s of cutBlocks(body)) blocks.push({ kind: guessKind(s), source: s });
+    for (const s of cutBlocks(body)) blocks.push({ kind: guess(s, offered), source: s });
   }
   return { title, preamble, blocks };
 }

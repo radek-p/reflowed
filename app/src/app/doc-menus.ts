@@ -9,7 +9,7 @@
 //     menus.close(cancelled = true) · menus.open (is one open?)
 import { openMenu, openSlash, item as menuEntry, submenu, SEP, type MenuEntry, type MenuCommand, type SlashKind } from '../chrome/menu.ts';
 import { documentGroups } from '../chrome/main-menu.ts';
-import { kindsFor } from '../doc/kinds.ts';
+import { offeredKinds, type Offered } from '../doc/kinds.ts';
 
 export type { MenuEntry, SlashKind };
 /** what a contribution makes entries with (chrome/menu-model.ts item) */
@@ -19,6 +19,8 @@ type Handle = { close(cancelled?: boolean): void };
 
 export interface DocMenusHost {
   doc(): { preamble: { source: string }; blocks: unknown[] } | null;
+  /** what the document offers (doc/derived.js: with the engine's answers); none: from its preamble alone */
+  offered?(): Offered;
   indexOf(id: string): number;
   commands: { menuItem(id: string, input?: object, o?: { disabled?: boolean; label?: string }): MenuCommand; enabled(id: string, input?: object): boolean };
   /** a feature's entries in a block's menu, after the block's own (nesting: split / join; svgfig: duplicate figure;
@@ -43,12 +45,12 @@ export function createDocMenus(host: DocMenusHost) {
   return {
     close,
     get open() { return !!open; },
-    /** the slash menu: block kinds for this preamble, grouped; type to filter */
+    /** the slash menu (and the kind switcher, an empty block's "/"): the kinds the document offers, grouped; type to filter */
     openSlash(anchor: Element, onPick: SlashPick, onCancel: (() => void) | null = null) {
       close();
       const d = host.doc();
       if (!d) return;
-      let kinds = kindsFor(d.preamble.source) as SlashKind[], pick = onPick;
+      let kinds: SlashKind[] = (host.offered?.() ?? offeredKinds(d.preamble.source)).kinds, pick = onPick;
       for (const s of host.slash) { kinds = s.kinds(kinds); pick = s.pick(pick); }
       open = openSlash({ anchor, kinds, onPick: pick, onCancel, onClosed });
     },

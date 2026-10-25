@@ -1,18 +1,20 @@
 // @ts-check
 // What one document's blocks compile against, derived from it: the preamble's hash and
-// theorem kinds, each block's refs context and the recalls (thm-restate), the asset hashes, the files each block
+// the kinds it offers (doc/kinds.ts offeredKinds; what the source cannot decide asked of the engine:
+// doc/kind-probe.ts), each block's refs context and the recalls (thm-restate), the asset hashes, the files each block
 // uses (doc/block-files.ts: its last result's record, its source's names), and from them a block's compile key
 // (ck), what it shows (viewKey, viewResult) and its source as compiled. No DOM: tests/test-doc-units.ts and
 // tests/test-keys.ts.
 //
 //   const derived = createDerived({ doc, blockById, nest, refs, backend, salt, bibpane, recallsOf, results })
-//     derived.preHash · derived.thmSet · derived.contexts · derived.recalls · derived.assetHash   (read; the maps live)
+//     derived.preHash · derived.offered · derived.thmSet · derived.contexts · derived.recalls · derived.assetHash   (read; the maps live)
 //     derived.enginePreamble() · derived.compileSource(b) · derived.contextOf(b)
 //     derived.ck(b) · derived.viewKey(b) · derived.viewResult(b) · derived.kindOf(source)
 //     derived.pass(fn)   fn reads many blocks' keys (and changes no block): what they depend on that is the whole list's
 //                        (the nesting tree, nest.pass) read once for all of them, not once per block
 //     derived.computeContexts()   every block's context and the recalls, again (a structure or source change)
-//     derived.preambleChanged()   the preamble's hash (with the bibliography's part) and theorem kinds, again
+//     derived.preambleChanged()   the preamble's hash (with the bibliography's part) and the kinds it offers, again (the
+//                                 engine's answers, when it is asked, replace them once they come)
 //     derived.loadAssets(assets)  the asset hashes of an opened document · derived.noteAsset(meta) · forgetAsset(meta)
 //     derived.assetOf(name) · derived.assetSig(b) · derived.bibKeyPart()
 //     derived.filesOf(b) · derived.preambleFiles()   what a block, the preamble, uses (block-files.ts Used)
@@ -23,7 +25,8 @@
 //   hash(str): cyrb53, the app's 53-bit string hash
 import { blockCacheKey } from './cache-key.js';
 import { splitMeta, blockSource } from '../meta/compile.ts';
-import { guessKind, theoremKinds } from './kinds.ts';
+import { guessKind, offeredKinds } from './kinds.ts';
+import { engineProbe } from './kind-probe.ts';
 import { includesIn, usedBy } from './block-files.ts';
 import { fileSig } from '../../../engine/web/opened.js';   // a file's signature: the engine's, so a result's record compares
 
@@ -46,6 +49,8 @@ const EXTS = ['', '.pdf', '.png', '.jpg', '.jpeg', '.svg'];
 export function createDerived({ doc, blockById, nest, refs, backend, salt = () => '', bibpane = null, recallsOf = null, results }) {
   let preHash = '';
   /** @type {Set<string>} */ let thmSet = new Set();
+  /** what the preamble offers (the slash menu's kinds, the environments a block's kind is guessed from) */
+  let offered = offeredKinds('');
   /** @type {Map<string, string>} */ let contexts = new Map();   // block id -> refs context prefix
   // the contexts as of a nesting tree: a new paragraph in a container gets its role (head, end) only once it
   // typesets something, so its context is made again then (it was sent with its end line but without its head)
@@ -103,7 +108,7 @@ export function createDerived({ doc, blockById, nest, refs, backend, salt = () =
   /** what a block shows: its own result, or a recall's original's */
   const viewKey = (b) => { const o = recalls.get(b.id); const ob = o && blockById(o); return ob ? `recall:${ck(ob)}` : ck(b); };
   const viewResult = (b) => { const o = recalls.get(b.id); const ob = o && blockById(o); return results.cache.get(ob ? ck(ob) : ck(b)); };
-  const kindOf = (src) => guessKind(src, thmSet);
+  const kindOf = (src) => guessKind(src, offered);
 
   // A change of doc.bib keeps the preamble's key (bibKeyPart: the kind only) and reaches the compile keys through
   // each block's context: the References pane's `%rtxbib:<hash>` line (the cited entries' records; the whole
@@ -136,8 +141,13 @@ export function createDerived({ doc, blockById, nest, refs, backend, salt = () =
   }
   function preambleChanged() {
     preHash = hash(`${enginePreamble()}\n${bibKeyPart()}`);
-    thmSet = new Set(theoremKinds(doc().preamble.source).map((t) => t.env));
+    const d = doc(), pre = d.preamble.source;
+    setOffered(offeredKinds(pre));
+    const probe = engineProbe(backend(), enginePreamble());
+    if (probe) offeredKinds(pre, { probe }).then((o) => { if (doc() === d && d.preamble.source === pre) setOffered(o); }, (e) => console.warn('kinds:', e?.message));
   }
+  /** @param {import('./kinds.ts').Offered} o */
+  function setOffered(o) { offered = o; thmSet = new Set(o.theorems); }
   function loadAssets(assets) {
     assetHash.clear();
     for (const a of assets ?? []) noteAsset(a);
@@ -147,7 +157,7 @@ export function createDerived({ doc, blockById, nest, refs, backend, salt = () =
   function forgetAsset(a) { assetHash.delete(a.name); }
 
   return {
-    get preHash() { return preHash; }, get thmSet() { return thmSet; }, get contexts() { return contexts; }, get recalls() { return recalls; },
+    get preHash() { return preHash; }, get offered() { return offered; }, get thmSet() { return thmSet; }, get contexts() { return contexts; }, get recalls() { return recalls; },
     assetHash, assetOf, assetSig, usedAssets, filesOf, preambleFiles, landed, enginePreamble, compileSource, contextOf, ck, viewKey, viewResult, kindOf,
     computeContexts, preambleChanged, loadAssets, noteAsset, forgetAsset, bibKeyPart, pass,
   };

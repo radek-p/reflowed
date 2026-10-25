@@ -448,7 +448,7 @@ export function createDocEditor(ctx) {
   });
 
   // ── Menus (app/doc-menus.ts): the block's, the document's, the slash menu; features add their entries here ──
-  const menus = createDocMenus({ doc: () => S.doc, indexOf, get commands() { return commands; }, blockItems: feats.blockItems, docItems: feats.docItems, slash: feats.slash });
+  const menus = createDocMenus({ doc: () => S.doc, offered: () => derived.offered, indexOf, get commands() { return commands; }, blockItems: feats.blockItems, docItems: feats.docItems, slash: feats.slash });
   const openSlashMenu = (anchor, onPick, onCancel) => menus.openSlash(anchor, onPick, onCancel);
   const openBlockMenu = (anchor, id) => menus.openBlock(anchor, id), openDocMenu = (anchor) => menus.openDoc(anchor), closeMenu = (c) => menus.close(c);
 

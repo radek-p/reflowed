@@ -21,10 +21,13 @@
 //     filecontents) and \iffalse … \fi are opaque.
 import { commentStart, controlSequenceAt } from '../tex/lex.ts';
 import { isDefinitionsCommand } from '../tex/commands.ts';
+import { offeredKinds, kindOfEnv, type Offered } from '../doc/kinds.ts';
 
+/** what the document defines (doc/kinds.ts offeredKinds), as splitting and nesting read it */
 export interface SplitOptions {
-  theoremEnvs: Set<string>;
-  proofEnvs: Set<string>;
+  theoremEnvs: ReadonlySet<string>;
+  proofEnvs: ReadonlySet<string>;
+  offered: Offered;
 }
 
 export type Item =
@@ -35,26 +38,18 @@ export interface SplitResult { items: Item[]; tail: string }
 
 const OPAQUE = new Set(['verbatim', 'verbatim*', 'Verbatim', 'lstlisting', 'minted', 'comment', 'filecontents', 'filecontents*', 'alltt']);
 const FLOAT_ENVS = ['figure', 'figure*', 'table', 'table*', 'algorithm', 'algorithm*', 'wrapfigure', 'wraptable', 'sidewaysfigure', 'sidewaystable'];
-export const STANDARD_THEOREMS = ['theorem', 'lemma', 'corollary', 'proposition', 'definition', 'remark', 'example', 'claim', 'conjecture',
-  'observation', 'fact', 'note', 'problem', 'question', 'exercise', 'notation', 'assumption', 'hypothesis', 'property', 'axiom', 'case'];
 const HEAD_RE = /^\s*\\(part|chapter|section|subsection|subsubsection)\*?\s*[[{]/;
 const SOLO_RE = /^\s*\\(maketitle|appendix|printbibliography|bibliography|tableofcontents)\b(\s*\[[^\]]*\])?(\s*\{[^}]*\})?\s*(%.*)?$/;
 const INPUT_RE = /^(\s*)(\\(input|include)\s*(?:\{([^{}]+)\}|\s([^\s{}%]+)))\s*(%.*)?$/;
 
-/** Theorem-like and proof-like environments declared in a preamble. */
+/** Theorem-like and proof-like environments the preamble and its class define (doc/kinds.ts offeredKinds: no probe;
+ *  splitOptions(offered) for what a probe answered too). */
 export function envsFromPreamble(preamble: string): SplitOptions {
-  const code = stripCommentsKeepLines(preamble);
-  const th = new Set<string>();
-  for (const m of code.matchAll(/\\(?:newtheorem|spnewtheorem|declaretheorem)\*?\s*(?:\[[^\]]*\]\s*)?\{([^}]+)\}/g)) th.add(m[1].trim());
-  for (const m of code.matchAll(/\\newtheorem\*?\s*\{([^}]+)\}/g)) th.add(m[1].trim());
-  if (!th.size) for (const t of STANDARD_THEOREMS) th.add(t);
-  const pr = new Set<string>(['proof']);
-  for (const m of code.matchAll(/\\(?:newenvironment|renewenvironment|NewDocumentEnvironment)\s*\{([^}]+)\}[^\n]*?\\begin\{proof\}/g)) pr.add(m[1].trim());
-  return { theoremEnvs: th, proofEnvs: pr };
+  return splitOptions(offeredKinds(preamble));
 }
-
-function stripCommentsKeepLines(s: string) {
-  return s.split('\n').map((l) => codeOf(l)).join('\n');
+export function splitOptions(offered: Offered): SplitOptions {
+  const proofEnvs = new Set([...offered.envs].filter(([, k]) => k === 'proof').map(([e]) => e));
+  return { theoremEnvs: offered.theorems, proofEnvs, offered };
 }
 
 /** A line without its %-comment. */
@@ -150,20 +145,10 @@ export function detectKind(source: string, opts: SplitOptions): { kind: string; 
     if (!whole) return { kind: 'paragraph', attrs: { env } };
     if (bare === 'restatable') {
       const r = restatableArgs(s);
-      if (r) return { kind: opts.theoremEnvs.has(r.type) ? r.type : 'paragraph', attrs: { env, theorem: r.type, restatable: r.name } };
+      if (r) return { kind: kindOfEnv(env, opts.offered) && opts.theoremEnvs.has(r.type) ? r.type : 'paragraph', attrs: { env, theorem: r.type, restatable: r.name } };
     }
-    let kind = 'paragraph';
-    if (['equation', 'displaymath', 'gather', 'multline', 'math'].includes(bare)) kind = 'equation';
-    else if (['align', 'alignat', 'flalign', 'eqnarray', 'xalignat'].includes(bare)) kind = 'align';
-    else if (['figure', 'wrapfigure', 'sidewaysfigure'].includes(bare)) kind = 'figure';
-    else if (['table', 'wraptable', 'sidewaystable'].includes(bare)) kind = 'table';
-    else if (['algorithm'].includes(bare)) kind = 'algorithm';
-    else if (bare === 'itemize' || bare === 'enumerate') kind = bare;
-    else if (bare === 'description') kind = 'itemize';
-    else if (bare === 'abstract') kind = 'abstract';
-    else if (bare === 'thebibliography') kind = 'bibliography';   // as doc/kinds.ts guessKind has it (the Files panel, the e2e)
-    else if (opts.proofEnvs.has(env) || opts.proofEnvs.has(bare)) kind = 'proof';
-    else if (opts.theoremEnvs.has(env) || opts.theoremEnvs.has(bare)) kind = bare;
+    const k = kindOfEnv(env, opts.offered);
+    const kind = k && k !== 'restatable' ? k : 'paragraph';
     return { kind, attrs: { env } };
   }
   return { kind: 'paragraph', attrs: {} };

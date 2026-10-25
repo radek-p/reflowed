@@ -335,7 +335,7 @@ const inMemory = (t: any) => t.doc.blocks.map((b: any) => `${b.kind}:${b.source}
   const { createResults } = await imp('app/src/doc/results.js');
   const { blockCacheKey } = await imp('app/src/doc/cache-key.js');
   const { splitMeta, blockSource } = await imp('app/src/meta/compile.ts');
-  const { guessKind, theoremKinds } = await imp('app/src/doc/kinds.ts');
+  const { guessKind, offeredKinds } = await imp('app/src/doc/kinds.ts');
   const { createRefs } = await imp('app/src/refs/index.ts');
   // the intro from its source (always in the checkout)
   const { buildIntroSeed } = await import('../samples/intro/seed-intro.ts');
@@ -357,12 +357,12 @@ const inMemory = (t: any) => t.doc.blocks.map((b: any) => `${b.kind}:${b.source}
     // the editor's earlier formula, written out: the key of each block from the same parts
     const pre = splitMeta(d.preamble.source);
     const preHash = hash(`${pre.preamble}\n${d.bib?.source ?? ''}`);
-    const thm = new Set(theoremKinds(d.preamble.source).map((t: any) => t.env));
+    const offered = offeredKinds(d.preamble.source);
     const keys = d.blocks.map((b: any) => {
       const want = blockCacheKey(backend, { source: blockSource(b.kind, b.source, pre), context: derived.contexts.get(b.id) ?? '' }, { salt: 'S', preHash, assets: derived.assetSig(b) });
       const got = derived.ck(b);
       n++; if (got !== want) { same = false; firstBad ||= `${d.id} ${b.id}`; }
-      if (derived.kindOf(b.source) !== guessKind(b.source, thm)) { same = false; firstBad ||= `kind ${b.id}`; }
+      if (derived.kindOf(b.source) !== guessKind(b.source, offered)) { same = false; firstBad ||= `kind ${b.id}`; }
       return got;
     });
     return new Set(keys);

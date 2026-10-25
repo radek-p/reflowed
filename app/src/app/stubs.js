@@ -100,7 +100,7 @@ export function memoryStore() {
       const e = { doc, blocks: new Map(), assets: new Map(), ops: [] };
       const list = init.blocks ?? [];
       const keys = keysFor(list.length);
-      list.forEach((b, i) => { const bid = b.id ?? ulid(); e.blocks.set(bid, { attrs: {}, file: 'main.tex', kind: guessKind(b.source), ...clone(b), id: bid, docId: id, pos: b.pos ?? keys[i], rev: 1, updatedAt: now }); });
+      list.forEach((b, i) => { const bid = b.id ?? ulid(); e.blocks.set(bid, { attrs: {}, file: 'main.tex', kind: guessKind(b.source, doc.preamble.source), ...clone(b), id: bid, docId: id, pos: b.pos ?? keys[i], rev: 1, updatedAt: now }); });
       doc.blockCount = e.blocks.size;
       docs.set(id, e);
       for (const a of init.assets ?? []) e.assets.set(a.asset.id ?? ulid(), { asset: { ...a.asset, bytes: a.data.length }, data: a.data });

@@ -5,7 +5,6 @@
 //
 //   const api = createTestApi(x)
 // @ts-check
-import { kindsFor } from '../doc/kinds.ts';
 import { pdfRequest } from './pdf-request.js';
 import { next } from './page-state.ts';
 import { advanced, setAdvanced } from '../settings/advanced.js';
@@ -46,7 +45,7 @@ export function createTestApi(x) {
     }) : []),
     counters: () => ({ ...x.counters, compiledIds: [...x.counters.compiledIds] }),
     resetCounters() { x.counters.requests = 0; x.counters.partsSent = 0; x.counters.mounts = 0; x.counters.compiledIds = []; },
-    kinds: () => kindsFor(x.S.doc?.preamble.source ?? '').map((/** @type {any} */ k) => ({ kind: k.env ?? k.kind, label: k.label })),
+    kinds: () => (x.S.doc ? x.derived.offered.kinds : []).map((/** @type {any} */ k) => ({ kind: k.env ?? k.kind, label: k.label })),   // the slash menu's
     edit: (id, caret) => x.enterEdit(id, null, caret ?? null),
     /** open block `id` in pane 'a' or 'b' (split view) */
     editIn: (pane, id, caret) => x.enterEdit(id, null, caret ?? null, null, null, pane),
