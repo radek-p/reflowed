@@ -118,10 +118,39 @@ const loadMs = Date.now() - t0;
     const active = document.querySelector('#panel-outline .ol-item.active')?.textContent ?? '';
     return { top, atEnd: p.scrollTop > 0 && p.scrollTop >= max - 2, active, scrollTop: p.scrollTop, max, h: p.clientHeight };
   });
+  // The row is right in every frame drawn from the click on: each frame's rows are read after its animation callbacks
+  // and layout, just before it is painted (a resize observer's turn; a read in the frame's animation callbacks, as a
+  // wait polling per frame does, can come before the pane measures its section in that frame). The wait below then
+  // needs the state the check reads: the heading placed and the row marked.
+  await page.evaluate(() => {
+    const w = window as any, probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;left:0;top:0;height:1px;opacity:0;pointer-events:none';
+    document.body.append(probe);
+    w.__w3Frames = { rows: [] as string[], on: false };
+    let n = 0;
+    const ro = new ResizeObserver(() => { if (w.__w3Frames.on) w.__w3Frames.rows.push((document.querySelector('#panel-outline .ol-item.active') as HTMLElement | null)?.dataset.id ?? ''); });
+    ro.observe(probe);
+    const tick = () => { probe.style.width = `${1 + (n++ % 2)}px`; if (!w.__w3Frames.done) requestAnimationFrame(tick); else { ro.disconnect(); probe.remove(); } };
+    requestAnimationFrame(tick);
+    document.addEventListener('click', () => { w.__w3Frames.on = true; }, { capture: true, once: true });
+  });
   await page.locator('#panel-outline .ol-item', { hasText: 'Omitted proofs' }).locator('button.ol-link').click();
-  await page.waitForFunction(() => { const id = (window as any).editorAPI.outline().find((o: any) => o.title === 'Omitted proofs').id; const r = document.querySelector(`.blk[data-id="${id}"]`)!.getBoundingClientRect(); const p = document.querySelector('[data-part="page"]') as HTMLElement; return r.top >= 0 && (r.top < 160 || p.scrollTop >= p.scrollHeight - p.clientHeight - 2); }, null, { timeout: 5000 }).catch(() => {});
+  await page.waitForFunction(() => {
+    const id = (window as any).editorAPI.outline().find((o: any) => o.title === 'Omitted proofs').id;
+    const r = document.querySelector(`.blk[data-id="${id}"]`)!.getBoundingClientRect(), p = document.querySelector('[data-part="page"]') as HTMLElement;
+    const active = (document.querySelector('#panel-outline .ol-item.active') as HTMLElement | null)?.dataset.id;
+    return r.top >= 0 && (r.top < 160 || p.scrollTop >= p.scrollHeight - p.clientHeight - 2) && active === id;
+  }, null, { timeout: 5000 }).catch(() => {});
   const at = await placed();
   check('outline: click scrolls to the section and marks it active', at.top >= 0 && (at.top < 160 || (at.atEnd && at.top < at.h)) && /Omitted proofs/.test(at.active), JSON.stringify(at));
+  await page.waitForFunction(() => (window as any).__w3Frames.rows.length >= 6, null, { timeout: 5000 }).catch(() => {});   // the landing's frames too
+  const frames = await page.evaluate(() => {
+    const w = window as any, id = w.editorAPI.outline().find((o: any) => o.title === 'Omitted proofs').id;
+    w.__w3Frames.done = true;
+    const rows: string[] = w.__w3Frames.rows, title = (r: string) => w.editorAPI.outline().find((o: any) => o.id === r)?.title ?? (r || '(none)');
+    return { n: rows.length, wrong: rows.map((r, i) => [i, r] as const).filter(([, r]) => r !== id).map(([i, r]) => `frame ${i}: ${title(r)}`) };
+  });
+  check('outline: the clicked section is the active row from the first frame drawn after the click', frames.n > 0 && frames.wrong.length === 0, `${frames.n} frames; ${frames.wrong.slice(0, 4).join(', ')}`);
   // the Outline's active row, the tab's crumb and the jump's target (the selected heading) name one section, also for
   // the last one: they were three answers (the Outline "3 Functors…", the crumb "References", the target)
   const agree = (title: string) => page.evaluate((t: string) => {
@@ -390,12 +419,18 @@ const loadMs = Date.now() - t0;
   await shot(p, '12-long-outline');
   await p.click('[data-side] [data-ptab="problems"]');
   await shot(p, '13-long-problems');
-  // the Ipe figure editor is removed: PDF figures typeset as images, with no "Edit figure"
+  // the Ipe figure editor is removed: PDF and raster figures typeset as images, with no "Edit figure" (only a
+  // drawn SVG figure has one). The figures are the figure blocks (however their source places the picture: the
+  // intro through a macro), their pictures the document's image files.
   {
-    const pdfFigs = await p.evaluate(() => (window as any).editorAPI.blocks().filter((b: any) => /\\includegraphics/.test(b.source) && !/\.svg\}/.test(b.source))
-      .map((b: any) => ({ id: b.id, ok: b.state === 'ok' || b.state === 'pending' || b.mounted })));
+    const figs = await p.evaluate(() => {
+      const api = (window as any).editorAPI;
+      const images = (api.currentDoc()?.assets ?? []).map((a: any) => a.name).filter((n: string) => /\.(png|jpe?g|pdf|svg)$/i.test(n));
+      return { blocks: api.blocks().filter((b: any) => b.kind === 'figure').length, images: images.filter((n: string) => !/\.svg$/i.test(n)).length, svg: images.filter((n: string) => /\.svg$/i.test(n)).length };
+    });
     const editBtns = await p.locator('.blk .fig-edit').count();
-    check('long: its pictures are there and have no Edit figure button', pdfFigs.length >= 7 && editBtns === 0, `${pdfFigs.length} PDF figures, ${editBtns} buttons`);
+    check('long: its pictures are there and have no Edit figure button', figs.blocks >= 7 && figs.images >= 7 && figs.svg === 0 && editBtns === 0,
+      `${figs.blocks} figures, ${figs.images} PDF or raster files, ${figs.svg} SVG, ${editBtns} buttons`);
   }
   // versions from the menu
   await p.click('#btn-doc-menu');
