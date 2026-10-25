@@ -6,7 +6,10 @@
 //
 //   const snap = first(els)                     visual tops (transforms of a running motion included)
 //   stop(container)                             a running motion of this list ends where it is now
-//   const m = play(container, snap, els, box)   { finished: Promise, moved: number }
+//   const m = play(container, snap, els, box[, { extra }])   { finished: Promise, moved: number, anims, extra }
+//     extra(): the caller's own animations (a fade), started with the slide, after every read: an animation started
+//     on an element changes its style, and a layout read after it lays the page out again (one layout per moving
+//     block, a block's whole SVG text among it)
 export const DURATION = 220;
 export const EASING = 'cubic-bezier(0.2, 0, 0, 1)';
 import { reduced } from './reduced.ts';
@@ -33,13 +36,11 @@ export function stop(container) {
  * @param {Map<Element, number>} snap
  * @param {Iterable<Element>} els
  * @param {{ top: number, bottom: number }} box   the pane's visible box
- * @param {{ duration?: number, easing?: string, extra?: Animation[] }} [o]
+ * @param {{ duration?: number, easing?: string, extra?: () => Animation[] }} [o]
  */
 export function play(container, snap, els, box, o = {}) {
-  const anims = [...(o.extra ?? [])];
-  let moved = 0;
+  const go = [];                                     // [el, dy]: every Last read first, then the animations
   if (!reduced()) {
-    const opts = { duration: o.duration ?? DURATION, easing: o.easing ?? EASING };
     for (const el of els) {
       const old = snap.get(el);
       if (old == null || !el.isConnected) continue;
@@ -48,11 +49,14 @@ export function play(container, snap, els, box, o = {}) {
       if (Math.abs(d) < 0.5) continue;
       const lo = Math.min(old, r.top), hi = Math.max(old, r.top) + r.height;
       if (hi < box.top || lo > box.bottom) continue;
-      anims.push(el.animate([{ transform: `translateY(${d}px)` }, { transform: 'none' }], opts));
-      moved++;
+      go.push([el, d]);
     }
   }
+  const extra = o.extra?.() ?? [];
+  const opts = { duration: o.duration ?? DURATION, easing: o.easing ?? EASING };
+  const anims = [...extra, ...go.map(([el, d]) => el.animate([{ transform: `translateY(${d}px)` }, { transform: 'none' }], opts))];
+  const moved = go.length;
   running.set(container, anims);
   const finished = Promise.all(anims.map((a) => a.finished.catch(() => null))).then(() => { if (running.get(container) === anims) running.delete(container); });
-  return { finished, moved, anims };
+  return { finished, moved, anims, extra };
 }

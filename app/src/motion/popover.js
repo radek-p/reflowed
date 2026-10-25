@@ -16,7 +16,9 @@
 //        holdPopover).
 // prefers-reduced-motion: the same change and scroll, no animation.
 //
-//   const m = openMotion(P, sf, { change, caret, float })   -> { finished, dy, moved }
+//   const m = openMotion(P, sf, { change, caret, float })   -> { finished, dy, moved, renderH }
+//     renderH: the result's height in its new layout, read with the other rects before any animation starts (an
+//     animation on a block changes its style: a read after it lays the page out in this task); null when not read
 //   const m = closeMotion(P, sf, { change, teardown })      -> { finished, finish(), ended() }
 //   P: { box(), range(), moving(), scrollBy(dy), keeper, relayout?() }   (panes/pane.js + the core)
 import { first, stop, play, reduced, DURATION, EASING } from './flip.js';
@@ -45,20 +47,20 @@ export function openMotion(P, sf, o) {
   const now = sf.root.getBoundingClientRect().top;
   const shows = !sf.render.hidden && sf.render.getClientRects().length > 0;
   const c = shows ? o.caret?.() ?? null : null;
+  const render = shows ? rect(sf.render) : null;
   const dy = shows && !sf.source.hidden ? place({
-    box, pop: rect(sf.source), render: rect(sf.render), caret: c ? { top: c.top, bottom: c.bottom } : null,
+    box, pop: rect(sf.source), render, caret: c ? { top: c.top, bottom: c.bottom } : null,
     float, base: now - seen, range: P.range(),
   }) : Math.max(P.range().min, Math.min(P.range().max, now - seen));
   if (Math.abs(dy) >= 0.5) P.scrollBy(dy);
   o.onPlaced?.(dy);
-  const extra = [];
-  if (!reduced() && !sf.source.hidden) extra.push(sf.source.animate([{ opacity: 0 }, { opacity: 1 }], { duration: FADE_IN_MS, easing: FADE_EASING }));
-  const m = play(container(sf), snap, els, box, { extra });
+  const fade = () => (!reduced() && !sf.source.hidden ? [sf.source.animate([{ opacity: 0 }, { opacity: 1 }], { duration: FADE_IN_MS, easing: FADE_EASING })] : []);
+  const m = play(container(sf), snap, els, box, { extra: fade });
   sf.root.classList.add('rtx-moving');
   const finished = m.finished.then(() => { if (!sf.root._motion || sf.root._motion === finished) sf.root.classList.remove('rtx-moving'); });
   sf.root._motion = finished;
   P.keeper?.quiet?.(finished);
-  return { finished, dy, moved: m.moved };
+  return { finished, dy, moved: m.moved, renderH: render ? render.bottom - render.top : null };
 }
 
 /**
@@ -105,12 +107,14 @@ export function closeMotion(P, sf, o) {
     pop.style.setProperty('--leave-y', `${was.top - at.top}px`);
   }
   const box = P.box();
-  const extra = shown ? [pop.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FADE_MS, easing: FADE_EASING, fill: 'forwards' })] : [];
   // the block slides (the page scrolled to keep the one below): the popover in it stays where it was seen, the
   // block's slide undone on it (the same timing: `translate` composes with its transform)
   const slid = shown && snap.has(sf.root) ? snap.get(sf.root) - sf.root.getBoundingClientRect().top : 0;
-  if (Math.abs(slid) >= 0.5) extra.push(pop.animate([{ translate: `0 ${-slid}px` }, { translate: '0 0' }], { duration: DURATION, easing: EASING }));
-  const m = play(container(sf), snap, els, box, { extra });
+  const m = play(container(sf), snap, els, box, { extra: () => !shown ? [] : [
+    pop.animate([{ opacity: 1 }, { opacity: 0 }], { duration: FADE_MS, easing: FADE_EASING, fill: 'forwards' }),
+    ...(Math.abs(slid) >= 0.5 ? [pop.animate([{ translate: `0 ${-slid}px` }, { translate: '0 0' }], { duration: DURATION, easing: EASING })] : []),
+  ] });
+  const extra = m.extra;
   let ended = false;
   const end = () => {
     if (ended) return;

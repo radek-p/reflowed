@@ -188,7 +188,7 @@ export function createSession(core, pane) {
     });
     s.motion = m.finished;
     V()?.pulse?.(sf.root);                            // both current lines pulse once
-    holdPopover(sf);
+    holdPopover(sf, m.renderH);                       // the height the motion read (no layout read after its animations)
     return true;
   }
   /** open with no motion and no scroll: the editor of a pane that closed goes on here, as it was (o.carry: its
@@ -249,11 +249,12 @@ export function createSession(core, pane) {
 
   /** stacked: the source popover keeps its place in the window while the preview above it changes height
    *  (a result with another line count): the page scrolls by the change, after layout and before paint, so only the
-   *  preview moves. Not while the popover floats (it is sticky then), nor in another layout. */
-  function holdPopover(sf) {
+   *  preview moves. Not while the popover floats (it is sticky then), nor in another layout. h0: the preview's height
+   *  now, when the caller read it already. */
+  function holdPopover(sf, h0 = null) {
     s.ro?.disconnect();
     if (typeof ResizeObserver === 'undefined') return;
-    let h = sf.render.getBoundingClientRect().height;
+    let h = h0 ?? sf.render.getBoundingClientRect().height;
     const check = () => {
       const now = sf.render.getBoundingClientRect().height, d = now - h;
       h = now;
