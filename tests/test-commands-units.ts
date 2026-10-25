@@ -33,16 +33,20 @@ const check = (name: string, ok: boolean, detail: unknown = '') => { n++; if (!o
 }
 
 // ── the shortcuts dialog: its rows, as the old hand-kept table listed them ──
-for (const MOD of ['⌘', 'Ctrl']) {
+// (keys with a modifier as the workbench writes its own: ⇧⌘Z on macOS, Ctrl+Shift+Z on Windows and Linux, never "CtrlZ")
+for (const [platform, mod, sh, alt, enter] of [['mac', '⌘', '⇧⌘', '⌥', '⌘Enter'], ['other', 'Ctrl+', 'Ctrl+Shift+', 'Alt+', 'Ctrl+Enter']]) {
   const old = [
-    ['↑ ↓ or j k', 'Select the block above / below'], ['↵', 'Edit the selected block'], ['Esc', 'Leave the editor (the block stays selected)'],
-    ['⌥↑ ⌥↓', 'Move the block'], [`${MOD}↵`, 'Split the block at the caret'], ['⌫ at the start', 'Merge with the block above'],
-    ['⇧↵', 'New block below'], ['/', 'Block types (in an empty block, or with a block selected)'], [`${MOD}D`, 'Duplicate'], ['⌫ / Del', 'Delete the selected block'],
-    [`${MOD}Z  ${MOD}⇧Z`, 'Undo / redo block changes'], [`${MOD}F`, 'Find and replace'], [`${MOD}⇧F`, 'Focus mode'], [`${MOD}\\`, 'Sidebar'], [`${MOD}B`, 'Bold, in a block\'s source (elsewhere: the sidebar)'],
-    ['F12 or ' + MOD + '-click', 'Go to the label or bibliography entry'],
+    ['↑ ↓ or j k', 'Select the block above / below'], ['Enter', 'Edit the selected block'], ['Esc', 'Leave the editor (the block stays selected)'],
+    [`${alt}↑ ${alt}↓`, 'Move the block'], [enter, 'Split the block at the caret'], ['⌫ at the start', 'Merge with the block above'],
+    [platform === 'mac' ? '⇧Enter' : 'Shift+Enter', 'New block below'], ['/', 'Block types (in an empty block, or with a block selected)'], [`${mod}D`, 'Duplicate'], ['⌫ / Del', 'Delete the selected block'],
+    [`${mod}Z  ${sh}Z`, 'Undo / redo block changes'], [`${mod}F`, 'Find and replace'], [`${sh}F`, 'Focus mode'], [`${mod}\\`, 'Sidebar'], [`${mod}B`, 'Bold, in a block\'s source (elsewhere: the sidebar)'],
+    [`F12 or ${platform === 'mac' ? '⌘' : 'Ctrl'}-click`, 'Go to the label or bibliography entry'],
   ];
-  const rows = createCommands({ context: () => ({}) }).define(editorCommands(MOD)).shortcuts();
-  check(`shortcuts (${MOD}): the dialog's rows are the commands', equal to the old hand-kept table`, JSON.stringify(rows) === JSON.stringify(old), rows);
+  const C = createCommands({ context: () => ({}) }).define(editorCommands(platform));
+  const rows = C.shortcuts();
+  check(`shortcuts (${platform}): the dialog's rows are the commands', equal to the old hand-kept table`, JSON.stringify(rows) === JSON.stringify(old), rows);
+  const menu = ['block.duplicate', 'doc.undo', 'find.open', 'view.focusMode', 'block.moveUp', 'block.moveDown'].map((id) => C.menuItem(id).shortcut);
+  check(`shortcuts (${platform}): the menus' keys`, JSON.stringify(menu) === JSON.stringify([`${mod}D`, '', `${mod}F`, `${sh}F`, `${alt}↑`, `${alt}↓`]), menu);
 }
 
 // ── the editor's commands on a DocSession (Memory store) ──
@@ -63,7 +67,7 @@ for (const MOD of ['⌘', 'Ctrl']) {
     enterEdit: (bid: string, _e: any, caret: any) => edited.push(`${bid}@${caret}`), parentAt: () => null,
     selectStep: (from: number, dir: number) => selected.push(S.doc.blocks[from + dir]?.id), selectIndex: (k: number) => selected.push(S.doc.blocks[k]?.id), slashBelow: noop,
     page: new Proxy({ can: { versions: () => false, resetSeed: () => false, importTex: () => true, exportZip: () => true, exportPdf: () => false } }, { get: (t: any, k: string) => t[k] ?? ((...a: any[]) => page.push(`${k}${a.length ? `(${JSON.stringify(a[0])})` : ''}`)) }) });
-  const C = createCommands({ context: ctx }).define(editorCommands('⌘'));
+  const C = createCommands({ context: ctx }).define(editorCommands('mac'));
   const text = () => S.doc.blocks.map((b: any) => b.source).join('|');
   const start = text();
   const [h, p1, p2] = S.doc.blocks.map((b: any) => b.id);

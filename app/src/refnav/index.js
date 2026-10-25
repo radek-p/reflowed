@@ -33,9 +33,10 @@ import { html, render, Button } from '../design/ui/index.js';
 import { pushLayer } from '../design/ui/layers.js';
 import { page, onChange } from '../app/page-state.ts';
 import { reduced } from '../motion/reduced.ts';
+import { isMacPlatform, shortcutLabel } from '../../../workbench/src/keys.ts';
 
 const HOVER_MS = 300, CLOSE_MS = 250;
-const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const BACK_KEY = shortcutLabel(isMacPlatform() ? 'meta+[' : 'alt+arrowleft');   // the Back pill's title names the platform's usual one
 const CMD_KIND = { ref: 'ref', eqref: 'ref', pageref: 'ref', Cref: 'Cref', cref: 'cref', autoref: 'autoref', Autoref: 'autoref' };
 
 export function installRefNav({ api, numberingState, root } = {}) {
@@ -136,8 +137,8 @@ export function installRefNav({ api, numberingState, root } = {}) {
     clearTimeout(openTimer); clearTimeout(closeTimer);
     if (!u?.els[0]?.isConnected) return;
     const rects = unitRects(u);
-    if (u.kind === 'cite') card.openCite(u, rects, { entries: entriesOf(u), focus, mac: MAC, hasList: !!bibBlock() });
-    else await card.open(u, rects, { targets: targetsOf(u), focus, mac: MAC });
+    if (u.kind === 'cite') card.openCite(u, rects, { entries: entriesOf(u), focus, hasList: !!bibBlock() });
+    else await card.open(u, rects, { targets: targetsOf(u), focus });
     if (!same(card.unit, u)) return;
     describer = u.els[0];
     describer.setAttribute('aria-describedby', 'rn-card');
@@ -278,7 +279,7 @@ export function installRefNav({ api, numberingState, root } = {}) {
     document.body.append(host);
     let shown = false, on = false, hideT = 0;
     const draw = () => render(html`<${Button} size="lg" pill icon="back" class=${`rn-back${on ? ' rn-on' : ''}`} hidden=${!shown}
-      title=${`Back to where you were (${MAC ? '⌘[' : 'Alt+←'})`} aria-label="Back to where you were" onClick=${() => back()}>Back<//>`, host);
+      title=${`Back to where you were (${BACK_KEY})`} aria-label="Back to where you were" onClick=${() => back()}>Back<//>`, host);
     draw();
     const layer = pushLayer({ el: host.firstElementChild, kind: 'pill' });     // its place in the one stacking order
     root.onDispose(() => { clearTimeout(hideT); layer.remove(); render(null, host); host.remove(); });

@@ -118,7 +118,7 @@ export function EditorSection({ g }: { g: Gallery }) {
       <div class="gal-cells gal-cells--top">${root ? panels.map((v: ViewDef) => html`<${Cell} label=${typeof v.title === 'string' ? v.title : v.id}><${SidePanel} root=${root} v=${v} /><//>`) : null}</div>
     <//>
     <${Group} title="View options" g="view" note="view/popover.js: the panel the top bar's View button opens, on the page's View options.">
-      ${root ? html`<div class="rtx-vp ui-popover gal-static gal-vp" role="dialog" aria-label="View options"><${ViewPanel} view=${g.services.view} mod="⌘" alt="⌥" /></div>` : null}
+      ${root ? html`<div class="rtx-vp ui-popover gal-static gal-vp" role="dialog" aria-label="View options"><${ViewPanel} view=${g.services.view} /></div>` : null}
     <//>
   <//>`;
 }

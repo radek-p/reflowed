@@ -23,10 +23,11 @@ import { installFigureColours, currentTheme, shown } from './colours.js';
 import { injectStyle } from './style.js';
 import { App } from './ui.js';
 import { reduced } from '../motion/reduced.ts';
+import { isMacPlatform } from '../../../workbench/src/keys.ts';
 
 const HANDLE = 7;          // handle size, CSS px
 const SNAP = 5;            // snapping distance, CSS px
-const isMac = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? '');
+const isMac = isMacPlatform();
 
 export async function openSvgFigureEditor(input = {}, opts = {}) {
   installFigureColours();

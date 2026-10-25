@@ -11,8 +11,10 @@
 //                          focusSection(id | null, pane?) (section focus: docview/focus.js), gotoDefinition(k), can: { versions, resetSeed, importTex, exportZip, exportPdf, plainTitle }
 //
 // The rows of the shortcuts dialog are the commands with `keys` and `help`, in the order defined here (the order of
-// the table app.js kept by hand before).
-/** @param {string} MOD the platform's modifier sign ('⌘' or 'Ctrl') */
+// the table app.js kept by hand before). A key with a modifier is written as the workbench writes its own
+// (workbench/src/keys.ts shortcutLabel: ⇧⌘Z on macOS, Ctrl+Shift+Z elsewhere).
+import { shortcutLabel } from '../../../workbench/src/keys.ts';
+
 /** the focused block editor's selection wrapped in `open` … `close` (one typing step: the document's history);
  *  false when no block editor has the focus (the key goes on) */
 function wrapSelection(view, open, close) {
@@ -21,25 +23,28 @@ function wrapSelection(view, open, close) {
   view.dispatch({ changes: { from: r.from, to: r.to, insert: `${open}${text}${close}` }, selection: { anchor: r.from + open.length, head: r.from + open.length + text.length }, userEvent: 'input.type' });
   return true;
 }
-export function editorCommands(MOD) {
+/** @param {import('../../../workbench/src/keys.ts').Platform} [platform] whose keys the labels name (default: the page's) */
+export function editorCommands(platform) {
+  /** @param {string} k */
+  const key = (k) => shortcutLabel(k, platform);
   const at = (c, id) => c.S.model.indexOf(id);
   const last = (c) => c.S.doc.blocks.length - 1;
   return [
     // ── the rows of the shortcuts dialog, in its order ──
     { id: 'select.down', label: 'Select the block below', keys: '↑ ↓ or j k', help: 'Select the block above / below',
       run: (c, { from }) => c.selectStep(from, 1) },
-    { id: 'block.edit', label: 'Edit source', key: 'edit', shortcut: '↵', keys: '↵', help: 'Edit the selected block',
+    { id: 'block.edit', label: 'Edit source', key: 'edit', shortcut: key('enter'), keys: key('enter'), help: 'Edit the selected block',
       run: (c, { id, caret = null, pane = null }) => c.enterEdit(id, null, caret, null, null, pane) },
     { id: 'editor.leave', label: 'Leave the editor', keys: 'Esc', help: 'Leave the editor (the block stays selected)',
       run: (c, { session, id }) => { session.leave(); c.select(id, { scroll: false }); return true; } },   // the block was in view: nothing scrolls on a close
-    { id: 'block.moveUp', label: 'Move up', key: 'up', shortcut: '⌥↑', keys: '⌥↑ ⌥↓', help: 'Move the block', edits: true,
+    { id: 'block.moveUp', label: 'Move up', key: 'up', shortcut: key('alt+arrowup'), keys: `${key('alt+arrowup')} ${key('alt+arrowdown')}`, help: 'Move the block', edits: true,
       // no `when`: a key at the edge still asks (nesting may move a paragraph out of its container); the menu disables it
       run: (c, { id }) => c.S.ops.moveBlock(id, at(c, id) - 1) },
-    { id: 'block.split', label: 'Split the block at the caret', keys: `${MOD}↵`, help: 'Split the block at the caret', edits: true,
+    { id: 'block.split', label: 'Split the block at the caret', keys: key('mod+enter'), help: 'Split the block at the caret', edits: true,
       run: (c, { id, offset, edit = false, pane = null }) => c.S.ops.splitBlock(id, offset, { edit, pane }) },
     { id: 'block.merge', label: 'Merge with the block above', key: 'merge', keys: '⌫ at the start', help: 'Merge with the block above', edits: true,
       when: (c, { id }) => at(c, id) > 0, run: (c, { id, edit = false, pane = null }) => c.S.ops.mergeBlock(id, { edit, pane }) },
-    { id: 'block.insertBelow', label: 'New block below', keys: '⇧↵', help: 'New block below', edits: true,
+    { id: 'block.insertBelow', label: 'New block below', keys: key('shift+enter'), help: 'New block below', edits: true,
       run: (c, { id, kind = 'paragraph', source = '', caret = null, pane = null, edit = true }) => {
         const k = at(c, id) + 1;
         const nb = c.S.ops.insertBlock(k, kind, source, c.parentAt(k));
@@ -48,29 +53,29 @@ export function editorCommands(MOD) {
       } },
     { id: 'block.kinds', label: 'Block types', keys: '/', help: 'Block types (in an empty block, or with a block selected)', edits: true,
       run: (c, { id, pane = null }) => c.slashBelow(id, pane) },
-    { id: 'block.duplicate', label: 'Duplicate', key: 'duplicate', shortcut: `${MOD}D`, keys: `${MOD}D`, help: 'Duplicate', edits: true,
+    { id: 'block.duplicate', label: 'Duplicate', key: 'duplicate', shortcut: key('mod+d'), keys: key('mod+d'), help: 'Duplicate', edits: true,
       run: (c, { id }) => c.S.ops.duplicateBlock(id) },
     { id: 'block.delete', label: 'Delete', key: 'delete', shortcut: '⌫', keys: '⌫ / Del', help: 'Delete the selected block', edits: true,
       run: (c, { id, quiet = false }) => c.S.ops.removeBlock(id, { quiet }) },
-    { id: 'doc.undo', label: 'Undo', keys: `${MOD}Z  ${MOD}⇧Z`, help: 'Undo / redo block changes', edits: true,
+    { id: 'doc.undo', label: 'Undo', keys: `${key('mod+z')}  ${key('mod+shift+z')}`, help: 'Undo / redo block changes', edits: true,
       run: (c) => !!c.S.history.undo() },
-    { id: 'find.open', label: 'Find and replace', key: 'find', shortcut: `${MOD}F`, keys: `${MOD}F`, help: 'Find and replace',
+    { id: 'find.open', label: 'Find and replace', key: 'find', shortcut: key('mod+f'), keys: key('mod+f'), help: 'Find and replace',
       run: (c) => c.page.find() },
-    { id: 'view.focusMode', label: 'Focus mode', key: 'focus', shortcut: `${MOD}⇧F`, keys: `${MOD}⇧F`, help: 'Focus mode',
+    { id: 'view.focusMode', label: 'Focus mode', key: 'focus', shortcut: key('mod+shift+f'), keys: key('mod+shift+f'), help: 'Focus mode',
       run: (c, input) => c.page.toggleFocus(input?.on) },
     // (section focus) pane `pane` (the focused one) narrowed to heading `id`'s section; id null: the whole document
     { id: 'view.sectionFocus', label: 'Focus on a section', run: (c, input) => c.page.focusSection(input?.id ?? null, input?.pane) },
-    { id: 'view.sidebar', label: 'Sidebar', keys: `${MOD}\\`, help: 'Sidebar', run: (c) => c.page.toggleSidebar() },
+    { id: 'view.sidebar', label: 'Sidebar', keys: key('mod+\\'), help: 'Sidebar', run: (c) => c.page.toggleSidebar() },
     // Ctrl/⌘B in a block's source: \textbf{…} around the selection (elsewhere the key shows or hides the sidebar)
-    { id: 'editor.bold', label: 'Bold', keys: `${MOD}B`, help: 'Bold, in a block\'s source (elsewhere: the sidebar)', edits: true,
+    { id: 'editor.bold', label: 'Bold', keys: key('mod+b'), help: 'Bold, in a block\'s source (elsewhere: the sidebar)', edits: true,
       run: (c) => wrapSelection(c.editing?.()?.editor?.view, '\\textbf{', '}') },
-    { id: 'nav.definition', label: 'Go to the definition', keys: `F12 or ${MOD}-click`, help: 'Go to the label or bibliography entry',
+    { id: 'nav.definition', label: 'Go to the definition', keys: `F12 or ${key('mod')}-click`, help: 'Go to the label or bibliography entry',
       run: (c, { target }) => c.page.gotoDefinition(target) },
     // ── no row of their own ──
     { id: 'select.up', label: 'Select the block above', run: (c, { from }) => c.selectStep(from, -1) },
     { id: 'select.first', label: 'Select the first block', run: (c) => c.selectIndex(0) },
     { id: 'select.last', label: 'Select the last block', run: (c) => c.selectIndex(last(c)) },
-    { id: 'block.moveDown', label: 'Move down', key: 'down', shortcut: '⌥↓', edits: true,
+    { id: 'block.moveDown', label: 'Move down', key: 'down', shortcut: key('alt+arrowdown'), edits: true,
       run: (c, { id }) => c.S.ops.moveBlock(id, at(c, id) + 1) },
     { id: 'doc.redo', label: 'Redo', edits: true, run: (c) => !!c.S.history.redo() },
     // what editorAPI's mutating calls do (tests: via 'test'), each one undo step but setPreamble's

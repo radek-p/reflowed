@@ -20,6 +20,7 @@
 import { html, render, ensureStyles, Button } from '../design/ui/index.js';
 import { pushLayer } from '../design/ui/layers.js';
 import { viewBox } from '../design/ui/view-box.ts';
+import { shortcutLabel } from '../../../workbench/src/keys.ts';
 
 const MAX_H = 240;
 
@@ -82,7 +83,7 @@ export function createCard({ numberingState, sourceOf, renderOf, onGo, onAction,
     body().scrollTop = 0;
   }
 
-  async function open(u, rect, { targets, focus = false, mac = false }) {
+  async function open(u, rect, { targets, focus = false }) {
     const t = ++token;
     unit = u;
     unmount();
@@ -92,7 +93,7 @@ export function createCard({ numberingState, sourceOf, renderOf, onGo, onAction,
     const name = first?.info ? cardTitle(first.info) : 'Undefined reference';
     const go = targets.slice(0, 4).filter((tg) => tg.blockId).map((tg) => ({ label: tg.label, text: targets.length > 1 ? `Go to ${cardTitle(tg.info)}` : 'Go to' }));
     v = { open: true, kind: 'ref', actions: [], entries: null, title: targets.length > 1 ? `${name} and ${targets.length - 1} more` : name, keys: u.labels.join(', '), go,
-      hint: go.length ? `${mac ? '⌘' : 'Ctrl'}-click to jump · click to edit` : 'Click to edit the reference',
+      hint: go.length ? `${shortcutLabel('mod')}-click to jump · click to edit` : 'Click to edit the reference',
       empty: first?.blockId ? null : first?.info ? 'This label is not in a block of the document.' : `No \\label{${u.labels[0] ?? ''}} in the document.`,
       source: null };
     draw();
@@ -104,7 +105,7 @@ export function createCard({ numberingState, sourceOf, renderOf, onGo, onAction,
   }
 
   /** a citation: its entries (refsState().bib), "Show in References" and "Go to the reference list" */
-  function openCite(u, rect, { entries, focus = false, mac = false, hasList = true }) {
+  function openCite(u, rect, { entries, focus = false, hasList = true }) {
     ++token;
     unit = u;
     unmount();
@@ -114,7 +115,7 @@ export function createCard({ numberingState, sourceOf, renderOf, onGo, onAction,
     v = { open: true, kind: 'cite', title: `Citation ${u.text.replace(/\s+/g, ' ').trim()}`, keys: '', go: [], source: null,
       empty: entries.length ? null : 'No keys in this citation.', entries,
       actions: [{ id: 'show-refs', text: 'Show in References' }, ...(hasList ? [{ id: 'goto-list', text: 'Go to the reference list' }] : [])],
-      hint: known.length && hasList ? `${mac ? '⌘' : 'Ctrl'}-click: the reference list · click to edit` : 'Click to edit the citation' };
+      hint: known.length && hasList ? `${shortcutLabel('mod')}-click: the reference list · click to edit` : 'Click to edit the citation' };
     draw();
     place(rect, u.els?.[0] ?? null);
     if (focus) (el.querySelector('.rn-act') ?? el).focus();

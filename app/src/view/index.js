@@ -24,6 +24,7 @@ import { decide, applyLayout, clearLayout, markCaret, slide, caretMap, keepCaret
 import { page, onChange } from '../app/page-state.ts';
 import { activeRoot, editorRoots } from '../app/editor-root.ts';
 import { reduced } from '../motion/reduced.ts';
+import { shortcutLabel } from '../../../workbench/src/keys.ts';
 
 export const COLOR_MAP = 'editor';
 // TeX's colours per theme (the viewer's colour maps: its README, Theming).
@@ -47,8 +48,6 @@ export const EDITOR_COLOURS = {
     '#d9d9db': ['#000000', 15] },
 };
 
-const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
-const MOD = isMac ? '⌘' : 'Ctrl+', ALT = isMac ? '⌥' : 'Alt+';
 
 /** @param {{ notes?: object | null }} [o] */
 export async function installView({ notes = null } = {}) {
@@ -258,7 +257,7 @@ export async function installView({ notes = null } = {}) {
    *  @param {{ widths?: (() => { transition(change: () => unknown, o: { animate: boolean }): unknown, restyle(): unknown } | null) | null }} [o] */
   const attach = (r, { widths = null } = {}) => {
     if (!r || attached.has(r)) return () => {};
-    const b = mountViewButton(r, { title: `View: width, text size, colours (${MOD}${ALT}V)`, onClick: (el) => pop.toggle(el) });   // on the kit: view-button.js
+    const b = mountViewButton(r, { title: `View: width, text size, colours (${shortcutLabel('mod+alt+v')})`, onClick: (el) => pop.toggle(el) });   // on the kit: view-button.js
     const entry = { b, widths };
     attached.set(r, entry);
     const offs = [onChange(r.state.widths, (w) => onWidths(r, w)), onChange(r.state.displayed, onDisplayed)];
@@ -308,7 +307,7 @@ export async function installView({ notes = null } = {}) {
     reset() { try { localStorage.removeItem('rtx-editor.view'); } catch { /* */ } Object.assign(s, DEFAULTS); set({}); },
     SLIDER,
   };
-  pop = createPopover(view, { mod: MOD, alt: ALT });
+  pop = createPopover(view);
 
   // ⌥⌘= ⌥⌘− ⌥⌘0 (Ctrl+Alt on Windows/Linux): text size; ⌥⌘V: the popover. Not ⌘= / ⌘−:
   // browser zoom stays the reader's (it scales the chrome too, which low-vision readers rely on)

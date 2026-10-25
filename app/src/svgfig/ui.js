@@ -11,10 +11,9 @@ import htm from 'htm';
 import { SOLIDS, FILLS, shown } from './colours.js';
 import { describe, walk } from './model.js';
 import { Icon as Glyph, ICON_STROKE, ICON_VIEWBOX } from '../design/ui/icon-set.ts';
+import { shortcutLabel } from '../../../workbench/src/keys.ts';   // a key as people read it (⇧⌘Z, Ctrl+Shift+Z)
 
 const html = htm.bind(h);
-const isMac = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? '');
-const MOD = isMac ? '⌘' : 'Ctrl+';
 
 // the icons: the one registry's (design/ui/icon-set.ts: our names → Lucide), drawn with the figure editor's class
 const Icon = ({ name, size = 18 }) => Glyph({ name, size, class: 'svf-ic' });
@@ -37,17 +36,17 @@ function TopBar({ ed }) {
     <${FigureSize} ed=${ed}/>
     <div class="svf-status" aria-live="polite">${S.pending.value ? html`<span class="svf-dot"></span>Typesetting…` : errs ? html`<span class="svf-err">${errs} text${errs > 1 ? 's' : ''} did not compile</span>` : null}</div>
     <div class="svf-group">
-      <${Btn} icon=${'undo'} label=${`Undo (${MOD}Z)`} on=${ed.undo} disabled=${!S.canUndo.value} data-act="undo"/>
-      <${Btn} icon=${'redo'} label=${`Redo (${MOD}⇧Z)`} on=${ed.redo} disabled=${!S.canRedo.value} data-act="redo"/>
+      <${Btn} icon=${'undo'} label=${`Undo (${shortcutLabel('mod+z')})`} on=${ed.undo} disabled=${!S.canUndo.value} data-act="undo"/>
+      <${Btn} icon=${'redo'} label=${`Redo (${shortcutLabel('mod+shift+z')})`} on=${ed.redo} disabled=${!S.canRedo.value} data-act="redo"/>
     </div>
     <div class="svf-group svf-zoom">
       <${Btn} icon=${'minus'} label="Zoom out" on=${() => ed.setZoom(S.zoom.value / 1.25)}/>
-      <button type="button" class="svf-btn svf-zoomval" title=${`Fit (${MOD}0)`} onClick=${ed.fit}>${z}%</button>
+      <button type="button" class="svf-btn svf-zoomval" title=${`Fit (${shortcutLabel('mod+0')})`} onClick=${ed.fit}>${z}%</button>
       <${Btn} icon=${'plus'} label="Zoom in" on=${() => ed.setZoom(S.zoom.value * 1.25)}/>
     </div>
     <div class="svf-group">
       <button type="button" class="svf-btn svf-text-btn" data-act="cancel" onClick=${() => ed.finish(false)}>Cancel</button>
-      <button type="button" class="svf-btn svf-text-btn svf-primary" data-act="done" title=${`Save the figure (${MOD}S)`} onClick=${() => ed.finish(true)}>Done</button>
+      <button type="button" class="svf-btn svf-text-btn svf-primary" data-act="done" title=${`Save the figure (${shortcutLabel('mod+s')})`} onClick=${() => ed.finish(true)}>Done</button>
     </div>
   </header>`;
 }
@@ -210,7 +209,7 @@ function TextSource({ ed, o }) {
   useEffect(() => { if (editing && ref.current) { ref.current.focus(); const n = ref.current.value.length; ref.current.setSelectionRange(n, n); } }, [editing]);
   const box = o.box != null;
   return html`<div class="svf-sec">
-    <div class="svf-sec-head">LaTeX <span class="svf-hint">${box ? `${MOD}Enter` : 'Enter'} to finish</span></div>
+    <div class="svf-sec-head">LaTeX <span class="svf-hint">${box ? shortcutLabel('mod+enter') : 'Enter'} to finish</span></div>
     <textarea ref=${ref} class="svf-src" rows=${box ? 3 : 1} spellcheck="false" placeholder=${box ? 'A paragraph of LaTeX…' : 'LaTeX, e.g. $G_n$'} value=${o.src}
       onFocus=${() => { if (ed.S.editing.value !== o.id) ed.beginTextEdit(o.id); }}
       onInput=${(e) => ed.setTextSource(o.id, e.currentTarget.value)}
@@ -285,18 +284,18 @@ function Popover({ ed }) {
       <${Opacity} label="Opacity" value=${common(textsSel, 'opacity')} onInput=${(v) => liveSet({ opacity: v })} onChange=${(v) => set({ opacity: v })}/>
     </div>` : null}
     <div class="svf-sec svf-actions">
-      <${Btn} icon=${'forward'} label=${`Bring forward (${MOD}])`} on=${() => ed.arrange(1)} data-act="forward"/>
-      <${Btn} icon=${'backward'} label=${`Send backward (${MOD}[)`} on=${() => ed.arrange(-1)} data-act="backward"/>
-      <${Btn} icon=${'toFront'} label=${`Bring to front (${MOD}⇧])`} on=${() => ed.arrange('front')}/>
-      <${Btn} icon=${'toBack'} label=${`Send to back (${MOD}⇧[)`} on=${() => ed.arrange('back')}/>
+      <${Btn} icon=${'forward'} label=${`Bring forward (${shortcutLabel('mod+]')})`} on=${() => ed.arrange(1)} data-act="forward"/>
+      <${Btn} icon=${'backward'} label=${`Send backward (${shortcutLabel('mod+[')})`} on=${() => ed.arrange(-1)} data-act="backward"/>
+      <${Btn} icon=${'toFront'} label=${`Bring to front (${shortcutLabel('mod+shift+]')})`} on=${() => ed.arrange('front')}/>
+      <${Btn} icon=${'toBack'} label=${`Send to back (${shortcutLabel('mod+shift+[')})`} on=${() => ed.arrange('back')}/>
       <span class="svf-sep"></span>
       ${objs.length > 1 ? html`
         <${Btn} icon=${'alignLeft'} label="Align left" on=${() => ed.align('left')}/><${Btn} icon=${'alignCentre'} label="Align centres" on=${() => ed.align('hcenter')}/><${Btn} icon=${'alignRight'} label="Align right" on=${() => ed.align('right')}/>
         <${Btn} icon=${'alignTop'} label="Align tops" on=${() => ed.align('top')}/><${Btn} icon=${'alignMiddle'} label="Align middles" on=${() => ed.align('vcenter')}/><${Btn} icon=${'alignBottom'} label="Align bottoms" on=${() => ed.align('bottom')}/>
         <span class="svf-sep"></span>
-        <${Btn} icon=${'group'} label=${`Group (${MOD}G)`} on=${ed.group} data-act="group"/>` : null}
-      ${one?.type === 'group' ? html`<${Btn} icon=${'group'} label=${`Ungroup (${MOD}⇧G)`} on=${ed.ungroup} data-act="ungroup" cls="is-on"/>` : null}
-      <${Btn} icon=${'copy'} label=${`Duplicate (${MOD}D)`} on=${ed.dup}/>
+        <${Btn} icon=${'group'} label=${`Group (${shortcutLabel('mod+g')})`} on=${ed.group} data-act="group"/>` : null}
+      ${one?.type === 'group' ? html`<${Btn} icon=${'group'} label=${`Ungroup (${shortcutLabel('mod+shift+g')})`} on=${ed.ungroup} data-act="ungroup" cls="is-on"/>` : null}
+      <${Btn} icon=${'copy'} label=${`Duplicate (${shortcutLabel('mod+d')})`} on=${ed.dup}/>
       <${Btn} icon=${'trash'} label="Delete (⌫)" on=${ed.del} data-act="delete"/>
     </div>
   </div>`;

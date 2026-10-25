@@ -31,8 +31,10 @@ const shot = async (page: any, name: string, opts: any = {}) => { if (SHOTS) awa
 
 const browser = await chromium.launch();
 const problems: string[] = [];
-async function newPage(url: string, { width = 1280, height = 900, reduced = true } = {}) {
+// platform: navigator.platform as the page reads it ('Win32', 'MacIntel'), for the shortcut labels; absent: the browser's own
+async function newPage(url: string, { width = 1280, height = 900, reduced = true, platform = '' } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height }, reducedMotion: reduced ? 'reduce' : 'no-preference' });
+  if (platform) await ctx.addInitScript((p: string) => { Object.defineProperty(Navigator.prototype, 'platform', { get: () => p, configurable: true }); }, platform);
   const page = await ctx.newPage();
   page.on('console', (m: any) => { if (m.type() === 'error') problems.push(`console: ${m.text()}`); });
   page.on('pageerror', (e: any) => problems.push(`pageerror: ${e.message}`));
@@ -412,6 +414,24 @@ const loadMs = Date.now() - t0;
   const r2 = await api(page, 'route');
   check('opening a document from home routes to #/doc/<id>', r2.name === 'doc' && (await page.evaluate(() => location.hash)).startsWith('#/doc/'), JSON.stringify(r2));
   check('in a document: no home screen and no home footer', await page.evaluate(() => !document.querySelector('.rh, .home-foot')));
+}
+
+// ── 14. Shortcut labels: each platform's, as the workbench writes its own (Ctrl+D on Windows, never "CtrlD") ──
+for (const [platform, want] of [
+  ['Win32', { find: 'Ctrl+F', focus: 'Ctrl+Shift+F', dup: 'Ctrl+D', undo: 'Ctrl+Z  Ctrl+Shift+Z', split: 'Ctrl+Enter', move: 'Alt+↑' }],
+  ['MacIntel', { find: '⌘F', focus: '⇧⌘F', dup: '⌘D', undo: '⌘Z  ⇧⌘Z', split: '⌘Enter', move: '⌥↑' }],
+] as const) {
+  const { ctx, page: p } = await newPage('?seed=sample&backend=none#/doc/sample', { platform });
+  await p.click('#btn-doc-menu');
+  const keyOf = (action: string) => p.locator(`.doc-menu [data-action="${action}"] .mi-key`).textContent();
+  const menu = { find: await keyOf('find'), focus: await keyOf('focus') };
+  await p.click('.doc-menu [data-action="keys"]');
+  await p.waitForSelector('dialog.shortcuts dt');
+  const rows: Record<string, string> = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll('dialog.shortcuts dt')].map((dt) => [dt.nextElementSibling?.textContent ?? '', dt.textContent ?? ''])));
+  const dialog = { dup: rows['Duplicate'], undo: rows['Undo / redo block changes'], split: rows['Split the block at the caret'], move: rows['Move the block']?.split(' ')[0] };
+  check(`shortcut labels (${platform}): the document menu and the shortcuts dialog`, menu.find === want.find && menu.focus === want.focus && dialog.dup === want.dup
+    && dialog.undo === want.undo && dialog.split === want.split && dialog.move === want.move, { menu, dialog });
+  await ctx.close();
 }
 
 check('no console errors, failed requests or page errors', problems.length === 0, problems.slice(0, 5).join(' | '));

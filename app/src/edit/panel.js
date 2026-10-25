@@ -14,6 +14,7 @@ import { useState } from 'preact/hooks';
 import { CopyButton } from '../design/ui/copy.js';
 import { selecting } from '../view/copy-errors.js';
 import { DiffView } from '../view/diff-view.js';
+import { shortcutLabel } from '../../../workbench/src/keys.ts';
 
 const COPY_TITLE = 'Copy a report of this error (message, line, source, TeX log)';
 
@@ -40,7 +41,7 @@ export function LiveNote({ note }) {
     </details>
     ${changed ? html`<div class="live-note-actions">
       <${Button} size="sm" variant="ghost" title="What changed since the version the preview shows" onClick=${() => setDiff(!diff)}>${diff ? 'Hide changes' : 'Show changes'}</${Button}>
-      <${Button} size="sm" variant="ghost" title="Back to the source the preview shows (undo with ⌘Z)" onClick=${() => note.revert()}>Revert to last working version</${Button}>
+      <${Button} size="sm" variant="ghost" title=${`Back to the source the preview shows (undo with ${shortcutLabel('mod+z')})`} onClick=${() => note.revert()}>Revert to last working version</${Button}>
     </div>` : null}
     ${changed && diff ? html`<${DiffView} a=${good} b=${current} />` : null}`;
 }

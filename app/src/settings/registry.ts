@@ -6,7 +6,7 @@
 //   registerSetting({ id, where, order, advanced?, shown?, Control }) -> unregister
 //   settingsAt(where) -> the settings of a place, by order        visibleAt(where, ctx) -> those drawn now
 //
-// where: 'view'         a row of the View options (ctx: { view, mod, alt })
+// where: 'view'         a row of the View options (ctx: { view })
 //        'view-switch'  a switch in the View options' last row, after "Show advanced features" (ctx: the same)
 //        'engine'       a field of Document settings' Engine and view tab, after the engine (ctx: { host })
 // advanced: true, the control is drawn only with "Show advanced features" on; { label, where }, the same, and the

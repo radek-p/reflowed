@@ -10,7 +10,7 @@ import { createContentDrag } from './drag.ts';
 import { Crumbs } from './crumbs.ts';
 import { SideToggle } from './sides.ts';
 import { ShortcutsView } from './shortcuts.ts';
-import { bindings, createMatcher, isMacPlatform, label as keyLabel, keyId, KEYMAP, keyRows, rowKey, parseChord, evalWhen, WB_COMMAND, type Action, type ActionArgs, type Key, type KeyOverrides, type KeyRow, type Platform } from './keys.ts';
+import { bindings, createMatcher, currentPlatform, label as keyLabel, keyId, KEYMAP, keyRows, rowKey, parseChord, evalWhen, WB_COMMAND, type Action, type ActionArgs, type Key, type KeyOverrides, type KeyRow, type Platform } from './keys.ts';
 import type { DocStatus, DocStatusInput, OpenOpts, OpenSpec, PanelHint, TabDnd, TabHint, ViewContext, ViewType, WorkbenchEvents } from './types.ts';
 import type { ViewState, Tab, Group, Layout, Side, SideName } from './model.ts';
 
@@ -64,7 +64,7 @@ type Focus = { tabId?: string; group?: string; where: 'tab' | 'content' };
 export type AttachOptions = { park?: HTMLElement | null; bar?: boolean; tabMenu?: ((kind: 'section' | 'document', tabId: string) => boolean) | null };
 type Attached = { root: HTMLElement; park: HTMLElement | null; bar: boolean; tabMenu: AttachOptions['tabMenu'] };
 
-export function createWorkbench({ layout: init = null, home = 'home', keymap = {}, platform = isMacPlatform() ? 'mac' : 'other', idPrefix = 'wb', springDelay = 450, minSize = 120, keys: hostKeys = [], commands = null }: WorkbenchOptions = {}) {
+export function createWorkbench({ layout: init = null, home = 'home', keymap = {}, platform = currentPlatform(), idPrefix = 'wb', springDelay = 450, minSize = 120, keys: hostKeys = [], commands = null }: WorkbenchOptions = {}) {
   const P = idPrefix;
   // a saved layout is a disposable preference: one that is not valid now (an old shape, a broken save) is dropped
   // quietly and the workbench starts anew (layoutDropped says so); never a throw at creation

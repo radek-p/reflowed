@@ -20,9 +20,9 @@ import { createTypesetter } from './text.js';
 import { renderObject } from './render.js';
 import { find } from './model.js';
 import { toTikz } from './tikz.js';
+import { shortcutLabel } from '../../../workbench/src/keys.ts';
 
 const html = htm.bind(h);
-const isMac = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? '');
 
 const CSS = `
 .svf-label { position: fixed; z-index: 900; width: 300px; padding: 8px; border-radius: 10px; color: var(--text, #2f2e2b);
@@ -61,7 +61,7 @@ function LabelField({ o, at, onInput, onDone, state }) {
       onBlur=${() => onDone(true)}></textarea>
     <div class="svf-label-foot">
       ${s.error ? html`<span class="svf-label-err">${s.error.split('\n')[0]}</span>` : html`<span>${s.busy ? 'Typesetting…' : ''}</span>`}
-      <span>${box ? `${isMac ? '⌘' : 'Ctrl+'}Enter` : 'Enter'} to save · Esc to cancel</span>
+      <span>${box ? shortcutLabel('mod+enter') : 'Enter'} to save · Esc to cancel</span>
     </div>
   </div>`;
 }

@@ -8,8 +8,9 @@
 //
 //   installScrollKeys({ pane(p) -> far.js P | null, paneOf(el) -> pane id | null, focused() -> pane id }) -> uninstall
 import { glide, paneHeight, pendingTarget } from './far.js';
+import { isMacPlatform } from '../../../workbench/src/keys.ts';
 
-const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const MAC = isMacPlatform();
 const NOT_THE_PAGE = '.cm-editor, input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="textbox"], [role="listbox"], [role="menu"], [role="dialog"], dialog, .ui-sheet, .sidebar, #sidebar, aside';
 
 export function installScrollKeys(host) {

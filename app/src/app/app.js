@@ -87,8 +87,6 @@ export const h = (tag, cls, attrs = {}) => {
 
 function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function safeSet(k, v) { try { localStorage.setItem(k, v); } catch { /* not kept */ } }
-const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
-export const MOD = isMac ? '⌘' : 'Ctrl';
 
 export function createDocEditor(ctx) {
   const { store, refs, ids } = ctx;
@@ -547,7 +545,7 @@ export function createDocEditor(ctx) {
       can: { versions: () => !!ctx.mountVersions, resetSeed: () => !!(S.doc && ctx.io?.isSeedDoc?.(S.doc.id)), importTex: () => !!ctx.io?.openImportTex,
         exportZip: () => !!ctx.modulesReal?.io, exportPdf: () => typeof backend.pdf === 'function' },
     },
-  }) }).define(editorCommands(MOD));
+  }) }).define(editorCommands());
   /** a command called from here: the menus and buttons ('ui'), the keys ('key'), editorAPI ('test') */
   const command = (id, input = {}, via = 'ui') => commands.call(id, input, { via });
   function selectIndex(k) { const b = S.doc.blocks[Math.max(0, Math.min(k, S.doc.blocks.length - 1))]; if (b) select(b.id); }
@@ -576,7 +574,7 @@ export function createDocEditor(ctx) {
   function toggleFocus(on = !root.has('focus-mode')) {
     void panes.widths.transition(() => root.flag('focus-mode', on), { animate: false });   // the columns go at once: lines kept, one re-break at the new width
     safeSet('rtx-editor.focus', on ? '1' : '');
-    toast(on ? `Focus mode · ${MOD}⇧F or Esc to leave` : 'Focus mode off');
+    toast(on ? `Focus mode · ${commands.get('view.focusMode').shortcut} or Esc to leave` : 'Focus mode off');
   }
 
   // the page's keys: one table, app/doc-keys.ts (the order of its rows is the keys' precedence)

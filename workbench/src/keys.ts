@@ -1,15 +1,20 @@
 // The workbench's keymap: VS Code's default
 // keybindings where a page may have them, browser-safe replacements where the browser keeps the key, and no key
-// that types a Polish letter. Pure: no DOM; the platform is a parameter (unit-tested for both).
+// that types a Polish letter. Pure: no DOM; the platform is a parameter (unit-tested for both). The one place that
+// says whether the page runs on a Mac (isMacPlatform, currentPlatform) and how a key is written for people (label,
+// shortcutLabel): the workbench and the app both use them.
 //
 // A key is 'ctrl+alt+w', 'meta+shift+t', 'f6'; a chord is two keys with a space ('ctrl+k ctrl+m'). Letters,
 // digits and the backslash match by physical key (e.code), so a layout or AltGr never changes what a key does.
 import type { Side, SideName } from './model.ts';
 
+/** The page runs on macOS, iPadOS or iOS (their keyboards have ⌘). */
 export const isMacPlatform = (): boolean => typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 /** The platforms a keymap entry names keys for ('other': Windows and Linux alike). */
 export type Platform = 'mac' | 'win' | 'linux' | 'other';
+/** The page's platform as the keymap names it: 'mac' or 'other'. */
+export const currentPlatform = (): Platform => (isMacPlatform() ? 'mac' : 'other');
 /** One key ('ctrl+alt+w'), or a chord of two ('ctrl+k ctrl+m'); several alternatives as a list; null: unbound. */
 export type Keys = string | readonly string[] | null;
 /** The workbench's actions (wb.run): their argument where they take one. */
@@ -228,14 +233,21 @@ export function vscodeKeybindings(rows: readonly KeyRow[], editorWhen = "activeC
     ...(r.args !== undefined ? { args: r.args } : {}), when: r.when ? `${editorWhen} && (${r.when})` : editorWhen }));
 }
 
-/** How a key reads to people: ⌘⌥W on macOS, Ctrl+Alt+W elsewhere. */
+/** How a key reads to people: ⌥⌘W on macOS, Ctrl+Alt+W elsewhere; a modifier alone by its name (⌘, Ctrl). */
 export function label(text: string, platform: Platform): string {
   const mac = platform === 'mac';
-  const names: Record<string, string> = { arrowleft: '←', arrowright: '→', arrowup: '↑', arrowdown: '↓', pagedown: 'PageDown', pageup: 'PageUp', enter: 'Enter', '\\': '\\', f6: 'F6' };
+  const names: Record<string, string> = { arrowleft: '←', arrowright: '→', arrowup: '↑', arrowdown: '↓', pagedown: 'PageDown', pageup: 'PageUp', enter: 'Enter', '\\': '\\', f6: 'F6',
+    ...(mac ? { ctrl: '⌃', alt: '⌥', shift: '⇧', meta: '⌘' } : { ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift', meta: 'Meta' }) };
   return text.split(' ').map((k) => {
     const p = parseKey(k);
     const key = names[p.key] ?? p.key.toUpperCase();
     if (mac) return `${p.ctrl ? '⌃' : ''}${p.alt ? '⌥' : ''}${p.shift ? '⇧' : ''}${p.meta ? '⌘' : ''}${key}`;
     return [p.ctrl && 'Ctrl', p.alt && 'Alt', p.shift && 'Shift', p.meta && 'Meta', key].filter(Boolean).join('+');
   }).join(' ');
+}
+/** A host's key written once for every platform, as label() writes it: `mod` is ⌘ (meta) on macOS and Ctrl
+ *  elsewhere ('mod+shift+z': ⇧⌘Z, Ctrl+Shift+Z; 'mod' alone: ⌘, Ctrl). The platform: the page's unless given. */
+export function shortcutLabel(text: string, platform: Platform = currentPlatform()): string {
+  const mod = platform === 'mac' ? 'meta' : 'ctrl';
+  return label(text.split(' ').map((k) => k.split('+').map((m) => (m === 'mod' ? mod : m)).join('+')).join(' '), platform);
 }

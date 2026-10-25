@@ -4,10 +4,11 @@
 // page (hidden when closed), the kit's Segmented controls (role radio, aria-checked, the data-w/-a/-e hooks), kit
 // icon buttons for the text size; placed by the kit's place() under its button, right-aligned; Esc (focus back to
 // the button) and a press outside close it: the kit's one overlay layer, while it is open.
-//   createPopover(view, { mod, alt }) -> { el, open(anchor), close({ focus }), toggle(anchor), sync(), isOpen }
-//   Panel({ view, mod, alt })  the panel's content (the gallery draws it in place: app/src/gallery/live.ts)
+//   createPopover(view) -> { el, open(anchor), close({ focus }), toggle(anchor), sync(), isOpen }
+//   Panel({ view })  the panel's content (the gallery draws it in place: app/src/gallery/live.ts)
 // the rows and switches are registrations (settings/registry.ts, where 'view' and 'view-switch'; their
 // context is a ViewCtx): a new option is a registration in its own module, no edit here. The built-in ones follow.
+// Keys are written as the workbench writes its own (workbench/src/keys.ts shortcutLabel: ⌥⌘V, Ctrl+Alt+V).
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { html, render, Segmented, IconButton, place } from '../design/ui/index.js';
@@ -16,6 +17,7 @@ import { WIDTHS, SLIDER, THEMES, EDIT_LAYOUTS, layoutsDebug } from './settings.j
 import { installPopoverStyle } from './popover-style.js';
 import { advanced, setAdvanced, advancedFeatures } from '../settings/advanced.js';
 import { registerSetting, visibleAt } from '../settings/registry.ts';
+import { shortcutLabel } from '../../../workbench/src/keys.ts';
 
 /** what the panel reads and sets of the page's view (view/index.js) */
 export interface ViewSettings { width: string; widthPx: number; zoom: number; theme: string; align: string; handles: boolean; editLayout: string }
@@ -29,7 +31,7 @@ export interface PopoverView {
   readonly notes: { settings(): { hidden: boolean } } | null;
 }
 /** a View option's context (registerSetting's ctx for 'view' and 'view-switch') */
-export interface ViewCtx { view: PopoverView; mod: string; alt: string }
+export interface ViewCtx { view: PopoverView }
 type Choice = { name: string; label: string; hint?: string };
 type Input = HTMLInputElement;
 
@@ -55,12 +57,12 @@ registerSetting({ id: 'view-width', where: 'view', order: 10, Control: ({ view }
     </div>`;
 } });
 
-registerSetting({ id: 'view-size', where: 'view', order: 20, Control: ({ view, mod, alt }: ViewCtx) => html`<div class="rtx-vp-row">
+registerSetting({ id: 'view-size', where: 'view', order: 20, Control: ({ view }: ViewCtx) => html`<div class="rtx-vp-row">
     <${Caption}>Text size<//>
     <div class="rtx-vp-zoom" role="group" aria-label="Text size">
-      <${IconButton} icon="minus" label="Smaller text" title=${`Smaller (${mod}${alt}−)`} data-z="-1" onClick=${() => view.zoomBy(-1)} />
-      <button type="button" class="ui-btn ui-btn--ghost" data-z="0" title=${`Reset (${mod}${alt}0)`} aria-label="Reset text size" onClick=${() => view.zoomBy(0)}>${Math.round(view.settings.zoom * 100)} %</button>
-      <${IconButton} icon="plus" label="Larger text" title=${`Larger (${mod}${alt}=)`} data-z="1" onClick=${() => view.zoomBy(1)} />
+      <${IconButton} icon="minus" label="Smaller text" title=${`Smaller (${shortcutLabel('mod+alt+−')})`} data-z="-1" onClick=${() => view.zoomBy(-1)} />
+      <button type="button" class="ui-btn ui-btn--ghost" data-z="0" title=${`Reset (${shortcutLabel('mod+alt+0')})`} aria-label="Reset text size" onClick=${() => view.zoomBy(0)}>${Math.round(view.settings.zoom * 100)} %</button>
+      <${IconButton} icon="plus" label="Larger text" title=${`Larger (${shortcutLabel('mod+alt+=')})`} data-z="1" onClick=${() => view.zoomBy(1)} />
     </div>
   </div>` });
 
@@ -96,8 +98,9 @@ registerSetting({ id: 'view-chips', where: 'view-switch', order: 10, advanced: {
 registerSetting({ id: 'view-handles', where: 'view-switch', order: 20, advanced: { label: 'Block handles on or off', where: 'View' }, Control: ({ view }: ViewCtx) => html`<label title="The + and drag handle beside each block">
     <input type="checkbox" checked=${view.settings.handles} onChange=${(e: Event) => view.set({ handles: (e.currentTarget as Input).checked })} /><span>Block handles</span></label>` });
 
-export function Panel({ view, mod, alt }: ViewCtx) {
-  const ctx: ViewCtx = { view, mod, alt };
+export function Panel({ view }: ViewCtx) {
+  const ctx: ViewCtx = { view };
+  const k = (key: string) => shortcutLabel(`mod+alt+${key}`);
   return html`
     ${visibleAt('view', ctx).map((s) => html`<${s.Control} key=${s.id} ...${ctx} />`)}
     <div class="rtx-vp-row"><div class="rtx-vp-toggles">
@@ -105,21 +108,21 @@ export function Panel({ view, mod, alt }: ViewCtx) {
         <input type="checkbox" id="rtx-vp-advanced" checked=${advanced.peek()} onChange=${(e: Event) => setAdvanced((e.currentTarget as Input).checked)} /><span>Show advanced features</span></label>
       ${visibleAt('view-switch', ctx).map((s) => html`<${s.Control} key=${s.id} ...${ctx} />`)}
     </div></div>
-    <div class="rtx-vp-keys">${`Text size ${mod}${alt}=  ${mod}${alt}−  ${mod}${alt}0 · this panel ${mod}${alt}V`}</div>`;
+    <div class="rtx-vp-keys">${`Text size ${k('=')}  ${k('−')}  ${k('0')} · this panel ${k('v')}`}</div>`;
 }
 
 type Anchor = { current: HTMLElement | null };
 
 // drawn synchronously by render() on open, close and sync(): the focus can go to the chosen option at once
-function Root({ view, mod, alt, isOpen, anchor }: ViewCtx & { isOpen: boolean; anchor: Anchor }) {
+function Root({ view, isOpen, anchor }: ViewCtx & { isOpen: boolean; anchor: Anchor }) {
   const ref = useRef<HTMLDivElement>(null);
   // placed before the first paint, under its button, right-aligned, kept on that side (the kit's place)
   useLayoutEffect(() => { if (isOpen && anchor.current && ref.current) place(ref.current, anchor.current, { placement: 'bottom-end', keep: true }); });
   return html`<div ref=${ref} class="rtx-vp ui-popover" id="rtx-view-pop" role="dialog" aria-label="View options" hidden=${!isOpen}>
-    ${isOpen ? html`<${Panel} view=${view} mod=${mod} alt=${alt} />` : null}</div>`;
+    ${isOpen ? html`<${Panel} view=${view} />` : null}</div>`;
 }
 
-export function createPopover(view: PopoverView, { mod, alt }: { mod: string; alt: string }) {
+export function createPopover(view: PopoverView) {
   installPopoverStyle();
   let isOpen = false;
   let layer: { remove(): void } | null = null;
@@ -127,7 +130,7 @@ export function createPopover(view: PopoverView, { mod, alt }: { mod: string; al
   const host = document.createElement('div');
   host.style.display = 'contents';
   document.body.append(host);
-  const draw = () => render(html`<${Root} view=${view} mod=${mod} alt=${alt} isOpen=${isOpen} anchor=${anchor} />`, host);
+  const draw = () => render(html`<${Root} view=${view} isOpen=${isOpen} anchor=${anchor} />`, host);
   draw();
   const pop = host.firstElementChild as HTMLElement;
 

@@ -72,6 +72,32 @@ test('labels', () => {
   assert.equal(K.label('meta+alt+w', 'mac'), '⌥⌘W');
   assert.equal(K.label('ctrl+alt+shift+t', 'linux'), 'Ctrl+Alt+Shift+T');
   assert.equal(K.label('ctrl+k ctrl+arrowleft', 'win'), 'Ctrl+K Ctrl+←');
+  assert.equal(K.label('meta', 'mac'), '⌘', 'a modifier alone: its sign');
+  assert.equal(K.label('ctrl', 'other'), 'Ctrl');
+});
+
+// a host's keys written once ('mod': ⌘ on macOS, Ctrl elsewhere), the same way as the workbench's own
+test('shortcutLabel: mod is ⌘ on macOS and Ctrl+ elsewhere, never a bare "Ctrl" glued to the key', () => {
+  const cases: [string, string, string][] = [
+    ['mod+d', '⌘D', 'Ctrl+D'],
+    ['mod+shift+z', '⇧⌘Z', 'Ctrl+Shift+Z'],
+    ['mod+enter', '⌘Enter', 'Ctrl+Enter'],
+    ['mod+alt+v', '⌥⌘V', 'Ctrl+Alt+V'],
+    ['mod+\\', '⌘\\', 'Ctrl+\\'],
+    ['alt+arrowup', '⌥↑', 'Alt+↑'],
+    ['shift+enter', '⇧Enter', 'Shift+Enter'],
+    ['mod', '⌘', 'Ctrl'],
+    ['mod+k mod+s', '⌘K ⌘S', 'Ctrl+K Ctrl+S'],
+  ];
+  for (const [k, mac, other] of cases) {
+    assert.equal(K.shortcutLabel(k, 'mac'), mac, k);
+    for (const p of ['other', 'win', 'linux'] as const) assert.equal(K.shortcutLabel(k, p), other, `${k} (${p})`);
+  }
+  // the workbench's own label of the same key agrees
+  assert.equal(K.shortcutLabel('mod+k mod+s', 'mac'), K.label(K.firstKey(K.keysOf(K.KEYMAP.find((e) => e.action === 'shortcuts')!, 'mac'))!, 'mac'));
+  assert.equal(K.shortcutLabel('mod+k mod+s', 'win'), K.label(K.firstKey(K.keysOf(K.KEYMAP.find((e) => e.action === 'shortcuts')!, 'win'))!, 'win'));
+  // no navigator (Node): not a Mac
+  assert.equal(K.currentPlatform(), typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? 'mac' : 'other');
 });
 
 // the keymap as data, one table: the workbench's rows from the keymap, a host's rows before them, when clauses
