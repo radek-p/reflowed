@@ -65,18 +65,26 @@ if (TARGET === 'dev') {
   const prob = workerProblem();
   if (prob) { console.log(`FAIL the dev app's engine worker is current — ${prob}`); process.exit(1); }
 }
-const ctx = await pw.chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'rtx-citecard-')), { viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
-const page = ctx.pages()[0] ?? await ctx.newPage();
-page.setDefaultTimeout(300000);
 const errors: string[] = [];
-page.on('pageerror', (e: any) => errors.push(e.message.slice(0, 200)));
-page.on('console', (m: any) => { if (m.type() === 'error') errors.push(`console: ${m.text().slice(0, 200)}`); });
+/** a browser profile of its own (the page's storage empty), its page watched for errors */
+async function profile() {
+  const c = await pw.chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'rtx-citecard-')), { viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+  const p = c.pages()[0] ?? await c.newPage();
+  p.setDefaultTimeout(300000);
+  p.on('pageerror', (e: any) => errors.push(e.message.slice(0, 200)));
+  p.on('console', (m: any) => { if (m.type() === 'error') errors.push(`console: ${m.text().slice(0, 200)}`); });
+  return { c, p };
+}
+let { c: ctx, p: page } = await profile();
 const sep = URL0.includes('?') ? '&' : '?';
 const idle = () => page.evaluate(() => (window as any).editorAPI.whenIdle());
 const frames = (k = 2) => page.evaluate((k: number) => new Promise((r) => { const f = (i: number) => (i ? requestAnimationFrame(() => f(i - 1)) : r(0)); f(k); }), k);
 /** open a document: a default one by its tag, 'sample' (the tests' fixture), or 'biblatex' (created here) */
+// Each document in a fresh profile: a release ignores ?store=memory (a dev switch, release-mode.js pageParams), so the
+// last document's store and saved layout would come back on the next load, and ?seed=sample seeds only an empty store
 async function open(doc: string) {
-  await page.goto('about:blank');                         // a real load: a hash change alone would keep the old document's blocks
+  await ctx.close();
+  ({ c: ctx, p: page } = await profile());
   if (doc === 'biblatex') {
     await page.goto(`${URL0}${sep}store=memory#/`);
     await page.waitForFunction(() => (window as any).editorAPI?.route?.());
