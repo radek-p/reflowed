@@ -405,7 +405,8 @@ export interface RefUse {
   length: number;
 }
 
-export interface CiteUse { blockId: ULID; cmd: string; keys: string[]; offset: number; length: number }
+/** `all`: its keys had `*` (\nocite{*}), every entry is cited */
+export interface CiteUse { blockId: ULID; cmd: string; keys: string[]; all?: boolean; offset: number; length: number }
 
 export interface BlockNumbers {
   heading?: { level: number; number: string; title: string; appendix?: boolean };

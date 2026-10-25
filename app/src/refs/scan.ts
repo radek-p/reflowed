@@ -11,10 +11,12 @@ import { startsWithDefinition } from '../tex/definitions.ts';
 export { stripComments };
 
 export interface Use { cmd: string; keys: string[]; offset: number; length: number }
+/** a citation: `all` when its keys had `*` (\nocite{*}: every entry is cited; `*` is never a key) */
+export interface CiteScan extends Use { all: boolean }
 export interface SourceScan {
   labels: { label: string; env: string | null; offset: number }[];
   refs: Use[];
-  cites: Use[];
+  cites: CiteScan[];
   headings: { level: string; starred: boolean; title: string; label: string | null; offset: number }[];
   /** theorem-like environments begun in the block, with their optional note */
   envs: { env: string; note: string | null; offset: number }[];
@@ -129,8 +131,8 @@ export function scanSource(source: string): SourceScan {
   while ((m = CITE_CMDS.exec(s))) {
     const a = argAfter(s, m.index + m[0].length);
     if (!a) continue;
-    const { keys } = citeKeys(a[0]);
-    out.cites.push({ cmd: m[1], keys, offset: m.index, length: a[1] - m.index });
+    const { keys, all } = citeKeys(a[0]);
+    out.cites.push({ cmd: m[1], keys, all, offset: m.index, length: a[1] - m.index });
   }
   const head = new RegExp(`\\\\(${HEADINGS.join('|')})(\\*?)(?=\\s*[{[])`, 'g');
   while ((m = head.exec(s))) {

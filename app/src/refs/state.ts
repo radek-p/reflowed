@@ -28,7 +28,8 @@ export interface LabelInfo {
   from?: 'overlay' | 'source';
 }
 export interface RefUse { blockId: ULID; cmd: string; keys: string[]; offset: number; length: number }
-export interface CiteUse { blockId: ULID; cmd: string; keys: string[]; offset: number; length: number }
+/** `all`: its keys had `*` (\nocite{*}), every entry is cited */
+export interface CiteUse { blockId: ULID; cmd: string; keys: string[]; all?: boolean; offset: number; length: number }
 export interface BibEntry {
   key: string; label?: string; type?: string; authors?: string[]; title?: string; year?: string; venue?: string;
   fields?: Record<string, string>;

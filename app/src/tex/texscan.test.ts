@@ -34,7 +34,10 @@ check('scanCites: \\nocite{*} has no key, and cites every entry', star.length ==
 check('scanCites: \\nocite{*,a} has the key a, and cites every entry', starA[0]?.keys.join() === 'a' && starA[0].all === true, starA);
 check('scanCites: \\cite{a,b} does not cite every entry', plain[0]?.keys.join() === 'a,b' && plain[0].all === false, plain);
 const keysSrc = '\\nocite{*} \\nocite{*,a} \\cite[p.~2]{b, c}';
-check('cite keys: texscan = refs/scan', both((scanCites(keysSrc) as Cite[]).map((c) => c.keys.join()), scanSource(keysSrc).cites.map((c) => c.keys.join())), [scanCites(keysSrc), scanSource(keysSrc).cites]);
+// refs/scan.ts says `all` too: the References pane reads it from refsState().cites (Remove unused, the Cited filter)
+check('cite all: texscan = refs/scan', both((scanCites(keysSrc) as Cite[]).map((c) => String(c.all)), scanSource(keysSrc).cites.map((c) => String(c.all))), [scanCites(keysSrc), scanSource(keysSrc).cites]);
+check('refs/scan: \\nocite{*} cites every entry', scanSource('\\nocite{*}').cites[0]?.all === true && scanSource('\\cite{a}').cites[0]?.all === false, scanSource('\\nocite{*}').cites);
+check('cite keys: texscan = refs/scan',both((scanCites(keysSrc) as Cite[]).map((c) => c.keys.join()), scanSource(keysSrc).cites.map((c) => c.keys.join())), [scanCites(keysSrc), scanSource(keysSrc).cites]);
 
 console.log(`\n${n - bad}/${n} checks passed`);
 process.exit(bad ? 1 : 0);

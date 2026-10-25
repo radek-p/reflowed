@@ -77,7 +77,8 @@ export function createBibPane({ h }) {
   /** key -> [{blockId, offset, length, cmd}] */
   function usesMap() {
     const out = new Map();
-    for (const c of refsState().cites ?? []) for (const k of c.keys) { if (!out.has(k)) out.set(k, []); out.get(k).push(c); }
+    // `*`: a \nocite{*} (c.all) cites every entry, the key the checks below look for
+    for (const c of refsState().cites ?? []) for (const k of c.all ? [...c.keys, '*'] : c.keys) { if (!out.has(k)) out.set(k, []); out.get(k).push(c); }
     return out;
   }
   const usesOf = (key) => usesMap().get(key) ?? [];
