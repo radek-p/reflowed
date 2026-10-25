@@ -8,10 +8,11 @@
 //
 // View types: 'document' ({ doc, at? }: a pane of document `doc`; `at`, the section in view, restored on reload),
 // 'home' (the editor's Documents view, home/screen.js, in the group's home panel), and one side panel per editor
-// panel (design/ui/views.ts: Outline, Problems, TODOs, References, Files) drawn with the editor's ViewContext.
+// panel (design/ui/views.ts: Outline, Problems, TODOs, References, Files; the Inspector on the dev page, on the right)
+// drawn with the editor's ViewContext, on the side and at the default column width the view gives.
 import { effect, untracked, signal } from '@preact/signals';
 import { useLayoutEffect, useMemo, useRef } from 'preact/hooks';
-import { createWorkbench, Workbench, html, render, kit, openRowMenu, ownViewport, VIEWPORT_CSS, model as M, sideOverlay,
+import { createWorkbench, Workbench, html, render, kit, openRowMenu, ownViewport, VIEWPORT_CSS, model as M, sideOverlay, isIconName,
   type ViewContext as WbContext, type Tab, type Subtitle, type WorkbenchStore, type SelectRow, type IconName } from '../../../workbench/src/index.ts';
 import { createEditorRoot, editorRoots } from '../app/editor-root.ts';
 import { createPageServices, pageReady } from '../app/services.ts';
@@ -339,10 +340,12 @@ function registerPanels(wb: WorkbenchStore, root: ReturnType<typeof createEditor
   const slots = slotsOf(root);
   function add(v: ViewDef) {
     const off = wb.registerView({
-      id: v.id, title: () => (typeof v.title === 'function' ? v.title(null) : v.title ?? v.id), icon: ICONS[v.id] ?? 'list',
+      id: v.id, title: () => (typeof v.title === 'function' ? v.title(null) : v.title ?? v.id), icon: ICONS[v.id] ?? (isIconName(v.icon) ? v.icon : 'list'),
       // a count on its tab (the Problems, the TODOs): the badge its content sets (app/panels.ts)
       ...(v.count ? { badge: () => { const b = slots.badge(v.id).value; return b?.n ? { n: b.n, ...(b.title ? { title: b.title } : {}), ...(b.tone === 'danger' ? { tone: 'danger' as const } : {}) } : null; } } : {}),
-      panel: { side: v.panel?.side ?? 'left', ...(v.id === 'files' ? { below: true } : {}) },
+      // its side, its column's default width (a share of the window: the workbench's sideWidth) and its close (a closable
+      // panel) as the view gives them
+      panel: { side: v.panel?.side ?? 'left', ...(v.panel?.width ? { width: v.panel.width } : {}), ...(v.panel?.onClose ? { onClose: v.panel.onClose } : {}), ...(v.id === 'files' ? { below: true } : {}) },
       Component: ({ ctx }: { tab: Tab; ctx: WbContext }) => {
         const ref = useRef<HTMLDivElement>(null);
         const ectx = useMemo(() => panelContext(root, v.id, { visible: ctx.visible, openAt: (doc, at) => openSectionTab(wb, doc, at) }), []);

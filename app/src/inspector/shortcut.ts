@@ -1,7 +1,7 @@
-// The inspector's shortcut, Alt+Shift+I (⌥⇧I), as a rule on a key event (inspector/index.js listens and acts).
+// The inspector's shortcut, Alt+Shift+I (⌥⇧I), as a rule on a key event (inspector/index.ts listens and acts).
 // The key is taken only when it toggles the inspector; otherwise it goes on untouched (on a Mac it types a character
 // in many layouts: "ˆ" on US, a letter on Polish Pro). The public panel's script, once loaded, listens for the same key
-// itself (in the capture phase on the window: it opens the panel on the whole page and prevents the default); while
+// itself (in the capture phase on the window: it opens or focuses the panel and prevents the default); while
 // that script is on the page and the key does not toggle, only that listener is stopped and the character still types.
 //
 //   shortcutAction(e, { canShow, panelLoaded }) -> 'toggle' | 'shield' | null

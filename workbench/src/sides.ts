@@ -13,6 +13,10 @@
 // width and their lines when it opens or closes (no resizestart/resizeend: nothing to lay out). It closes on a tap on
 // the scrim, Escape, or its toggle. Its panels and tabs are as in a wide window. sideOverlay: that width rule, live;
 // hosts start with the columns closed while it holds (app/src/wb/host.ts).
+// A column's width: the user's (its edge dragged), else its default (model.ts sideWidth: a share of the width within px
+// bounds its panels' types give, the whole width as an overlay; else SIDE_SIZE); a double-click on the edge goes back to
+// the default. A panel whose type has panel.onClose is closable:
+// a close button on its tab and Close in its menu call it.
 import { useLayoutEffect, useRef, type MutableRef } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import { html } from './html.ts';
@@ -27,11 +31,12 @@ import type { PanelHint, ViewType } from './types.ts';
 import type { Box, Layout, PanelGroup, SideName } from './model.ts';
 import type { IconName } from './kit/icons.ts';
 import { reducedMotion } from './motion.ts';
+
 import { rove } from './ui-keys.ts';
 import { oneLine } from './strip.ts';
 
 const NAME: Record<SideName, string> = { left: 'Left', right: 'Right' };
-export const SIDE_MIN = 160;
+export const SIDE_MIN = M.SIDE_MIN;
 /** the widest window whose side columns float over the main area (css.ts uses the same number) */
 export const OVERLAY_MAX_W = 640;
 const OVERLAY_Q = `(max-width: ${OVERLAY_MAX_W}px)`;
@@ -44,10 +49,11 @@ const OVERLAY_SHARE = 0.85;
 /** A column's stack for the shared Separator: its tree, its groups' attribute, a panel group's least height. */
 const stackOf = (side: SideName): SplitTree<PanelGroup> => ({ of: (L: Layout) => M.sides(L)[side].root, attr: 'data-pgroup', min: 80 });
 const sideMax = (root: Element | null) => Math.max(SIDE_MIN, Math.round((root?.getBoundingClientRect().width ?? 1200) * 0.45));
+const widthOf = (wb: Workbench, sd: M.Column) => M.sideWidth(sd, (id) => wb.viewType(id)?.panel?.width);
 
-function info(wb: Workbench, id: string): { label: string; icon: IconName; badge: ReturnType<NonNullable<ViewType['badge']>> | null } {
-  const t = wb.viewType(id);
-  return { badge: t?.badge?.() ?? null, label: t ? (t.title?.(wb.layout.peek().panelState?.[id] ?? {}) ?? t.label ?? id) : `${id} (not available)`, icon: t ? (typeof t.icon === 'function' ? t.icon({}) : t.icon) ?? 'list' : 'missing' };
+function info(wb: Workbench, id: string): { label: string; icon: IconName; badge: ReturnType<NonNullable<ViewType['badge']>> | null; close: (() => void) | null } {
+  const t = wb.viewType(id), onClose = t?.panel?.onClose;
+  return { badge: t?.badge?.() ?? null, close: onClose ? () => onClose() : null, label: t ? (t.title?.(wb.layout.peek().panelState?.[id] ?? {}) ?? t.label ?? id) : `${id} (not available)`, icon: t ? (typeof t.icon === 'function' ? t.icon({}) : t.icon) ?? 'list' : 'missing' };
 }
 
 /** The show button of a hidden column (the app's sidebar toggle): null while the column is shown or empty. */
@@ -75,6 +81,7 @@ export function Side({ wb, side, root }: { wb: Workbench; side: SideName; root: 
   const ui = useUi();
   const sd = wb.sides.value[side];
   wb.layout.value;      // re-render on layout changes (panel state may change titles)
+  const width = widthOf(wb, sd);
   const floats = sideOverlay.value;
   const aside = useRef<HTMLElement>(null), was = useRef(sd.collapsed), anim = useRef<Animation | null>(null), stop = useRef<(() => void) | null>(null);
   // the slide (hide: the groups take the room at once, the column slides out over them; show: it slides in over
@@ -89,7 +96,8 @@ export function Side({ wb, side, root }: { wb: Workbench; side: SideName; root: 
     // keep their lines during the motion (the hosts pin on resizestart) and are laid out at the end.
     const hiding = sd.collapsed;
     // (an overlay: its width over the main area, which keeps its own: no resizestart / resizeend, nothing to lay out)
-    const W = Math.min(sd.size, (el.parentElement?.getBoundingClientRect().width ?? sd.size) * (floats ? OVERLAY_SHARE : 0.45));
+    const areaW = el.parentElement?.getBoundingClientRect().width ?? 1200;
+    const W = Math.min(M.sidePx(width, areaW, floats), areaW * (floats ? (width.share != null ? 1 : OVERLAY_SHARE) : 0.45));
     el.classList.add('wb-side--sliding');
     el.style.setProperty('--wb-slide-w', `${W}px`);
     if (!floats) wb.emit('resizestart', { side, how: hiding ? 'hide' : 'show' });
@@ -115,19 +123,19 @@ export function Side({ wb, side, root }: { wb: Workbench; side: SideName; root: 
   tree.current ??= stackOf(side);
   if (!M.sidePanels(sd).length) return null;
   const T = { root: sd.root }, B = M.boxes(T);
-  const style = { '--wb-side-w': `${sd.size}px` };
+  const style = { '--wb-side-w': M.sideCss(width, floats) };
   // the scrim of an open overlay: a tap on it closes the column and does nothing else (closed on its click, so the tap's
   // click cannot land on what the scrim covered)
   const scrim = floating ? html`<div class=${`wb-side-scrim wb-side-scrim--${side}`} data-scrim=${side} aria-hidden="true"
     onPointerDown=${(e: PointerEvent) => { e.preventDefault(); e.stopPropagation(); }} onClick=${(e: MouseEvent) => { e.stopPropagation(); wb.toggleSide(side); }} />` : null;
-  return html`${scrim}<aside ref=${aside} class=${`wb-side wb-side--${side}${sd.collapsed ? ' wb-side--hidden' : ''}${floats ? ' wb-side--overlay' : ''}`} data-side=${side} style=${style}
+  return html`${scrim}<aside ref=${aside} class=${`wb-side wb-side--${side}${sd.collapsed ? ' wb-side--hidden' : ''}${floats ? ' wb-side--overlay' : ''}${floats && width.share != null ? ' wb-side--full' : ''}`} data-side=${side} style=${style}
       aria-label=${`${NAME[side]} sidebar`} inert=${sd.collapsed} aria-hidden=${sd.collapsed ? 'true' : undefined}>
     <div class="wb-side-groups" ref=${area}>
       ${M.sideGroups(sd).map((g) => html`<${Pane} key=${g.id} wb=${wb} side=${side} g=${g} box=${B.get(g.id)!} collapsed=${sd.collapsed} />`)}
       ${separators(T, B).map((x) => html`<${Separator} key=${x.key} wb=${wb} s=${x} root=${area} tree=${tree.current} label=${`Resize the ${side} sidebar’s groups`} />`)}
     </div>
     ${side === 'left' && ui.sideStatus ? html`<div class="wb-side-status" role="group" aria-label="Status">${ui.sideStatus()}</div>` : null}
-    <${SideSeparator} wb=${wb} side=${side} size=${sd.size} root=${root} aside=${aside} />
+    <${SideSeparator} wb=${wb} side=${side} width=${width} root=${root} aside=${aside} />
   </aside>`;
 }
 
@@ -193,7 +201,8 @@ function Pane({ wb, side, g, box, collapsed }: { wb: Workbench; side: SideName; 
           data-ptab=${id} aria-selected=${on ? 'true' : 'false'} aria-controls=${`side-${id}-panel`} tabindex="0" title=${p.label} aria-label=${p.label}
           onPointerDown=${(e: PointerEvent) => { if (e.button !== 0) return; e.preventDefault(); wb.showPanel(id); startPanelDrag(e, wb, id, p); }}
           onContextMenu=${(e: MouseEvent) => { e.preventDefault(); openPanelMenu(wb, id, { left: e.clientX, right: e.clientX, top: e.clientY, bottom: e.clientY, width: 0, height: 0 }); }}>
-          <span class="wb-ptab-icon"><${Icon} name=${p.icon} /></span><span class="wb-ptab-label">${p.label}</span>${p.badge?.n ? html`<span class="wb-ptab-badge" data-tone=${p.badge.tone ?? undefined} title=${p.badge.title || undefined}>${String(p.badge.n)}</span>` : null}</div>`; })}
+          <span class="wb-ptab-icon"><${Icon} name=${p.icon} /></span><span class="wb-ptab-label">${p.label}</span>${p.badge?.n ? html`<span class="wb-ptab-badge" data-tone=${p.badge.tone ?? undefined} title=${p.badge.title || undefined}>${String(p.badge.n)}</span>` : null}${p.close ? html`<${IconButton} class="wb-ptab-close" data-action="close-panel" icon="close" label=${`Close ${p.label}`} tabindex="-1"
+            onPointerDown=${(e: PointerEvent) => e.stopPropagation()} onClick=${(e: MouseEvent) => { e.stopPropagation(); p.close!(); }} />` : null}</div>`; })}
         ${bar != null ? html`<div class="wb-insert" style=${{ left: `${bar}px` }}></div>` : null}
       </div>
       ${first && side === 'left' ? html`<${HideButton} wb=${wb} side=${side} />` : null}
@@ -267,7 +276,9 @@ export function openPanelMenu(wb: Workbench, id: string, anchor: MenuAnchor) {
   if (!d) return null;
   const other = d.side === 'left' ? 'right' : 'left';
   const alone = M.sideGroups(M.sides(L)[d.side]).find((g) => g.id === d.group)!.panels.length === 1;
+  const onClose = wb.viewType(id)?.panel?.onClose;
   return openMenu(anchor, [
+    ...(onClose ? [{ id: 'close-panel', label: 'Close', onSelect: () => onClose() }, { separator: true as const }] : []),
     { id: `move-${other}`, label: `Move to the ${other} side`, onSelect: () => wb.movePanel(id, other) },
     { id: 'split-down', label: 'Move to a new group below', disabled: alone, onSelect: () => wb.splitPanel(id, d.side, d.group, 'bottom') },
     { separator: true },
@@ -275,13 +286,13 @@ export function openPanelMenu(wb: Workbench, id: string, anchor: MenuAnchor) {
   ], { label: 'Panel actions' });
 }
 
-// ── the column's resize handle (its inner edge): pointer, keyboard, double-click resets ──
-function SideSeparator({ wb, side, size, root, aside }: { wb: Workbench; side: SideName; size: number; root: MutableRef<HTMLDivElement | null>; aside: MutableRef<HTMLElement | null> }) {
+// ── the column's resize handle (its inner edge): pointer, keyboard, double-click resets (to its default width) ──
+function SideSeparator({ wb, side, width, root, aside }: { wb: Workbench; side: SideName; width: M.SideWidth; root: MutableRef<HTMLDivElement | null>; aside: MutableRef<HTMLElement | null> }) {
   const ref = useRef<HTMLDivElement>(null);
   const dirSign = side === 'left' ? 1 : -1;
   const clamp = (v: number) => Math.max(SIDE_MIN, Math.min(sideMax(root.current), v));
   const begin = (how: string) => wb.emit('resizestart', { side, how });
-  const finish = (how: string) => wb.emit('resizeend', { side, how, size: M.sides(wb.layout.peek())[side].size });
+  const finish = (how: string) => wb.emit('resizeend', { side, how, size: M.sidePx(widthOf(wb, M.sides(wb.layout.peek())[side]), root.current?.getBoundingClientRect().width ?? 1200) });
   const down = (e: PointerEvent) => {
     if (e.button !== 0) return;
     const w0 = aside.current!.getBoundingClientRect().width, set = (px: number) => aside.current!.style.setProperty('--wb-side-w', `${px}px`);
@@ -291,18 +302,20 @@ function SideSeparator({ wb, side, size, root, aside }: { wb: Workbench; side: S
       move: (dx) => { w = clamp(w0 + dirSign * dx); },
       paint: () => set(w),
       drop: () => { wb.resizeSide(side, w); set(Math.round(w)); finish('pointer'); },
-      cancel: () => { set(size); finish('pointer'); },
+      cancel: () => { aside.current!.style.setProperty('--wb-side-w', M.sideCss(width)); finish('pointer'); },
     });
   };
   const key = (e: KeyboardEvent) => {
     const k = splitterKey(e, 'row'), cur = aside.current!.getBoundingClientRect().width;
-    const v = k == null ? null : k === 'start' ? SIDE_MIN : k === 'end' ? sideMax(root.current) : k === 'reset' ? M.SIDE_SIZE : cur + dirSign * k;
+    if (k === 'reset') { e.preventDefault(); e.stopPropagation(); reset(); return; }
+    const v = k == null ? null : k === 'start' ? SIDE_MIN : k === 'end' ? sideMax(root.current) : cur + dirSign * k;
     if (v == null) return;
     e.preventDefault(); e.stopPropagation();
     begin('keyboard'); wb.resizeSide(side, clamp(v)); finish('keyboard');
   };
+  const reset = () => { begin('reset'); wb.resetSide(side); finish('reset'); };
   const max = sideMax(root.current);
   return html`<div ref=${ref} class=${`wb-sep wb-side-sep wb-side-sep--${side}`} role="separator" tabindex="0" aria-orientation="vertical"
-    aria-label=${`Resize the ${side} sidebar`} aria-valuenow=${Math.min(size, max)} aria-valuemin=${SIDE_MIN} aria-valuemax=${max}
-    onPointerDown=${down} onKeyDown=${key} onDblClick=${() => { begin('reset'); wb.resizeSide(side, M.SIDE_SIZE); finish('reset'); }}></div>`;
+    aria-label=${`Resize the ${side} sidebar`} aria-valuenow=${Math.min(M.sidePx(width, root.current?.getBoundingClientRect().width ?? 1200), max)} aria-valuemin=${SIDE_MIN} aria-valuemax=${max}
+    onPointerDown=${down} onKeyDown=${key} onDblClick=${reset}></div>`;
 }

@@ -44,7 +44,7 @@ export interface ViewService {
 }
 /** the page's notes (notes/index.js), as an editor uses them */
 export interface NotesService { attach?(hosts: object): () => void }
-/** the page's inspector (inspector/index.js), as an editor uses it */
+/** the page's inspector (inspector/index.ts), as an editor uses it */
 export interface InspectorService { attach(o: { layout: object; root: EditorRoot }): () => void }
 /** a router (app/router.js) */
 export interface Router {

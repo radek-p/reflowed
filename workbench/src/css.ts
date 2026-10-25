@@ -280,6 +280,7 @@ html:is(.wb-dragging, .wb-dropped) .wb-tab :is([data-name], [data-sub]) { backgr
    width (no reflow of the documents); a scrim under it closes it on a tap; no splitter. Its slide is its own width */
 .wb-side.wb-side--overlay { position: absolute; top: 0; bottom: 0; z-index: 30; width: min(var(--wb-side-w, ${SIDE_SIZE}px), 85%); background: linear-gradient(var(--rfed-sidebar-bg), var(--rfed-sidebar-bg)), var(--rfed-page);   /* its tint over the page: opaque over the document */ box-shadow: var(--ui-shadow-pop, none); }
 .wb-side.wb-side--overlay.wb-side--sliding { position: absolute; top: 0; bottom: 0; }
+.wb-side.wb-side--overlay.wb-side--full { width: 100%; }   /* a column with a panel's default width (types.ts panel.width), as an overlay: the whole width */
 .wb-side--overlay.wb-side--left { left: 0; right: auto; } .wb-side--overlay.wb-side--right { right: 0; left: auto; }
 .wb-side--overlay .wb-sep { display: none; }
 .wb-side-scrim { position: absolute; inset: 0; z-index: 29; background: var(--rfed-modal-backdrop-bg); animation: wb-scrim-in var(--wb-slide-ms, 220ms) var(--ui-ease); }
@@ -306,6 +307,9 @@ html:is(.wb-dragging, .wb-dropped) .wb-tab :is([data-name], [data-sub]) { backgr
 .wb-ptab-badge { margin-left: 4px; min-width: 16px; padding: 0 4px; box-sizing: border-box; border-radius: var(--ui-r-pill); background: var(--rfed-selected); color: var(--rfed-ink-2); font: var(--ui-medium) var(--ui-text-xs)/16px var(--ui-font); text-align: center; }
 .wb-ptab-badge[data-tone="danger"] { color: var(--rfed-danger); }
 .wb-ptab-icon { display: none; place-items: center; color: var(--rfed-ink-3); }
+.wb-ptab-close { width: 18px; height: 18px; min-width: 0; margin: 0 -4px 0 4px; padding: 0; border-radius: var(--ui-r-sm, 4px); color: var(--rfed-ink-3); }   /* a closable panel's (types.ts panel.onClose) */
+.wb-ptab-close svg { width: 12px; height: 12px; }
+.wb-ptabs[data-compact] .wb-ptab-close { display: none; }   /* (as icons: Close is in its menu) */
 .wb-ptab-icon svg { width: var(--ui-icon-sm); height: var(--ui-icon-sm); }
 /* the tabs as icons when their labels do not fit the strip (sides.ts fitTabs): a narrow column, many panels */
 .wb-ptabs[data-compact] .wb-ptab-icon { display: inline-grid; }

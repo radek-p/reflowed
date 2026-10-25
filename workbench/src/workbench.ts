@@ -76,6 +76,7 @@ export function createWorkbench({ layout: init = null, home = 'home', keymap = {
   bumpSeq();
   const nid = (k: string): string => `${P}${k}${++seq}`;
   const types = signal(new Map<string, ViewType>());
+  const left = new Map<string, M.Dock & { index: number }>();     // where each panel unregistered was docked (registerView)
   const inbar = signal(false);     // (with a window bar) the bar group's tabs sit in the bar
   const barGroupId = computed(() => M.barGroup(L.value)?.id ?? null);     // the group spanning the top edge (model.ts barGroup)
   // HOME: every group has its own home toggle, the first item of its strip (not a tab: it never counts in 1/n). Pressed,
@@ -167,14 +168,24 @@ export function createWorkbench({ layout: init = null, home = 'home', keymap = {
     const t = type as unknown as ViewType;     // the registry holds every type alike; a type's own functions narrow its state
     if (!t?.id) throw new Error('registerView: an id');
     const m = new Map(types.peek()); m.set(t.id, t); types.value = m;
-    // a sidebar panel: docked on its default side unless the layout has it somewhere already: into
-    // the column's top group, or (below: true) as its own group at the column's bottom
+    // a sidebar panel: docked where it was when its type left (this session: its group, else its side), else on its
+    // default side, unless the layout has it somewhere already: into the column's top group, or (below: true) as its own
+    // group at the column's bottom
     if (t.panel && !M.sideOf(L.peek(), t.id)) {
-      const side = t.panel.side ?? 'left';
-      set(t.panel.below ? M.splitPanel(L.peek(), t.id, side, null, 'bottom', nid('g'), nid('s')) : M.addPanel(L.peek(), t.id, side, t.panel.index ?? null), 'panel');
+      const was = left.get(t.id), l = L.peek();
+      const back = was ? M.addPanel(l, t.id, was.side, was.index, was.group) : l;
+      const side = was?.side ?? t.panel.side ?? 'left';
+      set(back !== l ? back : was ? M.addPanel(l, t.id, side) : t.panel.below ? M.splitPanel(l, t.id, side, null, 'bottom', nid('g'), nid('s')) : M.addPanel(l, t.id, side, t.panel.index ?? null), 'panel');
     }
-    // a panel unregistered leaves its column (a host's panel that comes and goes: the editor's Files panel, advanced)
-    return () => { const n = new Map(types.peek()); if (n.get(t.id) !== t) return; n.delete(t.id); types.value = n; if (t.panel) removePanel(t.id); };
+    // a panel unregistered leaves its column (a host's panel that comes and goes: the editor's Files panel, advanced);
+    // where it was is remembered for its return
+    return () => {
+      const n = new Map(types.peek()); if (n.get(t.id) !== t) return; n.delete(t.id); types.value = n;
+      if (!t.panel) return;
+      const d = M.dockOf(L.peek(), t.id);
+      if (d) left.set(t.id, { ...d, index: M.sideGroups(M.sides(L.peek())[d.side]).find((g) => g.id === d.group)!.panels.indexOf(t.id) });
+      removePanel(t.id);
+    };
   }
   const viewType = (id: string): ViewType | null => types.value.get(id) ?? null;
   /** A tab's document (the view type's docId(state, tab)), or null: a tab that shows no document has no status. */
@@ -414,6 +425,8 @@ export function createWorkbench({ layout: init = null, home = 'home', keymap = {
   /** A panel out of its column (a host's panel no longer available: its type gone, or never registered on this load). */
   const removePanel = (id: string) => { if (M.dockOf(L.peek(), id)) set(M.removePanel(L.peek(), id), 'panel'); };
   const resizeSide = (side: SideName, size: number) => set(M.resizeSide(L.peek(), side, size), 'resize');
+  /** The column back to its default width (its panels' widest default, else SIDE_SIZE: model.ts sideWidth). */
+  const resetSide = (side: SideName) => set(M.resetSide(L.peek(), side), 'resize');
   /** Ctrl+B / Ctrl+Alt+B: open (and focus) or close a side; false when it has no panels. */
   function toggleSide(side: SideName): false | undefined {
     const sd = M.sides(L.peek())[side];
@@ -842,7 +855,7 @@ export function createWorkbench({ layout: init = null, home = 'home', keymap = {
     docStatus, setDocStatus, getDocStatus, barOf, docOf, docFlash,
     barMark: signal({ icon: true, text: true }),     // (with a window bar) which parts of the host's mark are in it (ui.ts barItems)
     renaming, canRename, rename: startRename, finishRename,
-    showPanel, movePanel, splitPanel, dropPanel, removePanel, collapseSide, resizeSide, toggleSide, focusPart, sides: computed(() => M.sides(L.value)),
+    showPanel, movePanel, splitPanel, dropPanel, removePanel, collapseSide, resizeSide, resetSide, toggleSide, focusPart, sides: computed(() => M.sides(L.value)),
     drag, hosts, announcement, dnd, pdnd: signal<PanelHint | { id: string } | null>(null), resizing, nid,
     get closedCount() { return closed.length; },
     // the container's side (ui.ts): the hosts placed into a group's body or a column, parked between groups; after a

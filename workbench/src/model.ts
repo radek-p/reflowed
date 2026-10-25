@@ -20,8 +20,9 @@ export type DocNode = TreeNode<Group>;
 export type PanelNode = TreeNode<PanelGroup>;
 export type SideName = 'left' | 'right';
 export type Side = 'left' | 'right' | 'top' | 'bottom';
-/** A side column: a stack of panel groups (a group, or one 'column' split over groups), hidden or shown, its width. */
-export type Column = { root: PanelNode; collapsed: boolean; size: number };
+/** A side column: a stack of panel groups (a group, or one 'column' split over groups), hidden or shown, and the width
+ *  the user gave it (px; none: its default, sideWidth). */
+export type Column = { root: PanelNode; collapsed: boolean; size?: number };
 export type Sides = Record<SideName, Column>;
 export type Layout = {
   v: 1; root: DocNode; active: string; maximized: string | null;
@@ -78,7 +79,7 @@ export function shape(L: Layout): string {
     : ['g', x.tabs.map((t) => [t.id, t.view, JSON.stringify(t.state ?? null), !!t.pinned, !!t.preview]), x.active];
   const S = L.sides && sides(L);
   const t = (x: PanelNode): unknown => isSplit(x) ? ['s', x.sizes.map(r), x.children.map(t)] : ['g', x.panels, x.active];
-  const col = (sd: Column) => [sd.collapsed, sd.size, t(sd.root)];
+  const col = (sd: Column) => [sd.collapsed, sd.size ?? null, t(sd.root)];
   return JSON.stringify([n(L.root), S ? SIDEBARS.map((k) => col(S[k])) : null]);
 }
 export const sameShape = (a: Layout, b: Layout): boolean => shape(a) === shape(b);
@@ -207,7 +208,7 @@ export function validate(input: unknown): string[] {
           if (n.panels.length ? !n.panels.includes(n.active!) : n.active != null) errs.push(`side ${side}: group ${n.id} active ${n.active}`);
         } else errs.push(`side ${side}: node ${idOf(n)}`);
       });
-      if (!(sd.size > 0)) errs.push(`side ${side} size`);
+      if (sd.size != null && !(sd.size > 0)) errs.push(`side ${side} size`);
       if (typeof sd.collapsed !== 'boolean') errs.push(`side ${side} collapsed`);
     }
   }
@@ -517,10 +518,14 @@ export function shiftTab(L: Layout, tabId: string, delta: number): Layout {
 // tree constrained to 'column' splits (so it is a group or one column split over groups: normSplit flattens the rest),
 // split, resized and collapsed by the same code. A panel group: { kind: 'group', id, panels: [viewId], active }. An
 // empty group collapses (its share goes to its neighbours), except the root of an empty column.
+// A column's WIDTH: the one the user gave it (resizeSide; kept in the layout), else its default (sideWidth): the widest
+// default width its panels' types give (PanelWidth: a share of the workbench's width, within px bounds), else SIDE_SIZE
+// px. resetSide goes back to it.
 export const SIDEBARS: readonly SideName[] = ['left', 'right'];
-export const SIDE_SIZE = 256;   // a column's default width in px (css.ts: the fallback of --wb-side-w)
+export const SIDE_MIN = 160;   // a column's least width in px (its edge's drag stops there; a default share is never narrower)
+export const SIDE_SIZE = 256;   // a column's default width in px when none of its panels gives one (css.ts: the fallback of --wb-side-w)
 export const panelGroup = (id: string, panels: string[] = [], active: string | null = panels[0] ?? null): PanelGroup => ({ kind: 'group', id, panels, active });
-const emptySide = (side: SideName): Column => ({ root: panelGroup(`${side}-0`), collapsed: false, size: SIDE_SIZE });
+const emptySide = (side: SideName): Column => ({ root: panelGroup(`${side}-0`), collapsed: false });
 /** The sides, filled in for a layout that has none yet. */
 export const sides = (L: Layout): Sides => L.sides ?? { left: emptySide('left'), right: emptySide('right') };
 /** A column's panel groups, top to bottom. */
@@ -621,6 +626,39 @@ export function resizeSide(L: Layout, side: SideName, size: number): Layout {
   if (!SIDEBARS.includes(side) || !(size > 0)) return L;
   const r = Math.round(size);
   return setSide(L, side, (sd) => (sd.size === r ? sd : { ...sd, size: r }));
+}
+/** The column back to its default width (the user's width forgotten). */
+export function resetSide(L: Layout, side: SideName): Layout {
+  if (!SIDEBARS.includes(side)) return L;
+  return setSide(L, side, (sd) => { if (sd.size == null) return sd; const { size: _gone, ...rest } = sd; return rest; });
+}
+/** A panel's default width for its column (a view type's panel.width): `share` of the workbench's width (0 < share ≤ 1),
+ *  at least `min` px, at most `max` px (both optional). */
+export type PanelWidth = { share: number; min?: number; max?: number };
+/** A column's width: { px } (the user's, or SIDE_SIZE), or a panel's default width (PanelWidth): of the column's panels,
+ *  the one with the widest share (`width(id)`: its type's, or none; a share out of (0, 1] is none). */
+export type SideWidth = { px: number; share?: undefined; min?: undefined; max?: undefined } | (PanelWidth & { px?: undefined });
+export function sideWidth(sd: Column, width: (panelId: string) => PanelWidth | null | undefined): SideWidth {
+  if (sd.size != null) return { px: sd.size };
+  let best: PanelWidth | null = null;
+  for (const id of sidePanels(sd)) { const w = width(id); if (w && w.share > 0 && w.share <= 1 && (!best || w.share > best.share)) best = w; }
+  return best ? { ...best } : { px: SIDE_SIZE };
+}
+/** A column's width (sideWidth: the user's, or its panels' default) as CSS (--wb-side-w), and in px in an area
+ *  `areaW` wide: a share within its bounds (min: at least SIDE_MIN px); in an overlay (`full`) a default share is the
+ *  whole area. */
+const bounds = (w: PanelWidth) => ({ lo: Math.max(SIDE_MIN, w.min ?? 0), hi: w.max ?? Infinity });
+export function sideCss(w: SideWidth, full = false): string {
+  if (w.share == null) return `${w.px}px`;
+  if (full) return '100%';
+  const { lo, hi } = bounds(w), pct = `${+(w.share * 100).toFixed(4)}%`;
+  return hi < Infinity ? `clamp(${lo}px, ${pct}, ${Math.max(lo, hi)}px)` : `max(${lo}px, ${pct})`;
+}
+export function sidePx(w: SideWidth, areaW: number, full = false): number {
+  if (w.share == null) return w.px;
+  if (full) return Math.round(areaW);
+  const { lo, hi } = bounds(w);
+  return Math.round(Math.max(lo, Math.min(Math.max(lo, hi), w.share * areaW)));
 }
 export function setPanelState(L: Layout, id: string, state: ViewState): Layout {
   const cur = L.panelState?.[id];

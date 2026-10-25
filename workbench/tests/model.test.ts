@@ -459,3 +459,48 @@ test('the side column\'s CSS width before it is sized is the model\'s SIDE_SIZE 
   assert.ok(fallbacks.length >= 2, 'the column and the overlay column');
   assert.deepEqual([...new Set(fallbacks)], [`${M.SIDE_SIZE}px`]);
 });
+
+test('a column\'s width: the user\'s, else the widest default share its panels give, else SIDE_SIZE; reset goes back', () => {
+  const widths: Record<string, M.PanelWidth> = { insp: { share: 1 / 3, min: 320 }, half: { share: 0.5, max: 700 }, bad: { share: 2 } };
+  const width = (id: string) => widths[id];
+  const W = (L: M.Layout, s: M.SideName) => M.sideWidth(M.sides(L)[s], width);
+  let L = ok(M.emptyLayout('g1'));
+  assert.deepEqual(W(L, 'right'), { px: M.SIDE_SIZE }, 'an empty column: SIDE_SIZE');
+  assert.equal(M.sides(L).right.size, undefined, 'a new column has no width of its own');
+  L = run(L, (l) => M.addPanel(l, 'outline', 'right'));
+  assert.deepEqual(W(L, 'right'), { px: M.SIDE_SIZE }, 'no panel gives one: SIDE_SIZE');
+  L = run(L, (l) => M.addPanel(l, 'insp', 'right'));
+  assert.deepEqual(W(L, 'right'), { share: 1 / 3, min: 320 }, 'a panel\'s default width');
+  L = run(L, (l) => M.addPanel(l, 'bad', 'right'));
+  assert.deepEqual(W(L, 'right'), { share: 1 / 3, min: 320 }, 'a share out of (0, 1] is ignored');
+  L = run(L, (l) => M.addPanel(l, 'half', 'right'));
+  assert.deepEqual(W(L, 'right'), { share: 0.5, max: 700 }, 'the widest share wins');
+  L = run(L, (l) => M.movePanel(l, 'half', 'left'));
+  assert.deepEqual(W(L, 'left'), { share: 0.5, max: 700 }, 'it goes with the panel to the other column');
+  assert.deepEqual(W(L, 'right'), { share: 1 / 3, min: 320 });
+  L = run(L, (l) => M.resizeSide(l, 'right', 500.2));
+  assert.deepEqual(W(L, 'right'), { px: 500 }, 'the user\'s width wins');
+  L = run(L, (l) => M.removePanel(l, 'insp'));
+  assert.deepEqual(W(L, 'right'), { px: 500 }, 'and is kept as panels come and go');
+  assert.deepEqual(M.deserialize(M.serialize(L)), L, 'round trip (one column sized, one not)');
+  L = run(L, (l) => M.resetSide(l, 'right'));
+  assert.equal(M.sides(L).right.size, undefined);
+  assert.equal(M.resetSide(L, 'right'), L, 'a reset of an unsized column is a no-op');
+  assert.deepEqual(M.validate({ ...L, sides: { ...L.sides!, left: { ...L.sides!.left, size: 0 } } }), ['side left size'], 'a width of 0 is invalid');
+});
+
+test('a column\'s width in px and as CSS: a share within its bounds (never under SIDE_MIN); the whole width as an overlay', () => {
+  const third = { share: 1 / 3, min: 320 }, half = { share: 0.5, max: 700 };
+  assert.equal(M.sidePx(third, 1600), 533);
+  assert.equal(M.sidePx(third, 600), 320, 'at least its min');
+  assert.equal(M.sidePx(half, 2000), 700, 'at most its max');
+  assert.equal(M.sidePx({ share: 0.1 }, 1000), M.SIDE_MIN, 'never under SIDE_MIN');
+  assert.equal(M.sidePx({ px: 256 }, 1600), 256, 'a px width is as it is');
+  assert.equal(M.sidePx(third, 390, true), 390, 'an overlay: the whole width');
+  assert.equal(M.sidePx({ px: 256 }, 390, true), 256, '(a px width stays: the overlay\'s own cap applies)');
+  assert.equal(M.sideCss(third), 'max(320px, 33.3333%)');
+  assert.equal(M.sideCss(half), `clamp(${M.SIDE_MIN}px, 50%, 700px)`);
+  assert.equal(M.sideCss({ share: 0.5, min: 800, max: 700 }), 'clamp(800px, 50%, 800px)', 'a max under the min is the min');
+  assert.equal(M.sideCss(third, true), '100%');
+  assert.equal(M.sideCss({ px: 300 }, true), '300px');
+});

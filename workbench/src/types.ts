@@ -2,7 +2,7 @@
 // events. Types only (erased): the modules import them with `import type`.
 import type { ComponentType } from 'preact';
 import type { ReadonlySignal, Signal } from '@preact/signals';
-import type { Tab, ViewState, SideName, Side } from './model.ts';
+import type { Tab, ViewState, SideName, Side, PanelWidth } from './model.ts';
 import type { IconName } from './kit/icons.ts';
 import type { Crumb } from './crumbs.ts';
 import type { DragInfo, DragResult, DragSpec, DropHandlers, PointerSession } from './drag.ts';
@@ -80,8 +80,12 @@ export type ViewType<S extends ViewState = ViewState> = {
    *  as a CSS `left` whose percentages are of the group's width (which moves every frame). Read once, as the motion
    *  begins: no layout read in it. None: the host's left edge stays where it is. */
   lockedLeft?(ctx: ViewContext, w: number): string | null;
-  /** A side panel: docked on this side by default (below: as its own group at the column's bottom). */
-  panel?: { side?: SideName; below?: boolean; index?: number };
+  /** A side panel: docked on this side by default (below: as its own group at the column's bottom). width: its column's
+   *  default width while the user has not sized it: { share, min?, max? }, a share of the workbench's width within px
+   *  bounds (the widest share of the column's panels wins; none of them: SIDE_SIZE px); a column with such a default
+   *  takes the whole width in a narrow window (an overlay). onClose: the panel is closable (a close button on its own
+   *  tab, Close in its menu), and this is what closing it does (the host takes it away: unregisters its type). */
+  panel?: { side?: SideName; below?: boolean; index?: number; width?: PanelWidth; onClose?(): void };
   /** A side panel's count on its tab (may read signals: the strip follows): the Problems, the TODOs. */
   badge?(): { n: number; title?: string; tone?: 'danger' } | null;
   Component: ComponentType<{ tab: Tab; ctx: ViewContext }>;

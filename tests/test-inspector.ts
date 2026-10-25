@@ -4,11 +4,12 @@
 //
 //   node tests/test-inspector.ts [http://localhost:8156/]       (a dev server: tests/integration/serve.ts)
 //
-// Hidden by default (no control, no menu item, the shortcut does nothing and goes on to a text field unprevented,
-// nothing loaded); the advanced switch shows its control; with two panes it inspects pane A only (its blocks, its
-// outlines; pane B has no marks); focusing pane B moves it, picking a pane in its bar pins it; its own close and the
-// advanced switch turn it off and remove everything (the key then still goes on to a text field unprevented); no
-// block is re-broken by any of it (the viewer's paint counter and the blocks' widths stay).
+// Hidden by default (no control, no menu item, no view, the shortcut does nothing and goes on to a text field
+// unprevented, nothing loaded); the advanced switch shows its control; ⌥⇧I opens it as a side panel on the right, its
+// column a third of the window wide, the public panel hosted in it; with two panes it inspects the focused one only (its
+// blocks, its outlines); focusing the other moves it, picking a pane in its bar pins it; the shortcut, the View control
+// and its tab's close button close it (everything goes); moved to the left it is hosted there, comes back there, and a
+// width the user gives its column is kept; the advanced switch off closes it.
 // Results: test-results/inspector/results.json.
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -47,17 +48,30 @@ const P: Record<string, string> = { a: await page.evaluate(() => Object.keys((wi
 const syncP = () => page.evaluate((p: Record<string, string>) => { (window as any).P = p; }, P);
 await syncP();
 
-/** what is on the page of the inspector: its panel, its outline layer, its bar, the viewer's paint count, the blocks' widths */
+/** what is on the page of the inspector: the public panel's host (where it is: the side column), the outline layer's
+ *  marks, its pane bar, the column's width (and the window's), the viewer's paint count, the blocks' widths */
 const state = () => page.evaluate(() => {
-  const host = [...document.documentElement.children].find((e) => e.hasAttribute('data-rtx-ui') && (e as any).shadowRoot) as any;
+  const w = window as any;
+  const host = [...document.querySelectorAll('[data-rtx-ui]')].find((e) => (e as any).shadowRoot) as any;
   const panel = host?.shadowRoot?.querySelector('.rtx') as HTMLElement | undefined;
   const layer = document.querySelector('[data-rtx-inspector]');
   const bar = document.querySelector('.rtx-insp-bar') as HTMLElement | null;
+  const aside = host?.closest('aside[data-side]') as HTMLElement | null;
+  const S = w.editorAPI.workbench().sides.peek();
+  const panelsOf = (n: any): string[] => (n.kind === 'split' ? n.children.flatMap(panelsOf) : n.panels);
+  const docked = ['left', 'right'].find((s) => panelsOf(S[s].root).includes('inspector')) ?? null;
   const widths = [...document.querySelectorAll('[data-pane] .blk-render > .latex-block')].map((el) => Math.round((el as HTMLElement).getBoundingClientRect().width)).join(',');
-  return { host: !!host, open: !!panel && !panel.hidden, layer: !!layer, marks: layer?.childElementCount ?? 0, bar: bar?.dataset.paneOf ?? null,
-    loaded: !!(window as any).reflowtex?.inspector, paints: (window as any).reflowtex.inspect.paints, widths,
-    on: (window as any).editorAPI.inspector().on.peek(), target: (window as any).editorAPI.inspector().target.peek() };
+  return { host: !!host, open: !!panel && !panel.hidden, embedded: !!panel?.classList.contains('docked'), marks: layer?.childElementCount ?? 0, bar: bar?.dataset.paneOf ?? null,
+    side: aside?.dataset.side ?? null, inView: !!host?.closest('[data-panel-view="inspector"]'), docked, width: aside ? Math.round(aside.getBoundingClientRect().width) : null,
+    vw: document.documentElement.clientWidth,
+    loaded: !!w.reflowtex?.inspector, paints: w.reflowtex.inspect.paints, widths,
+    on: w.editorAPI.inspector().on.peek(), target: w.editorAPI.inspector().target.peek() };
 });
+/** the side column's width is a third of the window (the inspector's default), within a few px */
+const third = (s: { width: number | null; vw: number }) => s.width != null && Math.abs(s.width - s.vw / 3) <= 4;
+/** gone: no public panel on the page, nothing outlined, no bar, not docked in either column */
+const gone = (s: Awaited<ReturnType<typeof state>>) => !s.on && !s.host && s.marks === 0 && !s.bar && !s.docked;
+const settle = async () => { await ready(); await frames(); await page.waitForFunction(() => ![...document.querySelectorAll('[data-rtx-ui]')].some((e) => (e as any).shadowRoot) || (window as any).editorAPI.inspector().on.peek()); };
 /** the blocks the agent lists, by the pane their element is in */
 const agentBlocks = () => page.evaluate(() => {
   const a = (window as any).__rtxInspector;
@@ -125,13 +139,13 @@ async function closeMenu() { await page.keyboard.press('Escape'); await page.wai
   await page.keyboard.press('Alt+Shift+KeyI');
   await frames();
   const s = await state();
-  check('... Alt+Shift+I does nothing: the public panel is not even loaded', !s.loaded && !s.host && !s.layer && !s.bar && !s.on, s);
+  check('... Alt+Shift+I does nothing: the public panel is not even loaded', !s.loaded && gone(s), s);
   const k = await keyInField();
   await frames();
   const s2 = await state();
   check('... Alt+Shift+I in a text field (the inspector cannot show) reaches the field, not prevented (on a Mac: a character)', k.heard && !k.prevented && !s2.on && !s2.loaded, { k, s2 });
-  const reg = await page.evaluate(() => (window as any).editorAPI.views().find((x: any) => x.id === 'inspector'));
-  check('it is a registered view: id inspector, its own container slot', reg?.slot === 'pane-corner', reg);
+  const reg = await page.evaluate(() => (window as any).editorAPI.views().find((x: any) => x.id === 'inspector') ?? null);
+  check('... no inspector view registered while it is closed', reg === null, reg);
 }
 
 // ── the switch shows it ───────────────────────────────────────────────────────
@@ -143,7 +157,7 @@ async function closeMenu() { await page.keyboard.press('Escape'); await page.wai
   await closePopover();
 }
 
-// ── two panes: it inspects pane A only ────────────────────────────────────────
+// ── two panes: it inspects the focused one only, in a side panel on the right ──
 await page.evaluate(() => (window as any).editorAPI.workbench().run('splitRight'));
 await page.waitForFunction((a: string) => Object.keys((window as any).editorAPI.editors()).some((p) => p !== a), P.a);
 P.b = await page.evaluate((a: string) => Object.keys((window as any).editorAPI.editors()).find((p) => p !== a), P.a);
@@ -152,21 +166,25 @@ await page.waitForSelector(`[data-pane="${P.b}"] .blocks > .blk .blk-render > .l
 await idle();
 await frames();
 await focusPane(P.a);
-const s0 = await state();
+let s0 = await state();
 {
-  await viewPopover();
-  await page.click('#rtx-vp-inspector');
+  await page.keyboard.press('Alt+Shift+KeyI');
   await ready();
-  await closePopover();
   await idle();
   const s = await state();
-  check('the control opens it, on the focused pane (A): the panel open, its bar at pane A', s.open && s.on && s.target === P.a && s.bar === P.a, s);
+  check('Alt+Shift+I opens it as a side panel on the right: the public panel hosted in the right column\'s Inspector view',
+    s.open && s.on && s.embedded && s.inView && s.side === 'right' && s.docked === 'right', s);
+  check('... its column is a third of the window wide (the view\'s default width), wider than the left column\'s default',
+    third(s) && s.width! > 256, { width: s.width, vw: s.vw, third: s.vw / 3 });
+  check('... it inspects the focused pane (A): its bar says so', s.target === P.a && s.bar === P.a, s);
+  const reg = await page.evaluate(() => (window as any).editorAPI.views().find((x: any) => x.id === 'inspector') ?? null);
+  check('... a registered side-panel view (slot sidebar) while it is open', reg?.slot === 'sidebar', reg);
   const b = await agentBlocks();
   check('it lists pane A\'s blocks only (all of them), none of pane B\'s', !!b && b.by[P.a] === b.a && !b.by[P.b] && !b.by.none && b.a > 0 && b.b > 0, b);
   const m = await marksWhere();
   check('its outlines (a block hovered) lie in pane A; pane B has no inspector marks', m.n > 0 && m.inA === m.n && m.inB === 0, m);
-  check('opening it re-broke nothing (the viewer\'s paints and the blocks\' widths unchanged)', s.paints === s0.paints && s.widths === s0.widths, { before: s0.paints, after: s.paints });
   await page.screenshot({ path: join(OUT, '01-pane-a.png') });
+  s0 = await state();
 }
 // a block of pane A, from its block menu: the tree shows that block
 {
@@ -177,11 +195,11 @@ const s0 = await state();
   await page.click('.block-menu [data-action="inspect"]');
   await ready();
   const sel = await page.evaluate(() => {
-    const host = [...document.documentElement.children].find((e) => e.hasAttribute('data-rtx-ui') && (e as any).shadowRoot) as any;
+    const host = [...document.querySelectorAll('[data-rtx-ui]')].find((e) => (e as any).shadowRoot) as any;
     return host.shadowRoot.querySelector('[aria-selected="true"], .sel, .selected')?.textContent?.slice(0, 60) ?? null;
   });
   const s = await state();
-  check('Inspect boxes and glue opens it on that block, still on pane A', s.open && s.target === P.a && !!sel, { sel, target: s.target });
+  check('Inspect boxes and glue opens it on that block, still on pane A, still in its side panel', s.open && s.side === 'right' && s.target === P.a && !!sel, { sel, target: s.target });
 }
 
 // ── switching panes moves it ──────────────────────────────────────────────────
@@ -211,52 +229,105 @@ const s0 = await state();
   check('moving between the panes re-broke nothing', s2.paints === s0.paints && s2.widths === s0.widths, { before: s0.paints, after: s2.paints });
 }
 
-// ── turning it off removes everything ─────────────────────────────────────────
+// ── closing: the shortcut, its tab's close, the advanced switch ───────────────
 {
-  await page.click('.rtx-insp-bar .rtx-insp-close');
-  await ready();
-  await frames();
+  await page.keyboard.press('Alt+Shift+KeyI');
+  await settle();
   const s = await state();
-  check('its bar\'s close turns it off: no panel, no outline layer, no bar', !s.on && !s.host && !s.layer && !s.bar, s);
+  check('Alt+Shift+I again closes it: no public panel, no outlines, no bar, its view gone from the column', gone(s), s);
+  check('... the right column goes with it (it had no other panel)', !(await page.$('aside[data-side="right"]')));
   const v = await viewPopover();
   check('... the View control says off', v.inspector && !v.checked, v);
   await closePopover();
-  check('turning it off re-broke nothing', s.paints === s0.paints && s.widths === s0.widths, { before: s0.paints, after: s.paints });
-  // the shortcut: on, then the panel's own close (Esc in it) turns it off here too
+  // the View control opens it
+  await viewPopover();
+  await page.click('#rtx-vp-inspector');
+  await ready();
+  await closePopover();
+  const t = await state();
+  check('the View control opens it again, on the right, a third wide, on the focused pane', t.on && t.open && t.side === 'right' && third(t) && t.target === P.b, t);
+  // closable: its tab's close button
+  await page.click('[data-ptab="inspector"] .wb-ptab-close');
+  await settle();
+  const u = await state();
+  check('its tab\'s close button closes it', gone(u), u);
+}
+
+// ── moved to the left, resized: the workbench's own rules ─────────────────────
+{
+  await page.keyboard.press('Alt+Shift+KeyI');
+  await ready();
+  await page.click('[data-ptab="inspector"]', { button: 'right' });
+  await page.click('[data-item="move-left"]');
+  await page.waitForFunction(() => (window as any).editorAPI.workbench().sides.peek().left.root && [...document.querySelectorAll('aside[data-side="left"] [data-ptab]')].some((e: any) => e.dataset.ptab === 'inspector'));
+  await ready();
+  await frames();
+  const s = await state();
+  const b = await agentBlocks();
+  check('moved to the left (its tab\'s menu): hosted in the left column, still inspecting the focused pane', s.on && s.open && s.side === 'left' && s.docked === 'left' && s.target === P.b && !!b && b.by[P.b] === b.b, { s, b });
+  check('... the left column takes its default width (a third) while it holds it', third(s), { width: s.width, vw: s.vw });
+  await page.keyboard.press('Alt+Shift+KeyI');
+  await settle();
+  check('... Alt+Shift+I closes it there', gone(await state()));
   await page.keyboard.press('Alt+Shift+KeyI');
   await ready();
   const t = await state();
-  check('Alt+Shift+I (switch on) opens it on the focused pane', t.on && t.open && t.target === P.b, t);
-  await page.evaluate(() => {
-    const host = [...document.documentElement.children].find((e) => e.hasAttribute('data-rtx-ui') && (e as any).shadowRoot) as any;
-    host.shadowRoot.querySelector('.close').click();
-  });
-  await page.waitForFunction(() => !(window as any).editorAPI.inspector().on.peek());
-  await ready();
-  const u = await state();
-  check('the panel\'s own close turns it off and removes everything', !u.on && !u.host && !u.layer && !u.bar, u);
-  // the advanced switch off while it is open
+  check('... and opens it where it was (the left)', t.on && t.side === 'left', t);
+  // the user's width: kept as it closes and opens
+  await page.evaluate(() => (window as any).editorAPI.workbench().resizeSide('left', 520));
+  await frames();
+  await page.keyboard.press('Alt+Shift+KeyI');
+  await settle();
   await page.keyboard.press('Alt+Shift+KeyI');
   await ready();
-  await viewPopover();
-  // (the floating panel is above every layer of the page, the popover too: a click through the DOM)
-  await page.evaluate(() => { document.getElementById('rtx-vp-advanced')!.click(); });
-  await closePopover();
+  await frames();
+  const r = await state();
+  check('a width the user gives its column is kept as it closes and opens', r.on && r.side === 'left' && r.width === 520, r);
+  await page.click('[data-ptab="inspector"]', { button: 'right' });
+  await page.click('[data-item="move-right"]');
   await ready();
   await frames();
+  const q = await state();
+  check('moved back to the right: a third wide there again (the left keeps the user\'s width)', q.side === 'right' && third(q), q);
+}
+
+// ── the advanced switch off while it is open ──────────────────────────────────
+{
+  await viewPopover();
+  await page.evaluate(() => { document.getElementById('rtx-vp-advanced')!.click(); });
+  await closePopover();
+  await settle();
   const w = await state();
-  check('the advanced switch off turns it off and removes everything', !w.on && !w.host && !w.layer && !w.bar, w);
+  check('the advanced switch off closes it and removes everything', gone(w), w);
   await page.keyboard.press('Alt+Shift+KeyI');
   await ready();
   check('... and the shortcut does nothing again', !(await state()).on);
   // the public panel's script is on the page now (its own listener for the key): in a text field the key is still not
-  // prevented, and that listener does not open the panel on the whole page
+  // prevented, and that listener does not show the panel
   const k = await keyInField();
   await frames();
   const ks = await state();
-  check('... Alt+Shift+I in a text field, the panel loaded: not prevented, no panel opened', !k.prevented && ks.loaded && !ks.on && !ks.host && !ks.open, { k, ks });
-  const z = await state();
-  check('no re-break at any toggle (paints and widths as before the first)', z.paints === s0.paints && z.widths === s0.widths, { before: s0.paints, after: z.paints });
+  check('... Alt+Shift+I in a text field, the panel loaded: not prevented, no panel shown', !k.prevented && ks.loaded && gone(ks), { k, ks });
+}
+
+// ── a phone: the side column floats over the documents, and a panel's default width is the whole width ──
+{
+  const phone = await browser.newContext({ viewport: { width: 390, height: 800 }, reducedMotion: 'reduce' });
+  await phone.addInitScript(() => { try { localStorage.setItem('rtx-editor.advanced', '1'); } catch { /* */ } });
+  const p2 = await phone.newPage();
+  p2.setDefaultTimeout(120000);
+  p2.on('pageerror', (e: any) => problems.push(`phone pageerror: ${e.message}`));
+  await p2.goto(`${BASE}?seed=sample&store=memory&engine#/doc/sample`);
+  await p2.waitForFunction(() => (window as any).editorAPI?.whenIdle);
+  await p2.evaluate(() => (window as any).editorAPI.whenIdle());
+  await p2.keyboard.press('Alt+Shift+KeyI');
+  await p2.evaluate(() => (window as any).editorAPI.inspector().whenReady());
+  await p2.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  const g = await p2.evaluate(() => { const a = document.querySelector('aside[data-side="right"]') as HTMLElement | null;
+    return { on: (window as any).editorAPI.inspector().on.peek(), overlay: !!a?.classList.contains('wb-side--overlay'), w: a ? Math.round(a.getBoundingClientRect().width) : null, vw: document.documentElement.clientWidth }; });
+  check('on a phone (390 px) it opens over the documents, the whole width', g.on && g.overlay && g.w === g.vw, g);
+  await p2.screenshot({ path: join(OUT, '03-phone.png') });
+  await phone.close();
 }
 
 check('no page errors', problems.length === 0, problems);

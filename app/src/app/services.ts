@@ -90,7 +90,7 @@ export async function createPageServices({ params, route = () => null, store: st
   // installs a setting, a view, a key listener and a style element when it is evaluated)
   let inspector: InspectorService | null = null;
   if (!isRelease()) {
-    try { inspector = (await import('../inspector/index.js')).inspector; } catch (e) { inspector = featureFailed('inspector', e); }
+    try { inspector = (await import('../inspector/index.ts')).inspector; } catch (e) { inspector = featureFailed('inspector', e); }
   }
 
   const services: EditorServices = {

@@ -44,7 +44,7 @@ export function installTestSurface({ wb, tabs, store, services, kinds, openDoc, 
     notes: () => services.notes, io: () => services.io, view: () => services.view, bibpane: () => tabs.bibpane, refnav: () => tabs.refnav,
     views: () => registeredViews().map((v: ViewDef) => ({ id: v.id, title: v.title, slot: v.slot })),
     layers: () => layerState().map((l: { kind: string; z: string }) => ({ kind: l.kind, z: l.z })),
-    /** the page's inspector (inspector/index.js); null in a release (not loaded there) */
+    /** the page's inspector (inspector/index.ts); null in a release (not loaded there) */
     inspector: () => services.inspector,
     refsState: () => (cur() as { refsState?(): unknown } | null)?.refsState?.() ?? null,
     /** the backend object of the current document (PDF export, stats) */

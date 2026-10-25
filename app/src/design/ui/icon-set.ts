@@ -27,7 +27,7 @@ export const ICON_SET = {
   sidebarLeft: L.PanelLeft, sidebarRight: L.PanelRight, split: L.Columns2, pin: L.Pin, focus: L.Pin, unfocus: L.PinOff, newTab: L.SquareArrowRightEnter, home: L.House,
   // documents and views
   file: L.File, files: L.Files, text: L.Text, textSize: L.ALargeSmall, list: L.List, outline: L.List, todos: L.ListTodo, book: L.BookOpen,
-  preamble: L.Braces, note: L.StickyNote, comment: L.MessageSquare, figure: L.Image, problems: L.TriangleAlert, missing: L.CircleAlert, keyboard: L.Keyboard,
+  preamble: L.Braces, note: L.StickyNote, comment: L.MessageSquare, figure: L.Image, problems: L.TriangleAlert, missing: L.CircleAlert, keyboard: L.Keyboard, inspect: L.ScanSearch,
   // the figure editor: tools
   pointer: L.MousePointer2, hand: L.Hand, rect: L.Square, ellipse: L.Circle, line: L.Slash, arrow: L.MoveUpRight, path: L.Spline,
   label: L.Type, textBox: L.TextCursorInput,

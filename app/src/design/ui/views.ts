@@ -6,7 +6,10 @@
 //   registerView({ id, title, icon?, panel?: { side, order }, badge?, Component?({ ctx, close? }), mount?(host, ctx) })
 //     title       a string, or (state) -> string
 //     panel       a side panel: no document of its own, it follows the container's CURRENT document (ctx.current);
-//                 { side: 'left' | 'right', order }. (The older slot: 'sidebar' and order mean the same: panel left)
+//                 { side: 'left' | 'right', order, width?, onClose? }; width: its column's default width, { share, min?,
+//                 max? } (a share of the window, within px bounds; a container with columns uses it); onClose: it is
+//                 closable (its container offers a close on its tab that calls it). (The older slot: 'sidebar' and order
+//                 mean the same: panel left)
 //     Component   the content, a Preact component of { ctx } (and close, in a sheet)
 //     mount       or, for content that is not a component (an island, a pane of its own DOM): mount(host, ctx) ->
 //                 { unmount(), focus?() }; a host element the container owns and never re-parents
@@ -65,8 +68,9 @@ export interface ViewDef {
   id: string;
   title?: string | ((state: unknown) => string);
   icon?: string;
-  /** a side panel: it follows the container's current document */
-  panel?: { side: 'left' | 'right'; order?: number } | null;
+  /** a side panel: it follows the container's current document; width: its column's default width (a share of the window);
+   *  onClose: closable, and what closing it does */
+  panel?: { side: 'left' | 'right'; order?: number; width?: { share: number; min?: number; max?: number }; onClose?(): void } | null;
   slot?: string | null;
   order?: number;
   label?: string;

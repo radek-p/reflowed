@@ -1,6 +1,6 @@
 // A release: the dev switches ?stubs= and ?store=memory are ignored (the store stays IndexedDB, so
 // documents persist), and every feature installed (globalThis.__rtxFeatureErrors stays empty). The inspector (a
-// developer tool) is not there at all: no inspector, no view, no style element; Alt+Shift+I reaches a text field.
+// developer tool) is not there at all: no inspector, no view, no side panel, no style element; Alt+Shift+I reaches a text field.
 //   node tests/test-release-mode.ts [dist/reflowtex-editor.html]
 import { harness } from './qa/lib/harness.ts';
 
@@ -16,6 +16,12 @@ t.check('every feature installed (no __rtxFeatureErrors)', !failed.length, faile
 const insp = await page.evaluate(() => ({ api: (window as any).editorAPI.inspector() ?? null,
   view: (window as any).editorAPI.views().some((v: { id: string }) => v.id === 'inspector'), css: !!document.getElementById('rtx-insp-css') }));
 t.check('no inspector in a release: editorAPI.inspector() null, no inspector view registered, no #rtx-insp-css', insp.api === null && !insp.view && !insp.css, insp);
+// nor its side panel: Alt+Shift+I opens nothing, the workbench has no such panel type, no column holds it
+await page.keyboard.press('Alt+Shift+KeyI');
+await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+const side = await page.evaluate(() => ({ type: !!(window as any).editorAPI.workbench().viewType('inspector'), tab: !!document.querySelector('[data-ptab="inspector"], [data-panel-view="inspector"]'),
+  right: !!document.querySelector('aside[data-side="right"]'), panel: !!(window as any).reflowtex?.inspector }));
+t.check('no inspector side panel in a release (Alt+Shift+I pressed): no panel type, no tab, no right column, no public panel', !side.type && !side.tab && !side.right && !side.panel, side);
 // Alt+Shift+I (on a Mac a character in many layouts) reaches a text field, its default not prevented
 const key = await page.evaluate(() => {
   const input = document.createElement('input');
