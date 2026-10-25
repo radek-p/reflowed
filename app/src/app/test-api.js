@@ -16,6 +16,7 @@ export function createTestApi(x) {
     async whenIdle() {
       for (;;) {
         if (x.edits.settling()) { await x.edits.settled(); continue; }          // a close's refresh after its motion
+        if (x.S.follow.pending) { await x.S.follow.idle(); continue; }           // another tab's changes read and applied
         if (x.queue.busy() || x.edits.live.pending()) await x.queue.whenSettled();
         if (x.queue.draining()) { await x.queue.whenDrained(); continue; }
         if (!x.S.doc) return;

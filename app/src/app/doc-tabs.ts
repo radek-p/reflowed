@@ -96,6 +96,8 @@ export interface DocTabsOptions {
   router: Router;
   /** the page's sidebar toggle (the command view.sidebar) */
   shell: { toggleSidebar(open?: boolean): void; toggleSplit?(): void };
+  /** document `docId` was deleted in another tab: the host closes its tabs */
+  gone?(docId: string): void;
 }
 
 /** a pane's own chrome inside the host's element: its <main> (the scroller), the DocumentView's host, "Add a block" */
@@ -151,7 +153,7 @@ export function createDocTabs(root: EditorRoot, services: EditorServices, o: Doc
   };
   const common = { ...services.editorContext, root, store: services.store, ids: services.ids, backends: services.backends, io: services.io,
     shell: o.shell, notes: services.notes, bibpane, view: services.view, topbar: o.topbar, layout, router: o.router, connectBib: false,
-    inspector: services.inspector, widths, perf, writesSettled, tabs: true };
+    inspector: services.inspector, widths, perf, writesSettled, tabs: true, docGone: (docId: string) => o.gone?.(docId) };
 
   function makeEditor(id: string, docId: string, chrome: { pane: HTMLElement; host: HTMLElement; add: HTMLElement }): DocEditor {
     const refs = services.makeRefs() as { setSlots?(k: string): void };

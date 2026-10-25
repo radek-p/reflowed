@@ -11,20 +11,22 @@
 //                                   hashes and stored sources known; false when it is gone
 //     S.unload()                    the document closed: its results and history go
 //     S.persist · S.model · S.history · S.derived · S.results · S.ops · S.refs · S.backend()
-//   hooks: { saveChanged(), saveFailed(e), unplaced(id), beforeUndo(entry, how), afterUndo(entry, how), ops: (doc/ops.ts hooks) }
+//     S.follow                      what other tabs write to the document, followed while it is open (doc/follow.ts)
+//   hooks: { saveChanged(), saveFailed(e), unplaced(id), beforeUndo(entry, how), afterUndo(entry, how), ops: (doc/ops.ts hooks),
+//            gone() (the document was deleted in another tab: nothing more is written) }
 import { createPersist, type PersistStore } from './persist.ts';
 import { createModel } from './model.js';
 import { createHistory } from './history.js';
 import { createDerived } from './derived.js';
 import { createResults } from './results.js';
 import { createOps, type Block, type Doc, type OpsHooks, type OpsNest } from './ops.ts';
+import { createFollow, type FollowStore } from './follow.ts';
 
 /** the open document as the session holds it: the store's OpenDoc, its blocks sorted */
 export interface OpenDoc extends Doc { assets: unknown[]; readOnly?: string; deletedAt?: number; [k: string]: unknown }
 /** what the session reads from the store (contracts.d.ts DocStore; the writes are persist's) */
-export interface SessionStore extends PersistStore {
+export interface SessionStore extends FollowStore, PersistStore {
   getDoc(id: string): Promise<(Omit<OpenDoc, 'blocks' | 'assets'> & { blocks?: Block[]; assets?: unknown[] }) | null>;
-  getBlocks(id: string): Promise<Block[]>;
   [k: string]: unknown;
 }
 /** the nesting (nesting/app.js) as the session uses it: the tree repaired and ordered on open, ops' cases (and derived's) */
@@ -39,6 +41,7 @@ export interface SessionHooks {
   beforeUndo(step: unknown, how: 'undo' | 'redo'): void;
   afterUndo(step: unknown, how: 'undo' | 'redo'): void;
   ops: OpsHooks;
+  gone?(): void;
 }
 export interface SessionOptions {
   store: SessionStore;
@@ -61,11 +64,13 @@ export function createDocSession({ store, ids, refs, backend, nest, salt, bibpan
   const getDoc = () => doc;
   const results = createResults();
   const persist = createPersist({ store, ids, doc: getDoc, readOnly: () => readOnly(doc), beforeDestructive,
-    onChange: () => hooks.saveChanged(), onError: (e) => hooks.saveFailed(e) });
+    onChange: () => hooks.saveChanged(), onError: (e) => hooks.saveFailed(e), onConflict: (id, stored) => follow.conflict(id, stored) });
   const model = createModel({ ids, persist, doc: getDoc, onUnplace: (id) => hooks.unplaced(id) });
   const history = createHistory({ before: (u, how) => hooks.beforeUndo(u, how), after: (u, how) => hooks.afterUndo(u, how) });
   const derived = createDerived({ doc: getDoc, blockById: model.blockById, nest, refs, backend, salt, bibpane, recallsOf, results });
   const ops = createOps({ model, persist, history, doc: getDoc as () => Doc, ids, nest, hooks: hooks.ops });
+  const follow = createFollow({ store, doc: getDoc, model, persist, history, derived, nest, ops,
+    hooks: { unplaced: (id) => hooks.unplaced(id), edits: hooks.ops.edits, toast: (t, a, o) => hooks.ops.toast(t, a, o), meta: hooks.ops.meta ? (f, v, o) => hooks.ops.meta?.(f, v, o) : undefined, gone: () => hooks.gone?.() } });
 
   async function load(id: string): Promise<boolean> {
     const d = await store.getDoc(id);
@@ -77,6 +82,8 @@ export function createDocSession({ store, ids, refs, backend, nest, salt, bibpan
     const rep = nest.repair(opened.blocks);
     opened.blocks = nest.order(rep.blocks);
     doc = opened;
+    persist.start();
+    follow.start(id);                                    // from here on, what another tab writes to it is followed
     if (rep.changed.length) { console.warn(`nesting: repaired ${rep.changed.length} block(s) of ${id}`); persist.repaired(rep.changed); }
     derived.loadAssets(opened.assets);
     return true;
@@ -87,8 +94,8 @@ export function createDocSession({ store, ids, refs, backend, nest, salt, bibpan
     load,
     /** the stored sources known (after the page has seen the document: svgfig's own files first) */
     loaded() { if (doc) persist.loaded(doc.blocks); },
-    unload() { doc = null; },
-    refs, backend, results, persist, model, history, derived, ops,
+    unload() { follow.stop(); doc = null; },
+    refs, backend, results, persist, model, history, derived, ops, follow,
   };
 }
 export type DocSession = ReturnType<typeof createDocSession>;

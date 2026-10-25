@@ -15,6 +15,8 @@
 //   session's editor of the block, else any) · edits.isEditing(id) · edits.sessionsOf(id)
 //   edits.surfaceSession(rootEl) · edits.leave(pane, o) · edits.leaveBlock(id, o) · edits.leaveAll(o) · edits.dropBlock(id)
 //   edits.dropPane(pane) (the pane goes) · edits.swapped(id) (a result landed in the views) · edits.live · edits.dispose()
+//   edits.followed(id, change, source)   another tab changed the block (doc/follow.ts): its open editors take the change
+//                                        as a remote one (outside their undo, the caret mapped), its live preview again
 import { createSession } from './session.js';
 import { createLive } from './live.js';
 import { owns as ownsPress } from '../design/ui/layers.js';   // the one overlay layer's outside-press rule
@@ -183,6 +185,11 @@ export function createEditing(core) {
     dropBlock(id) { for (const s of sessionsOf(id)) s.drop(); },
     dropAll() { for (const s of byPane.values()) s.closing?.finish(); for (const s of open()) s.drop(); },
     dropPane(pane) { const s = byPane.get(pane); if (!s) return; s.closing?.finish(); s.leave({ animate: false }); byPane.delete(pane); const v = core.viewOf(pane); if (v?.edit === s) v.edit = null; },
+    followed(id, change, source) {
+      const ss = sessionsOf(id);
+      for (const s of ss) { s.applyRemote(change); s.startSource = source; }   // (nothing of theirs to save on leaving)
+      if (ss.length) live.soon(id);
+    },
     /** a result of block `id` was swapped into its views: stacked popovers on it keep their place now, carets marked in it */
     swapped(id) { for (const s of sessionsOf(id)) { s.refit?.(); s.hold?.(); s.caretSoon(); } },
     marks() { for (const s of open()) s.marks(); },

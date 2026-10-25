@@ -102,6 +102,7 @@ export const SUITES: Suite[] = [
   S('public-bundles', 'unit', 1, () => node('tests/test-public-bundles.ts')),   // the public checkout (REFLOWTEX, else a sibling checkout); its bundles built on demand (a fresh clone builds the app)
   S('integrate', 'dev', 10, (c) => node('tests/test-integrate.ts', `${c.dev}/`)),   // the editor on the workbench: tabs, splits, two documents, panels, home, status, keys, reload
   S('two-editors', 'dev', 10, (c) => node('tests/test-two-editors.ts', `${c.dev}/`), { alone: true, note: 'the leak check reads listener and node counts' }),   // two editors in two divs, apart; one unmounted leaves nothing
+  S('follow', 'dev', 10, (c) => node('tests/test-follow.ts', `${c.dev}/`)),   // two tabs on one document: edits, inserts, moves, deletes, the title followed; an open editor's two cases; deleted elsewhere
   S('motion', 'dev', 15, (c) => node('tests/test-motion.ts', `${c.dev}/`), { timing: true, alone: true }),   // the popover's motion, the followed caret, both panes
   S('calibrate', 'dev', 5, (c) => node('tests/test-calibrate.ts', `${c.dev}/`), { timing: true, alone: true, note: 'loads the host on purpose (CPU burners)' }),   // the timing limits' calibration: the factor, a regression still caught, under load
   S('widths', 'dev', 20, (c) => node('tests/test-widths.ts', `${c.dev}/`), { timing: true, alone: true }),   // width changes: lines kept while moving, then re-broken once
@@ -180,7 +181,7 @@ export const EST_SECONDS: Record<string, number> = {
   'pdf-svg': 1, 'file-deps': 1, 'loading-units': 1, resources: 40, 'resources-setting': 25, 'resources-origin': 90, 'workbench-units': 2, workbench: 120, keys: 1, 'motion-units': 1, 'view-units': 1, minify: 1, tex: 1, 'tex-lex': 1, 'tex-calls': 1,
   provenance: 1, brand: 1, 'w4-units': 1, 'cite-units': 1, 'cite-engine': 38, 'bundle-cache': 3, 'engine-node': 90,
   'app-bundle': 1, 'dev-seed': 12, 'webkit-open': 11, 'fmt-early': 60, 'fewer-requests': 30, 'fewer-requests-release': 40, 'fmt-early-release': 180, 'fixture-cache': 20, recovery: 18, 'fonts-dump': 2, 'editor-frame': 3, 'page-fonts': 25, 'colour-maps': 15, home: 2, 'reset-dev': 1, 'home-samples-dev': 29, w10: 37, w3: 27, 'e2e-dev': 140,
-  panes: 82, 'two-editors': 60, 'kept-docs': 1, motion: 142, widths: 240, notes: 19, settings: 18, view: 7, files: 10, chrome: 60,
+  panes: 82, 'two-editors': 60, follow: 40, 'kept-docs': 1, motion: 142, widths: 240, notes: 19, settings: 18, view: 7, files: 10, chrome: 60,
   sidebar: 11, inspector: 10, 'refs-panel': 30, 'selection-dev': 21, 'cref-dev': 3, 'popover-hold': 45, 'ios-zoom': 30, 'mobile-fit': 60, 'far-dev': 100, 'cite-card-dev': 226,
   'cite-dev': 76, sheets: 4, 'caret-bounds': 1289, boot: 54,
   'doc-header': 3, 'meta-dev': 125, 'readonly-dev': 2, 'older-core-dev': 4, 'replay-dev': 12, 'quota-dev': 1, 'caret-math-dev': 7,
@@ -200,10 +201,10 @@ export const EST_SAMPLED_SECONDS: Record<string, number> = { 'caret-bounds': 150
 /** app.js and main.js, the core the refactor moves: the wide set */
 export const WIDE = ['panes', 'e2e-dev', 'w3', 'recovery', 'keys', 'meta-dev', 'cite-card-dev', 'far-dev',
   'notes', 'w10', 'selection-dev', 'caret-dev', 'motion', 'widths', 'chrome', 'two-editors', 'integrate'];
-const STORE = ['home', 'reset-dev', 'home-samples-dev', 'recovery', 'quota-dev', 'readonly-dev', 'older-core-dev', 'replay-dev', 'cache'];
+const STORE = ['home', 'reset-dev', 'home-samples-dev', 'recovery', 'quota-dev', 'readonly-dev', 'older-core-dev', 'replay-dev', 'cache', 'follow', 'doc-units'];
 const ENGINE_CORE = ['engine-node', 'engine-stamp', 'engine-build-id', 'cite-engine', 'nested-seed', 'e2e-dev', 'caret-dev', 'keys'];
 const RELEASE = ['public-bundles', 'build-chromium', 'release-mode', 'minify', 'provenance', 'home-samples-file', 'e2e-file', 'smoke-firefox-webkit', 'multifile', 'fmt-early-release', 'fewer-requests-release'];
-const EDIT = ['caret-dev', 'caret-bounds', 'selection-dev', 'caret-math-dev', 'popover-hold', 'motion', 'ios-zoom', 'mobile-fit'];
+const EDIT = ['caret-dev', 'caret-bounds', 'selection-dev', 'caret-math-dev', 'popover-hold', 'follow', 'motion', 'ios-zoom', 'mobile-fit'];
 const UI = ['kit', 'sheets', 'settings', 'view', 'boot', 'sidebar', 'chrome', 'doc-header', 'inspector', 'files', 'mobile-fit', 'mobile-chrome'];
 
 export interface Rule { paths: string[]; suites: string[]; why: string }
@@ -212,7 +213,7 @@ export const RULES: Rule[] = [
   { why: 'the core (app.js, main.js)', paths: ['app/src/app/app.js', 'app/src/main.js', 'app/src/app/editor-root.ts', 'app/src/rtx-modules.d.ts', 'app/src/app/editor-entry.js', 'app/src/doc/kinds.js', 'app/src/app/stubs.js', 'app/src/app/model.js', 'app/src/app/panels.ts', 'app/src/app/source-position.js', 'app/src/tex/texscan.js', 'app/src/app/test-fixture.js', 'app/src/contracts.d.ts', 'app/index.html', 'app/app.css', 'app/package.json', 'app/package-lock.json'], suites: WIDE },
   { why: 'the core, other parts', paths: ['app/src/app/**'], suites: WIDE },
   { why: 'the two-editors harness', paths: ['app/src/harness/**', 'app/two-editors.html', 'tests/test-two-editors.ts'], suites: ['two-editors', 'typecheck', 'arch-units'] },
-  { why: 'the document model', paths: ['app/src/doc/**'], suites: [...WIDE, 'replay-dev', 'readonly-dev', 'w15-units', 'cache', 'keys', 'doc-units'] },
+  { why: 'the document model', paths: ['app/src/doc/**'], suites: [...WIDE, 'replay-dev', 'readonly-dev', 'w15-units', 'cache', 'keys', 'doc-units', 'follow'] },
   { why: 'commands', paths: ['app/src/commands/**'], suites: [...WIDE, 'selection-dev', 'chrome', 'sidebar', 'commands-units'] },
   { why: 'the dev seed cache', paths: ['app/src/app/dev-seed.js'], suites: ['dev-seed'] },
   { why: 'the fixture cache', paths: ['tests/integration/fixture-cache.ts', 'tests/integration/record-seed-cache.ts', 'app/src/app/test-fixture.js'], suites: ['fixture-cache', 'dev-seed'] },

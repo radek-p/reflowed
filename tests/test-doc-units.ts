@@ -428,6 +428,116 @@ const inMemory = (t: any) => t.doc.blocks.map((b: any) => `${b.kind}:${b.source}
       && (await store.getBlocks(id)).length === 0, { c1: c1?.message, kept: kept.source, over, c2: c2?.message });
 }
 
+// ── another tab's writes followed (doc/follow.ts): two sessions, each on its own store over one backend, a
+// BroadcastChannel between the stores as between two tabs ──
+{
+  const { createDocSession } = await imp('app/src/doc/session.ts');
+  const { createRefs } = await imp('app/src/refs/index.ts');
+  const { CoreStore } = await imp('app/src/store/core.ts');
+  const { memoryBackend } = await imp('app/src/store/backend.ts');
+  const shared = memoryBackend(), channel = `follow-${process.pid}-${Date.now()}`;
+  const sA = new CoreStore(shared, { channel }), sB = new CoreStore(shared, { channel });
+  const id = await sA.createDoc({ title: 'T', preamble: '\\documentclass{article}', blocks: [
+    { kind: 'heading', source: '\\section{A}' }, { kind: 'paragraph', source: 'One.' }, { kind: 'paragraph', source: 'Two.' }, { kind: 'paragraph', source: 'Three.' }] });
+  const nest = { repair: (l: any[]) => ({ blocks: l, changed: [] }), order: (l: any[]) => l, contextView: (l: any[]) => l, extraContext: () => '', compileSource: (b: any) => b.source, treeSig: () => 'flat',
+    remove: () => false, duplicate: () => false, moveBy: () => false, moveIndex: () => false, split: () => null, merge: () => null };
+  const noop = () => {};
+  const mk = (store: any, log: string[], toasts: any[]) => {
+    const S: any = createDocSession({ store, ids, refs: createRefs(), backend: () => ({ id: 'v1' }), nest,
+      beforeDestructive: (st: any, d: string, what: string) => st.snapshots.put(d, `Before ${what}`, { kind: 'auto' }),
+      hooks: {
+        saveChanged: noop, saveFailed: (e: any) => log.push(`failed ${e?.message}`), unplaced: (b: string) => log.push(`unplaced ${b}`), beforeUndo: noop, afterUndo: noop, gone: () => log.push('gone'),
+        ops: { edits: { leaveAll: noop, leaveBlock: noop, editorOf: () => null, sessionsOf: () => [], followed: (b: string, c: any) => log.push(`followed ${b} ${JSON.stringify(c)}`) },
+          applied: (r: any) => log.push(`applied ${r.how} ${r.blocks.length}${r.order ? ' order' : ''}`), enterEdit: noop, kindOf: (s: string) => (s.startsWith('\\section') ? 'heading' : 'paragraph'),
+          toast: (t: string, a: any, o: any) => { log.push(`toast ${t}`); toasts.push({ t, a, o }); }, undo: noop, duplicateOwned: () => false, gone: noop,
+          meta: (f: string, v: any, o: any) => { log.push(`meta ${f} save=${o?.save}`); if (f === 'title') S.doc.title = v; else if (f === 'preamble') S.doc.preamble = { source: v }; else S.doc.bib = v; } } } });
+    return S;
+  };
+  const logA: string[] = [], logB: string[] = [], toastsB: any[] = [];
+  const A = mk(sA, logA, []), B = mk(sB, logB, toastsB);
+  await A.load(id); await B.load(id); A.loaded(); B.loaded();
+  const list = (S: any) => S.doc.blocks.map((b: any) => b.source).join('|');
+  /** wait on state (the other tab's events land asynchronously), then on both sessions' follow being idle */
+  // (flush: false: B's typing is left to its timer)
+  const until = async (f: () => boolean, { ms = 4000, flush = true } = {}) => {
+    const t0 = Date.now();
+    for (;;) {
+      await A.persist.settled(); if (flush) await B.persist.settled(); await A.follow.idle(); await B.follow.idle();
+      if (f()) return true;
+      if (Date.now() - t0 > ms) return false;
+      await new Promise((r) => setTimeout(r, 5));
+    }
+  };
+  const [h, p1, p2, p3] = A.doc.blocks.map((b: any) => b.id);
+  // a text step of B's on p1 (B typed there before): it must not be undone onto A's text later
+  B.history.record({ type: 'text', label: 'typing', doc: id, block: p1, pane: 'a', changes: [4, [0, 'x']], inverse: [4, [1]], before: { anchor: 4, head: 4 }, after: { anchor: 5, head: 5 } });
+  // edit in A: B shows it, its editor told (a splice), nothing written by B
+  A.ops.setSource(p1, 'One, changed in A.');
+  const edited = await until(() => B.model.blockById(p1)?.source === 'One, changed in A.');
+  check('follow: a block edited in one tab is the same in the other (re-read from the store, its open editors given the change as a splice)',
+    edited && B.persist.savedOf(p1) === 'One, changed in A.' && logB.some((l) => l.startsWith(`followed ${p1} {"from":3,"to":3,"insert":", changed in A"}`)) && logB.includes('applied remote 1'), { b: list(B), logB });
+  check('follow: the block\'s typing steps leave the other tab\'s history (they no longer fit its text); undo there throws nothing',
+    !B.history.steps().some((s: any) => s.type === 'text' && s.block === p1) && (() => { try { B.history.undo(); return true; } catch { return false; } })());
+  // insert, move, remove in A
+  const nb = A.ops.insertBlock(2, 'paragraph', 'Inserted in A.');
+  const ins = await until(() => list(B) === list(A));
+  A.ops.moveBlock(p3, 0);
+  const mv = await until(() => list(B) === list(A));
+  A.ops.removeBlock(p2, { quiet: true });
+  const rm = await until(() => list(B) === list(A));
+  check('follow: insert, move and remove in one tab: the other has the same blocks in the same order; a block removed there drops its editors here',
+    ins && mv && rm && list(B) === 'Three.|\\section{A}|One, changed in A.|Inserted in A.' && logB.includes(`unplaced ${p2}`) && !!B.model.blockById(nb.id), { a: list(A), b: list(B) });
+  // the title and the preamble
+  A.doc.title = 'Renamed in A'; A.persist.saveMeta({ title: 'Renamed in A' });
+  A.doc.preamble = { source: '\\documentclass{amsart}', rev: 2 }; A.persist.saveMeta({ preamble: A.doc.preamble });
+  const meta = await until(() => B.doc.title === 'Renamed in A' && B.doc.preamble.source === '\\documentclass{amsart}');
+  check('follow: the title and the preamble follow, set without being saved again', meta && logB.includes('meta title save=false') && logB.includes('meta preamble save=false'), logB.filter((l) => l.startsWith('meta')));
+  // no echo: B wrote nothing of what it followed
+  const opsB = (await sA.getOps(id)).filter((o: any) => o.actor === sB.actor).length;
+  check('follow: nothing followed is written back (no op of the following tab in the log)', opsB === 0, { opsB });
+  // the conflict: typed in B (not written yet), changed in A, B's change written (it finds A's in the store, not the
+  // source it started from): B's kept and written (A's in a snapshot first), a toast with Use theirs
+  const b1 = B.model.blockById(p1);
+  b1.source = 'Typed in B, not saved yet.'; B.persist.saveBlock(b1, { typing: true });
+  A.ops.setSource(p1, 'Changed in A meanwhile.');
+  await A.persist.settled();
+  B.persist.flushTyping();                                // its timer fires before the other tab's event is read
+  const told = await until(() => toastsB.length > 0 && A.model.blockById(p1)?.source === 'Typed in B, not saved yet.');
+  const snaps = await sA.snapshots.list(id);
+  const snap = snaps.length ? await sA.snapshots.get(snaps[0].id) : null;
+  check('follow: typed here and changed there: ours is kept and written (the other tab follows it), theirs in a snapshot first, a toast offers Use theirs',
+    told && B.model.blockById(p1).source === 'Typed in B, not saved yet.' && (await sA.getBlocks(id)).find((b: any) => b.id === p1)?.source === 'Typed in B, not saved yet.'
+      && snap?.blocks.some((b: any) => b.id === p1 && b.source === 'Changed in A meanwhile.') && /yours is kept/.test(toastsB[0]?.t) && toastsB[0]?.o?.label === 'Use theirs',
+    { b: B.model.blockById(p1)?.source, a: A.model.blockById(p1)?.source, toasts: toastsB.map((t) => t.t), snaps: snaps.map((s: any) => s.label) });
+  toastsB[0].a();                                         // Use theirs: one step of B's, followed by A
+  const theirs = await until(() => A.model.blockById(p1)?.source === 'Changed in A meanwhile.' && B.model.blockById(p1)?.source === 'Changed in A meanwhile.');
+  check('follow: Use theirs puts the other tab\'s text back (an undo step here), and the other tab follows', theirs && B.history.labels().at(-1) === 'edit', B.history.labels());
+  // the same, the other tab's event read while B's typing timer still runs: B's kept and written at once
+  const b2 = B.model.blockById(nb.id);
+  b2.source = 'Inserted, typed in B.'; B.persist.saveBlock(b2, { typing: true });
+  A.ops.setSource(nb.id, 'Inserted, changed in A.');
+  const told2 = await until(() => toastsB.length > 1, { flush: false });
+  await until(() => A.model.blockById(nb.id)?.source === 'Inserted, typed in B.');
+  check('follow: typed here (its timer still running) when the other tab\'s change is read: ours is kept and written, the toast says so',
+    told2 && /yours is kept/.test(toastsB[1]?.t) && B.model.blockById(nb.id).source === 'Inserted, typed in B.' && A.model.blockById(nb.id)?.source === 'Inserted, typed in B.',
+    { a: A.model.blockById(nb.id)?.source, toasts: toastsB.map((t) => t.t) });
+  // deleted there while typed here: ours is kept and put back
+  const b3 = B.model.blockById(p3);
+  b3.source = 'Three, typed in B.'; B.persist.saveBlock(b3, { typing: true });
+  A.ops.removeBlock(p3, { quiet: true });
+  const back = await until(() => !!A.model.blockById(p3) && toastsB.length > 2);
+  check('follow: deleted there while typed here: ours is kept and put back in the store (the other tab gets it again), a toast offers Delete',
+    back && (await sA.getBlocks(id)).some((b: any) => b.id === p3 && b.source === 'Three, typed in B.') && toastsB[2]?.o?.label === 'Delete' && list(A) === list(B), { a: list(A), b: list(B), toasts: toastsB.map((t) => t.t) });
+  // the document deleted in A's tab: B is told and writes nothing more
+  await sA.deleteDoc(id);
+  const gone = await until(() => logB.includes('gone'));
+  const bb = B.doc.blocks[0]; bb.source = 'after the delete'; B.persist.saveBlock(bb);
+  await B.persist.settled();
+  check('follow: the document deleted in another tab: gone(), and nothing more is written (no failed write)', gone && !logB.some((l) => l.startsWith('failed')) && B.persist.writer.state().failed === 0, logB.filter((l) => /gone|failed/.test(l)));
+  A.unload(); B.unload();
+  sA.close(); sB.close();
+}
+
 // ── the panels' data (doc/panels.ts): the outline, the problems and the TODOs as values ──
 {
   const P = await imp('app/src/doc/panels.ts');

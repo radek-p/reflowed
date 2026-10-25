@@ -24,6 +24,8 @@
 //     history.undo() -> step | null                before(step, 'undo') first (the editors close or the block's opens)
 //     history.redo() -> step | null
 //     history.top() · history.drop(pred) · history.labels() · history.steps() (oldest first, tests) · history.clear()
+//     history.forget(pred)                         every step pred names goes, undo and redo (a block changed in another
+//                                                  tab: its typing steps no longer fit its text) -> how many
 //     history.canUndo() · history.canRedo()
 
 /** @param {{ limit?: number, before?: (step: any, how: 'undo' | 'redo') => void, after?: (step: any, how: 'undo' | 'redo') => void }} [o] */
@@ -81,12 +83,18 @@ export function createHistory({ limit = 200, before = () => {}, after = () => {}
     for (let i = undoStack.length - 1; i >= 0; i--) if (pred(undoStack[i])) { undoStack.splice(i, 1); return true; }
     return false;
   }
+  /** @param {(step: any) => boolean} pred */
+  function forget(pred) {
+    let n = 0;
+    for (const stack of [undoStack, redoStack]) for (let i = stack.length - 1; i >= 0; i--) if (pred(stack[i])) { stack.splice(i, 1); n++; }
+    return n;
+  }
   return {
     /** @param {(step: any) => void} fn */
     onRecord(fn) { recorded = fn; },
     /** @param {string} type @param {(step: any, how: 'undo' | 'redo') => boolean | void} apply */
     define(type, apply) { appliers.set(type, apply); },
-    record, extend, undo, redo, drop,
+    record, extend, undo, redo, drop, forget,
     top: () => undoStack.at(-1) ?? null,
     labels: () => undoStack.map((u) => u.label),
     steps: () => [...undoStack],

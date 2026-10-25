@@ -17,14 +17,18 @@
 //                                                    inside another is part of it (one step, one record)
 //     ops.restore(side)                              the document's changed parts set as `side` says (undo, redo)
 //     ops.onChange(fn) -> off · ops.revision()       the change records, and how many there were
-//   a change record: { label, how: 'do' | 'undo' | 'redo', blocks (ids changed, added or removed), added, removed,
+//     ops.announce(record)                           a change made in another tab (doc/follow.ts), already in the list:
+//                                                    published as this page's own are (drawn, compiled), no undo step
+//   a change record: { label, how: 'do' | 'undo' | 'redo' | 'remote', blocks (ids changed, added or removed), added, removed,
 //     order (the order changed), meta (the fields changed: title, preamble, bib) }
 //   hooks: {
-//     edits: { leaveAll(o), leaveBlock(id, o), editorOf(id), sessionsOf(id) },   the editing sessions (edit/)
+//     edits: { leaveAll(o), leaveBlock(id, o), editorOf(id), sessionsOf(id), followed(id, change, source) },   the editing
+//       sessions (edit/); followed: another tab's change of the block, applied to its open editors (outside their undo)
 //     applied(record)      after every change, once: the page draws and compiles what it names
-//     enterEdit(id, event, caret, line, range, pane), kindOf(source), toast(text, undo?), undo(),
+//     enterEdit(id, event, caret, line, range, pane), kindOf(source), toast(text, undo?, { label }?), undo(),
 //     duplicateOwned(id) -> boolean (svgfig: a block with drawn figures), gone(id) (a block left: the selection),
-//     meta(field, value) (the page sets the title, the preamble or the bibliography: an undo of one)
+//     meta(field, value, { save }?) (the page sets the title, the preamble or the bibliography: an undo of one; save:
+//       false, another tab's, which wrote it)
 //   }
 import { splice } from './persist.ts';
 
@@ -38,7 +42,7 @@ type Meta = 'title' | 'preamble' | 'bib';
 /** one side of a 'doc' step */
 export interface Side { order: string[] | null; blocks: Record<string, Rec | null>; meta: Partial<Record<Meta, unknown>> }
 export interface ChangeRecord {
-  label: string; how: 'do' | 'undo' | 'redo';
+  label: string; how: 'do' | 'undo' | 'redo' | 'remote';
   blocks: string[]; added: string[]; removed: string[]; order: boolean; meta: Meta[];
 }
 export interface OpsModel {
@@ -62,11 +66,14 @@ export interface OpsNest {
 }
 interface Session { editor?: { text: string } | null }
 export interface OpsHooks {
-  edits: { leaveAll(o?: object): void; leaveBlock(id: string, o?: object): void; editorOf(id: string): { text: string } | null | undefined; sessionsOf(id: string): Iterable<Session> };
+  edits: {
+    leaveAll(o?: object): void; leaveBlock(id: string, o?: object): void; editorOf(id: string): { text: string } | null | undefined; sessionsOf(id: string): Iterable<Session>;
+    followed?(id: string, change: { from: number; to: number; insert: string }, source: string): void;
+  };
   applied(rec: ChangeRecord): void;
   enterEdit(id: string, event: null, caret: number, line: null, range: null, pane: unknown): void;
-  kindOf(source: string): string; toast(text: string, undo?: () => unknown): void; undo(): unknown;
-  duplicateOwned(id: string): boolean; gone(id: string): void; meta?(field: string, value: unknown): void;
+  kindOf(source: string): string; toast(text: string, undo?: (() => unknown) | null, o?: { label?: string }): void; undo(): unknown;
+  duplicateOwned(id: string): boolean; gone(id: string): void; meta?(field: string, value: unknown, o?: { save?: boolean }): void;
 }
 
 export function createOps({ model, persist, history, doc, ids, nest, hooks: h }: {
@@ -310,6 +317,7 @@ export function createOps({ model, persist, history, doc, ids, nest, hooks: h }:
 
   return {
     insertBlock, removeBlock, duplicateBlock, moveBlocks, moveBlock, applyBlocks, splitBlock, mergeBlock, setSource, change, restore,
+    announce: (rec: ChangeRecord) => publish(rec),
     /** every change record, after the page's own (hooks.applied) -> unsubscribe */
     onChange(fn: (rec: ChangeRecord) => void): () => void { listeners.add(fn); return () => { listeners.delete(fn); }; },
     /** how many changes were published (a change of the document moves it) */

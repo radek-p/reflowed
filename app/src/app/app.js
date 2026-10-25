@@ -144,15 +144,15 @@ export function createDocEditor(ctx) {
   const S = createDocSession({ store, ids, refs, backend: () => backend, nest, salt: () => ctx.notes?.keySalt?.(backend) ?? '',
     bibpane: ctx.bibpane ?? null, recallsOf: ctx.recallsOf ?? null, readOnly: (d) => isReadOnly(d), beforeDestructive: ctx.beforeDestructive ?? null,
     hooks: {
-      saveChanged: () => showSave(), saveFailed: (e) => { console.error('store:', e); reportQuota(e); },
+      saveChanged: () => showSave(), saveFailed: (e) => { console.error('store:', e); reportQuota(e); }, gone: () => docGone(),   // deleted in another tab
       // a block taken out: its editors, in any pane, go with it (nothing saved from them), and the selection
       unplaced: (id) => { edits.dropBlock(id); paneStates.forget(id); },
       beforeUndo: (u, how) => undoUi.before(u, how), afterUndo: (u, how) => undoUi.after(u, how),   // edit/undo.js
       ops: {
-        edits: { leaveAll: (o) => edits.leaveAll(o), leaveBlock: (id, o) => edits.leaveBlock(id, o), editorOf: (id) => edits.editorOf(id), sessionsOf: (id) => edits.sessionsOf(id) },
+        edits: { leaveAll: (o) => edits.leaveAll(o), leaveBlock: (id, o) => edits.leaveBlock(id, o), editorOf: (id) => edits.editorOf(id), sessionsOf: (id) => edits.sessionsOf(id), followed: (id, c, src) => edits.followed(id, c, src) },
         applied: (rec) => applied(rec),                     // one change record per change: drawn below
-        enterEdit: (...a) => enterEdit(...a), kindOf: (src) => kindOf(src), toast: (t, u) => toast(t, u), undo: () => undo(),
-        duplicateOwned: (id) => feats.duplicate(id), gone: (id) => paneStates.forget(id), meta: (f, v) => setMeta(f, v),
+        enterEdit: (...a) => enterEdit(...a), kindOf: (src) => kindOf(src), toast: (t, u, o) => toast(t, u, o), undo: () => undo(),
+        duplicateOwned: (id) => feats.duplicate(id), gone: (id) => paneStates.forget(id), meta: (f, v, o) => setMeta(f, v, o),
       },
     } });
   const { persist, model, history, derived, results, ops } = S;
@@ -183,7 +183,9 @@ export function createDocEditor(ctx) {
   const status = createStatus((text, kind) => { if (active()) topbar.setStatus(text, kind); });
   function setStatus(text, kind = '') { status.set(text, kind); }
   // the page's one toast (chrome/toast.js, Preact): a new one replaces the last, one timer
-  function toast(text, undo) { showToast(text, undo); }
+  function toast(text, undo, o) { showToast(text, undo, o); }
+  /** the document was deleted in another tab (doc/follow.ts): its tabs close, as for a document that cannot be opened */
+  function docGone() { const id = S.doc?.id; toast('This document was deleted in another tab'); if (ctx.docGone) ctx.docGone(id); else close(); }
 
   // ── Undo (8: the document's history, S.history) ──
   function perform(label, doFn, tags) {   /* one undo step: what doFn changes, as data (doc/ops.ts change) */ return ops.change(label, doFn, tags); }
@@ -634,12 +636,12 @@ export function createDocEditor(ctx) {
   const paneBars = wirePaneBars({ sectionOf: (p) => paneStates.of(p).section, root, panes, layout, sectionFocus, topbar, title, onTitle: (t) => setTitle(t), split: guest, draw: !tabs,
     outline: () => panels.outline(), store, docId: () => S.doc?.id ?? null, scrollToBlock, router, nav });
   function focusIn(p, id) { sectionFocus.set(p, sectionFocus.get(p) === id ? null : id); }
-  function setTitle(text) {
+  function setTitle(text, o) {
     if (!S.doc) return;
     S.doc.title = text;
     if (guest) title.value = text;
     if (active()) document.title = `${S.doc.title || 'Untitled'} · ReflowEd`;
-    persist.setTitle();                                     // written after 400 ms of quiet
+    if (o?.save !== false) persist.setTitle();              // written after 400 ms of quiet (another tab's: written there)
   }
   if (!guest) {
     topbar.on.split = () => panes.toggle();
@@ -696,7 +698,7 @@ export function createDocEditor(ctx) {
   }
 
   // ── the bibliography: what src/bibpane/ (the References pane) may do ──
-  function setMeta(f, v) {   /* an undo or a redo of the title, the preamble or the bibliography */ if (f === 'preamble') meta.putPreamble(v); else if (f === 'bib') meta.bibAgain(v); else if (f === 'title') { setTitle(v); if (!guest) topbar.setTitle(v ?? ''); } }
+  function setMeta(f, v, o) {   /* an undo or a redo of the title, the preamble or the bibliography; o.save false: another tab's */ if (f === 'preamble') meta.putPreamble(v, o); else if (f === 'bib') meta.bibAgain(v, o); else if (f === 'title') { setTitle(v, o); if (!guest) topbar.setTitle(v ?? ''); } }
   function bibHost() {
     return {
       doc: () => S.doc, store,

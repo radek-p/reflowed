@@ -8,7 +8,7 @@
 //
 //   const w = createWriter({ onChange })   onChange(state) after every change
 //   w.write(fn, key?) -> Promise (never rejects)   key: what the write puts ('block:<id>', 'meta'); none: unique
-//   w.retry() · w.state() · w.idle() -> Promise (no write pending) · w.pending
+//   w.retry() · w.state() · w.idle() -> Promise (no write pending) · w.pending · w.failing(key) (that write failed, not yet retried well)
 export const RETRY_MS = [1000, 2000, 5000, 10000, 30000];
 
 /** @param {{ onChange?: (s: { pending: number, failed: number, error: unknown }) => void, retryMs?: number[], onError?: (e: any) => void }} [o] */
@@ -43,6 +43,7 @@ export function createWriter({ onChange = () => {}, retryMs = RETRY_MS, onError 
   return {
     write, retry, state,
     get pending() { return pending; },
+    failing: (key) => failed.has(key),
     idle: () => (pending ? new Promise((r) => idleWaiters.push(r)) : Promise.resolve()),
     /** forget everything (the document closed) */
     reset() { failed.clear(); clearTimeout(timer); timer = 0; tries = 0; changed(); },

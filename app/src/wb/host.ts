@@ -148,7 +148,9 @@ export async function startWorkbench({ el, params }: { el: HTMLElement; params: 
   // the workbench is drawn before the document part exists: the document tabs mount their panes once it does (below)
   tabsReady = new Promise<DocTabs>((res) => { resolveTabs = res; });
   render(html`<${Workbench} wb=${wb} label="ReflowEd" bar=${barSpec((anchor, focus) => openMainMenu(anchor, focus))} sideStatus=${() => html`<${SideStatus} root=${root} />`} />`, mountEl);
-  tabs = createDocTabs(root, services, { topbar, router, shell });
+  // a document deleted in another tab: its tabs close (as a restored tab of a document that is gone)
+  const gone = (docId: string) => { for (const t of M.allTabs(wb.layout.peek())) if (t.view === 'document' && (t.state as DocState).doc === docId) wb.close(t.id); };
+  tabs = createDocTabs(root, services, { topbar, router, shell, gone });
   resolveTabs!(tabs);
   tabs.attachView();
   // the TeX resource server: the engine follows the setting; after a change, every open document

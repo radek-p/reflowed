@@ -3,17 +3,20 @@
 // an undo of either comes back through setMeta (app.js).
 //
 //   const meta = createDocMeta(host)
-//     meta.putPreamble(text)             the preamble set (unchanged text: nothing), saved, then onPreamble()
+//     meta.putPreamble(text, { save }?)  the preamble set (unchanged text: nothing), saved (save: false, another tab's: not
+//                                        again), then onPreamble()
 //     meta.onPreamble()                  what a new preamble asks: every block typesets again, the engine takes it
 //     meta.applyBib(bib, after?)         doc.bib set and saved, the engine told, every block's context recomputed
 //     meta.setBibliography(bib, label, after?)   the same, as one undo step
-//     meta.bibAgain(bib)                 an undo or a redo of it (the pane's last follow-up again)
+//     meta.bibAgain(bib, { save }?)      an undo or a redo of it (the pane's last follow-up again); another tab's (not saved)
 //     meta.bibInfo()                     the bibliography in a few words (Document settings)
 
 /** What the preamble and bibliography need of the open document. */
 export interface MetaDoc { preamble: { source: string; rev?: number }; bib?: Bib | null; blocks: unknown[] }
 export interface Bib { kind?: string; source?: string; entries?: unknown[] }
 interface PreambleResult { errors?: unknown[]; warnings?: unknown[] }
+/** save: false, a value another tab wrote (doc/follow.ts): set here, not written again */
+interface Saving { save?: boolean }
 
 /** What createDocEditor (app.js) gives: the document, its writes, the engine, and what follows a change of every block. */
 export interface DocMetaHost {
@@ -58,20 +61,20 @@ export function createDocMeta(host: DocMetaHost) {
     host.everyBlockChanged();
     host.warm();                                           // warm again for the new preamble
   }
-  function putPreamble(text: string) {
+  function putPreamble(text: string, { save = true }: Saving = {}) {
     const d = host.doc();
     if (!d || text === d.preamble.source) return;
     d.preamble = { source: text, rev: (d.preamble.rev ?? 0) + 1 };
-    host.saveMeta({ preamble: d.preamble });
+    if (save) host.saveMeta({ preamble: d.preamble });
     onPreamble();
   }
   /** doc.bib = bib: saved (putMeta + a meta op), the engine told, contexts and keys recomputed, due blocks typeset */
-  function applyBib(bib: Bib | null, after: ((bib: Bib | null) => void) | null = null) {
+  function applyBib(bib: Bib | null, after: ((bib: Bib | null) => void) | null = null, { save = true }: Saving = {}) {
     const d = host.doc();
     if (!d) return;
     d.bib = bib;
     if (after) bibAfter = after;
-    host.saveMeta({ bib });
+    if (save) host.saveMeta({ bib });
     Promise.resolve(host.backend().setBib?.(bib)).catch((e: Error) => console.warn('setBib:', e.message));
     try { after?.(bib); } catch (e) { console.error('bib after:', e); }
     host.everyBlockChanged();
@@ -79,7 +82,7 @@ export function createDocMeta(host: DocMetaHost) {
   return {
     putPreamble, onPreamble, applyBib,
     /** an undo or a redo of the bibliography: with the References pane's last follow-up */
-    bibAgain(bib: Bib | null) { applyBib(bib, bibAfter); },
+    bibAgain(bib: Bib | null, o: Saving = {}) { applyBib(bib, bibAfter, o); },
     setBibliography(bib: Bib | null, label = 'bibliography', after: ((bib: Bib | null) => void) | null = null) { host.perform(label, () => applyBib(bib, after)); },
     bibInfo(): string {
       const b = host.doc()?.bib;
