@@ -52,10 +52,10 @@ const P = '\\documentclass{article}\n\\newcommand{\\shot}[1]{\\includegraphics{#
 const enc = new TextEncoder();
 const png = (name: string, hash: string): Asset => ({ name, mime: 'image/png', hash, bytes: enc.encode(hash) });
 
-function page(cache: ReturnType<typeof memCache>, files: Map<string, Asset>) {
-  const log = { compiled: [] as { id: string; fresh: boolean; had: string | null }[] };
+function page(cache: ReturnType<typeof memCache>, files: Map<string, Asset>, { names = false } = {}) {
+  const log = { compiled: [] as { id: string; fresh: boolean; had: string | null }[], lookups: [] as string[] };
   const be: any = createBackend({ standalone: { build: 'B1', createWorker: () => fakeWorker(log), initArgs: () => ({}), engineArgs: () => ({}) }, cache, resourceStore: null, figures: false, timeoutMs: 5000 });
-  be.setAssets(async (name: string) => files.get(name) ?? null);
+  be.setAssets(async (name: string) => { log.lookups.push(name); return files.get(name) ?? null; }, names ? () => files.keys() : undefined);
   const one = async (id: string, source: string) => (await be.compile({ preamble: P, keep: [], blocks: [{ id, source }] })).blocks[id];
   return { be, log, one };
 }
@@ -97,6 +97,19 @@ const files = new Map<string, Asset>([['figures/x.png', png('figures/x.png', 'h1
   files.set('figures/y.png', png('figures/y.png', 'hy'));
   const r2 = await one('m', 'B \\shot{figures/y}.');
   check('… added to the document later: the block typesets again, with it', !r2.cached && log.compiled.length >= 2 && log.compiled.at(-1)!.had === 'hy', log);
+}
+
+{
+  // the app gives the document's names: the names a run looked for in vain are checked against them, not looked up
+  const { log, one } = page(cache, files, { names: true });
+  await one('f', 'A \\shot{figures/x}.');
+  check('with the document\'s names: a cached result\'s names looked for in vain are not looked up', log.compiled.length === 0 && !log.lookups.includes('figures/x'), log.lookups);
+  const r0 = await one('q', 'C \\shot{figures/q}.');
+  const r1 = await one('q', 'C \\shot{figures/q}.');
+  check('… a figure the document lacks, asked again: the stored result stands', !r0.cached && r1.cached && log.compiled.length === 1, log.compiled);
+  files.set('figures/q', png('figures/q', 'hq'));      // a file of a name the run looked for in vain
+  const r2 = await one('q', 'C \\shot{figures/q}.');
+  check('… a name looked for in vain that the document has now: typeset again', !r2.cached && log.compiled.length === 2, log.compiled);
 }
 
 console.log(`\n${pass}/${pass + fail} passed`);

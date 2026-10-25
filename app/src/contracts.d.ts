@@ -348,8 +348,9 @@ export interface Backend {
   /** Re-warm for a new preamble; answers the preamble's own problems. */
   setPreamble(preamble: string): Promise<{ errors: Problem[]; warnings: Problem[]; files?: string[] }>;
   setBib(bib: Doc['bib']): Promise<void>;
-  /** What \includegraphics may find (picture shim). */
-  setAssets?(lookup: (name: string) => Promise<Asset | null>): void;
+  /** What \includegraphics may find (picture shim); names: the document's file names now (a stored result's record of
+   *  names TeX looked for in vain is checked against them; without it each is looked up). */
+  setAssets?(lookup: (name: string) => Promise<Asset | null>, names?: () => Iterable<string>): void;
   /** Cache key prefix: engine build + preamble + bib hash. A backend keeps its own
    * */
   keyPrefix?(): string;

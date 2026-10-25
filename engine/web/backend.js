@@ -7,7 +7,7 @@
 //   import { createBackend } from 'rtx:backend';
 //   const be = createBackend({ cache: store.cache });
 //   await be.setPreamble(doc.preamble.source); await be.setBib(doc.bib);
-//   be.setAssets((name) => store.getAssetByName(…));        // \includegraphics
+//   be.setAssets((name) => store.getAssetByName(…), () => names); // the document's files (\includegraphics, …), their names
 //   be.setVisible([...ids in view]);                          // viewport first
 //   const r = await be.compile({ preamble, blocks, keep, onBlock(id, result) {…} });
 //
@@ -189,12 +189,13 @@ export function createBackend(opts = {}) {
   // engine); `S` is the state of the call running now. The worker is shared: the files it holds are recorded
   // with the state that sent them (workerHas), and a document whose file of a name is not the one there sends
   // its own again.
-  //   preamble, bbl, preResult (the preamble's problems), assetLookup, assetsSent (name -> hash sent; null:
+  //   preamble, bbl, preResult (the preamble's problems), assetLookup, assetNames (() => the document's file names, or
+  //   null), assetsSent (name -> hash sent; null:
   //   looked up, none; its version is part of the key memo), texLooked, wantedExts, visible, keys (keys.js)
   const newDoc = () => {
     counters.docStates = (counters.docStates ?? 0) + 1;   // (tests) states built: a kept one taken back builds none
     const sent = new VersionedMap();
-    return { preamble: null, bbl: '', preResult: EMPTY, assetLookup: null, assetsSent: sent, texLooked: new Map(), wantedExts: new Map(), visible: new Set(),
+    return { preamble: null, bbl: '', preResult: EMPTY, assetLookup: null, assetNames: null, assetsSent: sent, texLooked: new Map(), wantedExts: new Map(), visible: new Set(),
       // memoised (keys.js): the same keys as before, the preamble scanned once per change
       keys: createKeys({ opened: (src) => { counters.opened = (counters.opened ?? 0) + 1; return opened(src); }, sent }) };
   };
@@ -603,12 +604,23 @@ export function createBackend(opts = {}) {
   }
   /** A stored result was made with the document's files as they are now: each file its runs read has the signature
    *  it had then, and each name they looked for in vain is still not in the document. A result without a record
-   *  (another engine's) stands. */
-  async function filesHold(r, looked) {
-    const names = (r.files ?? []).filter(docName);
-    if (!names.length) return true;
-    await lookUpFiles(names, looked);
-    return names.every((n) => (r.fileSigs?.[n] ?? null) === (S.assetsSent.get(n) ?? null));
+   *  (another engine's) stands. ctx: { looked (the names looked up for this request), names (the document's file
+   *  names now, when the app gives them: the names looked for in vain, many (TeX tries each name with ten
+   *  extensions), are checked against them, not looked up one by one) } */
+  async function filesHold(r, ctx) {
+    const read = [], vain = [];
+    for (const n of r.files ?? []) if (docName(n)) (r.fileSigs?.[n] ? read : vain).push(n);
+    if (!read.length && !vain.length) return true;
+    if (ctx.names) { if (vain.some((n) => ctx.names.has(n))) return false; }
+    else read.push(...vain);
+    await lookUpFiles(read, ctx.looked);
+    return read.every((n) => (r.fileSigs?.[n] ?? null) === (S.assetsSent.get(n) ?? null));
+  }
+  /** what filesHold checks against in one request */
+  function filesNow() {
+    let names = null;
+    try { const x = S.assetNames?.(); if (x) names = new Set(x); } catch { names = null; }
+    return { looked: new Set(), names };
   }
 
   // Keys: the preamble's own files in the preamble key, a block's in its
@@ -672,13 +684,13 @@ export function createBackend(opts = {}) {
     const seedFiles = seedFontsInPage();
     const out = {}, todo = [], restored = [], seeded = [];
     let cachedN = 0;
-    const looked = new Set();                 // the document's files looked up for this request (results' records)
+    const now = filesNow();                   // the document's files, for the stored results' records
     for (const b of req.blocks) {
       const key = keyOf(b);
       // a stored result whose files changed since (a figure replaced in place) is not used: the block typesets
       // again, fresh (the worker's own copy of the result is stale too)
       let stale = false;
-      const holds = async (x) => { if (x && !(await filesHold(x, looked))) { stale = true; return null; } return x; };
+      const holds = async (x) => { if (x && !(await filesHold(x, now))) { stale = true; return null; } return x; };
       let r = await holds(mem.get(key));
       if (r) counters.memHits++;
       else {
@@ -779,10 +791,10 @@ export function createBackend(opts = {}) {
     keyPrefix: () => inDoc(here(), () => `e${buildId()}.${pkey()}`),
     setCache(c) { cache = c; },
     setVisible(ids) { here().visible = new Set(ids); },
-    setAssets(lookup) {
+    setAssets(lookup, names = null) {
       const d = here();
-      if (Array.isArray(lookup)) { const by = new Map(lookup.map((a) => [a.name, a])); d.assetLookup = async (n) => by.get(n) ?? null; }
-      else d.assetLookup = lookup;
+      if (Array.isArray(lookup)) { const by = new Map(lookup.map((a) => [a.name, a])); d.assetLookup = async (n) => by.get(n) ?? null; d.assetNames = () => by.keys(); }
+      else { d.assetLookup = lookup; d.assetNames = typeof names === 'function' ? names : null; }
       d.assetsSent.clear();
       d.texLooked.clear();
     },

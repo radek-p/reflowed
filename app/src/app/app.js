@@ -652,7 +652,7 @@ export function createDocEditor(ctx) {
   function setBackend(id) {
     base = ctx.backends.find((b) => b.id === id) ?? base; bindBackend(S.doc?.id ?? null);
     safeSet('rtx-editor.backend', backend.id);
-    if (S.doc) { const id = S.doc.id; backend.setAssets?.((name) => store.getAssetByName?.(id, name) ?? Promise.resolve(null)); backend.setBib?.(S.doc.bib); }
+    if (S.doc) { const id = S.doc.id; backend.setAssets?.((name) => store.getAssetByName?.(id, name) ?? Promise.resolve(null), () => derived.assetHash.keys()); backend.setBib?.(S.doc.bib); }
     meta.onPreamble();
   }
 
@@ -731,7 +731,7 @@ export function createDocEditor(ctx) {
     if (active()) document.title = `${S.doc.title || 'Untitled'} · ReflowEd`;
     settings.close({ apply: false });
     // (integration) \includegraphics names → this document's assets in the store (contract Backend.setAssets)
-    backend.setAssets?.((name) => store.getAssetByName?.(id, name) ?? Promise.resolve(null));
+    backend.setAssets?.((name) => store.getAssetByName?.(id, name) ?? Promise.resolve(null), () => derived.assetHash.keys());
     await Promise.resolve(backend.setBib?.(S.doc.bib)).catch(() => {});
     derived.preambleChanged();
     // the paper column from the preamble's cached result, before the first paint; else once it warms
