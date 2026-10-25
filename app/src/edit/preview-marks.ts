@@ -71,7 +71,7 @@ const letters = (s: string): string[] => [...s.normalize('NFKD')].filter((c) => 
 
 /** each drawn glyph: { off, line, box() -> { left, right, top, bottom } in client px } */
 function exactGlyphs(el: Element, blk: ViewerBlock, sm: any, compiled: string): MapGlyph[] {
-  const doc = blk.document, segs = blk.segments(), sp = spToPx();
+  const doc = blk.document, segs = blk.segments(), sp = spToPx(el);
   const drawn = drawnGlyphs(segs);
   const { glyphs: offs } = guardedBlockGlyphOffsets(sm, doc, drawn, compiled, { file: sm.file, firstLine: sm.firstLine ?? 1 });
   const size = new Map<number, number>((doc.fonts ?? []).map((f: any) => [f.id, (f.size_sp || 655360) * sp]));

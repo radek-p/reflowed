@@ -62,7 +62,7 @@ export function glyphNodeAt(el, x, y) {
     const m = screenCTM(sg.svg);   // (CSS zoom in it in every browser)
     if (!m) continue;
     const pt = new DOMPoint(x, y).matrixTransform(m.inverse());
-    const em = 10 * 65536 * spToPx();
+    const em = 10 * 65536 * spToPx(el);
     sg.walk({
       node(n, nx, ny, adv) {
         if (n.type !== 'glyph') return;

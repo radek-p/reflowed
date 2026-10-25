@@ -1,13 +1,14 @@
 // The viewer as the editor reads it: its documented host API only (reflowtex src/viewer/src/host/types.ts:
 // Host, Block, Segment), typed here for the editor's modules, with nothing of the viewer's internals.
 //
-//   viewerHost() · blockOf(el) · blockEls()            the host, the Block of an element, every block's element
+//   viewerHost(of?) · blockOf(el) · blockEls()         the host (of an element's window: a frame's own viewer), the
+//                                                       Block of an element (by its window's viewer), every block's element
 //   segmentsOf(el)                                      a block's segments (Block.segments): kind, svg, painted, walk
 //   documentOf(el)                                      its decoded document (Block.document)
 //   sourceWidthPt(el) · laidAt(el) · relayout(el)       the width TeX set it at; how it was last laid out; again now
 //   layoutGeneration(el)                                bumped on every layout of the block and every paint of more of
 //                                                       its lines (its 'layout' event): what a cache of its geometry keys on
-//   spToPx() · whenIdle()                               CSS px per sp; the viewer settled (host.idle)
+//   spToPx(of?) · whenIdle(of?)                         CSS px per sp; the viewer settled (host.idle), of el's window
 
 export interface WalkSink {
   line?(j: number, nodes: readonly ViewerNode[], x0: number, baselineY: number): void;
@@ -38,10 +39,13 @@ interface ViewerHost {
   readonly spToPx: number;
 }
 
-export const viewerHost = (): ViewerHost | null => (globalThis as { reflowtex?: { host?: ViewerHost } }).reflowtex?.host ?? null;
+type WithHost = { reflowtex?: { host?: ViewerHost } };
+/** the viewer's host of `of`'s window (a frame's own viewer), else of this window */
+export const viewerHost = (of?: Element | null): ViewerHost | null =>
+  ((of?.ownerDocument?.defaultView ?? globalThis) as WithHost).reflowtex?.host ?? null;
 export function blockOf(el: Element | null | undefined): ViewerBlock | null {
   if (!el) return null;
-  try { return viewerHost()?.block(el) ?? null; } catch { return null; }
+  try { return viewerHost(el)?.block(el) ?? null; } catch { return null; }
 }
 export const blockEls = (): HTMLElement[] => viewerHost()?.blocks().map((b) => b.el) ?? [];
 export const segmentsOf = (el: Element | null | undefined): readonly ViewerSegment[] => blockOf(el)?.segments() ?? [];
@@ -67,5 +71,5 @@ export function layoutGeneration(el: Element | null | undefined): number {
   if (!g) { const gen = { n: 0 }; g = gen; generations.set(b, gen); b.on('layout', () => { gen.n++; }); }
   return g.n;
 }
-export const spToPx = (): number => viewerHost()?.spToPx ?? 0;
-export const whenIdle = (): Promise<void> => viewerHost()?.idle() ?? Promise.resolve();
+export const spToPx = (of?: Element | null): number => viewerHost(of)?.spToPx ?? 0;
+export const whenIdle = (of?: Element | null): Promise<void> => viewerHost(of)?.idle() ?? Promise.resolve();
