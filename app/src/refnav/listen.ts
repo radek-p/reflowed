@@ -1,9 +1,24 @@
-// reference navigation in the typeset document.
+// reference navigation in the typeset document: what a click, a key, the pointer or the focus on a reference, a
+// citation or a link does. The editor installs it on its container (index.ts installRefNav); any page that shows the
+// editor's typeset blocks installs the same on its own element, with hooks for what the editor would give.
 //
-//   installRefNav({ api, numberingState, root }) -> refnav
-//     root the editor's container (app/editor-root.ts): its blocks, its state; one refnav per editor
-//     api             { forPane(pane) -> that pane's document host (app/doc-host.js: refsState, numbering, nav, edit, blocks, readOnly), bibpane() } (main.js: the workspace's)
-//     numberingState  rtx:refs's numberingState (numbers for the card's copy)
+//   const refnav = listenRefnav(container, hooks)      refnav.dispose() takes all of it off the page
+//     container       the element whose typeset blocks it serves, in any document (a frame's too: the listeners, the
+//                     card and the Back pill are that document's)
+//     hooks.api       what a unit resolves against, and where its edit and its go-to go: { forPane(pane) -> that
+//                     pane's document, bibpane() }, or one document itself. A document (RefnavDoc; app/doc-host.js
+//                     docHost is one): refsState() (labels, refs and cites with their offsets, bib), numbering?(),
+//                     nav?() (the navigator, nav/navigate.js: goTo, back, history, clear, onChange, say, scrollOf),
+//                     blocks?() ({ id, kind, source }), readOnly?(), edit(blockId, caret)
+//     hooks.numberingState()   numbers for the card's copy when the document has none (rtx:refs's numberingState)
+//     hooks.takesKey(e)        a key whose target is outside the container is this one's (default: every key)
+//     hooks.onDisplayed(fn)    fn(blockId) when a block's result is shown, hooks.onRefreshed(fn) fn() when every
+//                              block's is: their renders are scanned again (a repaint is seen anyway); hooks.onRoute(fn)
+//                              fn() when another page opens: the history, the pill and the card go. Each returns
+//                              its unsubscribe.
+//     hooks.viewer()           the viewer's host (default: the container's window's reflowtex.host)
+//   The markup it reads (the editor's): a block .blk[data-id], in a pane .blk[data-pane], its render .blk-render with
+//   the viewer's island .latex-block in it, .blk-main the part a go-to pulses.
 //
 // A unit (units.js) is a reference (\ref, \eqref, \cref, \Cref, \autoref: brackets, name and number; resolved by
 // label through refsState()), a citation (\cite, \citep, …: rtx-numbering's slot "rtxk:<keys>") or an external
@@ -25,11 +40,11 @@
 //   Back pill          after any go-to; returns to where you were (a stack);
 //                      also Alt+← and ⌘/Ctrl+[ outside a text field. It goes
 //                      once you are back or have scrolled two screens away.
-// Every go-to and Back go through editorAPI.nav() (nav/navigate.js):
+// Every go-to and Back go through the document's navigator (nav(): in the editor nav/navigate.js):
 // in the unit's own pane, leaving a section focus the target is outside of; Back focuses it again.
 //
 // The test surface: refnav.units(), refnav.jump(label), refnav.back(),
-// refnav.history(), refnav.card(); events on document: 'refnav:card'
+// refnav.history(), refnav.card(); events on the container's document: 'refnav:card'
 // {open, labels}, 'refnav:jumped' {label, blockId}, 'refnav:back'.
 import { createCard, cardTitle } from './card.js';
 import { scanRender, unitOf, unitsIn, unitRects, markUnit, markedUnit, REF_SLOT } from './units.js';
@@ -38,10 +53,8 @@ import { clickAction, openable } from './rule.ts';
 import { linkCaret } from '../tex/links.ts';
 import { html, render, Button } from '../design/ui/index.js';
 import { pushLayer } from '../design/ui/layers.js';
-import { page, onChange } from '../app/page-state.ts';
 import { reduced } from '../motion/reduced.ts';
 import { isMacPlatform, shortcutLabel } from '../../../workbench/src/keys.ts';
-import type { EditorRoot } from '../app/editor-root.ts';
 import type { RefsState, BibEntry, LabelInfo } from '../refs/state.ts';
 import type { NumberingState } from '../refs/numbering.ts';
 
@@ -85,15 +98,43 @@ export interface RefnavApi extends Partial<RefnavDoc> {
   forPane?(pane: string | null): RefnavDoc | null;
   bibpane?(): Bibpane | null;
 }
+/** the viewer's host (view/viewer-host.ts): what the card's copy and the hovered unit's mark use */
+interface ViewerHost { mount(el: HTMLElement): Promise<unknown>; addMark?(...a: unknown[]): unknown; rangesOf?(r: Range): unknown[] }
+type Off = () => unknown;
+export interface RefnavHooks {
+  api: RefnavApi;
+  numberingState?: (() => unknown) | null;
+  takesKey?: (e: KeyboardEvent) => boolean;
+  onDisplayed?: (fn: (blockId: string | null) => void) => Off;
+  onRefreshed?: (fn: () => void) => Off;
+  onRoute?: (fn: () => void) => Off;
+  viewer?: () => ViewerHost | null | undefined;
+}
+type Target = Pick<EventTarget, 'addEventListener' | 'removeEventListener'>;
 
 const HOVER_MS = 300, CLOSE_MS = 250;
 const BACK_KEY = shortcutLabel(isMacPlatform() ? 'meta+[' : 'alt+arrowleft');   // the Back pill's title names the platform's usual one
 const CMD_KIND: Record<string, string> = { ref: 'ref', eqref: 'ref', pageref: 'ref', Cref: 'Cref', cref: 'cref', autoref: 'autoref', Autoref: 'autoref' };
 
-export function installRefNav({ api, numberingState, root }: { api: RefnavApi; numberingState?: (() => unknown) | null; root: EditorRoot }) {
-  installStyle();
+export function listenRefnav(container: HTMLElement, hooks: RefnavHooks) {
+  const { api, numberingState } = hooks;
+  const takesKey = hooks.takesKey ?? (() => true);
+  // the container's document and window: its events, its card and pill, its viewer
+  const doc = container.ownerDocument, win = doc.defaultView as Window & typeof globalThis & { reflowtex?: { host?: ViewerHost } };
+  const viewer = hooks.viewer ?? (() => win.reflowtex?.host ?? null);
+  const $ = (sel: string) => container.querySelector<HTMLElement>(sel);
+  const $$ = (sel: string) => [...container.querySelectorAll<HTMLElement>(sel)];
+  // everything it adds, taken off by dispose(), the last first
+  const owned: Off[] = [];
+  let disposed = false;
+  const onDispose = (fn: Off) => { owned.push(fn); };
+  function listen<E extends Event>(target: Target, type: string, fn: (e: E) => void, opts?: boolean | AddEventListenerOptions) {
+    target.addEventListener(type, fn as EventListener, opts);
+    onDispose(() => target.removeEventListener(type, fn as EventListener, opts));
+  }
+  installStyle(doc);
   // the document's events this editor answers: in its container or its own card (a layer outside the container)
-  const mine = (t: EventTarget | null): t is Node => t instanceof Node && (root.el.contains(t) || card.el.contains(t));
+  const mine = (t: EventTarget | null): t is Node => t instanceof win.Node && (container.contains(t) || card.el.contains(t));
   /** the pane a unit is drawn in (a card's unit: the pane the card was opened from) */
   const paneOf = (u: Unit | null | undefined): string | null => (u?.els?.[0]?.closest?.('.blk[data-pane]') as HTMLElement | null | undefined)?.dataset.pane ?? null;
   // a pane may show another document: what a unit resolves against is its own pane's document (that pane's
@@ -133,16 +174,19 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
     }
   });
   const observe = () => {
-    mo.observe(root.el, { childList: true, subtree: true });
-    for (const r of root.$$('.blk-render')) markDirty(r);
+    mo.observe(container, { childList: true, subtree: true });
+    for (const r of $$('.blk-render')) markDirty(r);
   };
   observe();
-  root.onDispose(() => { mo.disconnect(); cancelAnimationFrame(raf); });
+  onDispose(() => { mo.disconnect(); cancelAnimationFrame(raf); });
   // the block's render in every pane
-  // the container's signals (app/page-state.ts), the page's route
-  root.onDispose(onChange(root.state.displayed, (d) => { for (const el of root.$$(`.blk[data-id="${CSS.escape(d?.id ?? '')}"] .blk-render`)) markDirty(el); }));
-  root.onDispose(onChange(root.state.refreshed, () => { for (const r of root.$$('.blk-render')) markDirty(r); }));
-  root.onDispose(onChange(page.route, () => { nav()?.clear(); pill.hide(); card.close(); }));
+  // the host's news (the editor's: its container's signals, app/page-state.ts, and the page's route)
+  const offDisplayed = hooks.onDisplayed?.((id) => { for (const el of $$(`.blk[data-id="${CSS.escape(id ?? '')}"] .blk-render`)) markDirty(el); });
+  if (offDisplayed) onDispose(offDisplayed);
+  const offRefreshed = hooks.onRefreshed?.(() => { for (const r of $$('.blk-render')) markDirty(r); });
+  if (offRefreshed) onDispose(offRefreshed);
+  const offRoute = hooks.onRoute?.(() => { nav()?.clear(); pill.hide(); card.close(); });
+  if (offRoute) onDispose(offRoute);
 
   // ── resolving ─────────────────────────────────────────────────────────────
   const targetsOf = (u: Unit) => {
@@ -150,7 +194,7 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
     const s = st();
     return u.labels.map((label) => { const info = s?.labels?.[label] ?? null; return { label, info: info as LabelInfo | null, blockId: info?.blockId ?? null }; });
   };
-  const blockEl = (id: string) => root.$(`.blk[data-id="${CSS.escape(id)}"]`);
+  const blockEl = (id: string) => $(`.blk[data-id="${CSS.escape(id)}"]`);
 
   /** Where the unit is in its block's source: the caret goes into its first key, or a link's address. */
   function caretOf(u: Unit): number | null {
@@ -171,7 +215,7 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
   let hot: Unit | null = null, openTimer = 0, closeTimer = 0, describer: Element | null = null;
   const card = createCard({
     numberingState: () => A().numbering?.() ?? numberingState?.() ?? null,
-    renderOf: (id: string) => root.$(`.blk[data-id="${CSS.escape(id)}"] .blk-render > .latex-block`),
+    renderOf: (id: string) => $(`.blk[data-id="${CSS.escape(id)}"] .blk-render > .latex-block`),
     sourceOf: (id: string) => A().blocks?.().find((b) => b.id === id)?.source ?? '',   // the card's text without a typeset copy
     onGo: (label: string) => { const from: Unit | null = card.unit; card.close(); jump(label, { from }); },
     onAction: (id: string, u: Unit) => {
@@ -182,8 +226,9 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
     onClose: () => {
       if (describer) { describer.removeAttribute('aria-describedby'); describer.removeAttribute('aria-expanded'); describer = null; }
       if (hot && !hot.els[0].matches(':hover, :focus')) setHot(null);
-      document.dispatchEvent(new CustomEvent('refnav:card', { detail: { open: false } }));
+      doc.dispatchEvent(new CustomEvent('refnav:card', { detail: { open: false } }));
     },
+    doc, viewer,
   }) as Card;
   // the unit under the pointer or focus: its glyphs coloured, and a live mark
   // over it (units.js markUnit: the viewer's own line bands and rects). Units
@@ -194,7 +239,7 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
     hot?.els.forEach((g) => g.classList.remove('rn-hot'));
     hot = u;
     hot?.els.forEach((g) => g.classList.add('rn-hot'));
-    markUnit(hot);
+    markUnit(hot, viewer());
   };
   async function openCard(u: Unit, { focus = false } = {}) {
     clearTimeout(openTimer); clearTimeout(closeTimer);
@@ -208,15 +253,15 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
     describer = u.els[0];
     describer.setAttribute('aria-describedby', 'rn-card');
     describer.setAttribute('aria-expanded', 'true');
-    document.dispatchEvent(new CustomEvent('refnav:card', { detail: { open: true, labels: u.labels } }));
+    doc.dispatchEvent(new CustomEvent('refnav:card', { detail: { open: true, labels: u.labels } }));
   }
   const closeSoon = () => { clearTimeout(openTimer); clearTimeout(closeTimer); if (card.isOpen()) closeTimer = setTimeout(() => card.close(), CLOSE_MS); };
 
   mo.observe(card.el, { childList: true, subtree: true });   // the card's typeset copy (its units)
-  root.onDispose(() => { card.close(); card.el.remove(); });
-  root.listen(root.doc, 'pointerover', (e: PointerEvent) => {
+  onDispose(() => { card.close(); card.el.remove(); });
+  listen(doc, 'pointerover', (e: PointerEvent) => {
     if (e.pointerType === 'touch') return;
-    if (!mine(e.target)) { if (hot && !hot.els[0].matches(':focus')) setHot(null); clearTimeout(openTimer); if (card.isOpen() && !card.el.contains(document.activeElement)) closeSoon(); return; }
+    if (!mine(e.target)) { if (hot && !hot.els[0].matches(':focus')) setHot(null); clearTimeout(openTimer); if (card.isOpen() && !card.el.contains(doc.activeElement)) closeSoon(); return; }
     if (card.el.contains(e.target)) { clearTimeout(closeTimer); return; }
     fresh(e.target);
     const u: Unit | null = unitOf(e.target);
@@ -227,9 +272,9 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
     }
     if (hot && !hot.els[0].matches(':focus')) setHot(null);
     clearTimeout(openTimer);
-    if (card.isOpen() && !card.el.contains(document.activeElement)) closeSoon();
+    if (card.isOpen() && !card.el.contains(doc.activeElement)) closeSoon();
   }, true);
-  root.listen(root.doc, 'focusin', (e: FocusEvent) => {
+  listen(doc, 'focusin', (e: FocusEvent) => {
     if (mine(e.target)) fresh(e.target);
     const u: Unit | null = mine(e.target) ? unitOf(e.target) : null;
     if (u) { setHot(u); clearTimeout(closeTimer); clearTimeout(openTimer); if (!same(card.unit, u)) openTimer = setTimeout(() => openCard(u), HOVER_MS); return; }
@@ -240,7 +285,7 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
   // ── clicks and keys: before the viewer's and the app's own handlers ───────
   const stop = (e: Event) => { e.preventDefault(); e.stopImmediatePropagation(); };
   // one rule for every unit (rule.ts clickAction): edit, its card (a read-only document), or its navigation
-  root.listen(root.doc, 'click', (e: MouseEvent) => {
+  listen(doc, 'click', (e: MouseEvent) => {
     if (!mine(e.target)) return;
     fresh(e.target);
     const u: Unit | null = unitOf(e.target);
@@ -256,8 +301,8 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
   }, true);
   // the viewer marks a pressed link on pointerdown; keep a press on a unit from starting a text selection drag oddly
   // (Escape closes the card: the kit's one overlay layer, card.js)
-  root.listen(root.doc, 'keydown', (e: KeyboardEvent) => {
-    if (!mine(e.target) && !root.takesKey(e)) return;
+  listen(doc, 'keydown', (e: KeyboardEvent) => {
+    if (!mine(e.target) && !takesKey(e)) return;
     const u: Unit | null = unitOf(e.target);
     if (u && (e.key === 'Enter' || e.key === ' ')) {
       stop(e);
@@ -270,10 +315,10 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
     const inField = (e.target as Element | null)?.closest?.('input, textarea, select, .cm-editor, [contenteditable="true"]');
     if (!inField && stack.length && ((e.altKey && e.key === 'ArrowLeft') || ((e.metaKey || e.ctrlKey) && e.key === '['))) { stop(e); back(); }
   }, true);
-  card.el.addEventListener('pointerleave', () => { if (!card.el.contains(document.activeElement)) closeSoon(); });
+  card.el.addEventListener('pointerleave', () => { if (!card.el.contains(doc.activeElement)) closeSoon(); });
   card.el.addEventListener('pointerenter', () => clearTimeout(closeTimer));
   card.el.addEventListener('focusout', (e: FocusEvent) => { if (!card.el.contains(e.relatedTarget as Node | null) && !same(unitOf(e.relatedTarget), card.unit)) closeSoon(); });
-  root.listen(window, 'scroll', () => { if (card.isOpen() && !card.el.matches(':hover') && !card.el.contains(document.activeElement)) card.close(); }, { passive: true });
+  listen(win, 'scroll', () => { if (card.isOpen() && !card.el.matches(':hover') && !card.el.contains(doc.activeElement)) card.close(); }, { passive: true });
 
   /** a unit's own navigation (⌘/Ctrl-click, a click in a card): a reference's target, a citation's list, a link's address */
   function follow(u: Unit) {
@@ -288,15 +333,15 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
   }
   /** a link's address in a new tab, without an opener; an address the editor does not open is said, not followed */
   function openLink(u: Unit) {
-    const href = openable(u.href ?? '', document.baseURI);
+    const href = openable(u.href ?? '', doc.baseURI);
     if (!href) { use(u); nav()?.say('The editor does not open this kind of address.'); return false; }
-    window.open(href, '_blank', 'noopener');
+    win.open(href, '_blank', 'noopener');
     return true;
   }
 
   // ── jumping and coming back: through the navigator (nav/navigate.js), in the unit's own pane ──────────────
   let landed: { pane: string | null; y: number } | null = null;                       // where a go-to arrived: { pane, y } (two screens away from it, Back goes)
-  const yOf = (p: string | null) => nav()?.scrollOf(p) ?? scrollY;
+  const yOf = (p: string | null) => nav()?.scrollOf(p) ?? win.scrollY;
 
   function pulse(el: Element | null | undefined) {
     if (!el) return;
@@ -308,7 +353,7 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
     setTimeout(done, 1600);
   }
   const fromOf = (u: Unit | null): From | null => (u ? { blockId: u.blockId, labels: u.labels, index: u.index, kind: u.kind } : null);
-  const viewEl = (p: string | null, id: string) => root.$(`.blk[data-id="${CSS.escape(id)}"]${p ? `[data-pane="${CSS.escape(p)}"]` : ''}`) ?? blockEl(id);
+  const viewEl = (p: string | null, id: string) => $(`.blk[data-id="${CSS.escape(id)}"]${p ? `[data-pane="${CSS.escape(p)}"]` : ''}`) ?? blockEl(id);
 
   async function go(blockId: string, { from = null, anchor = null, event, detail }: { from?: Unit | null; anchor?: string | null; event: string; detail: unknown }) {
     const N = nav();
@@ -321,7 +366,7 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
     landed = { pane: p, y: yOf(p) };
     const el = viewEl(p, blockId);
     pulse(el?.querySelector('.blk-main') ?? el);
-    document.dispatchEvent(new CustomEvent(event, { detail }));
+    doc.dispatchEvent(new CustomEvent(event, { detail }));
     return true;
   }
   async function jump(label: string, { from = null }: { from?: Unit | null } = {}) {
@@ -349,7 +394,7 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
       if (u) { u.els.forEach((g) => g.classList.add('rn-flash')); setTimeout(() => u.els.forEach((g) => g.classList.remove('rn-flash')), 1200); }
     }
     landed = N.history().length ? { pane: e.pane, y: yOf(e.pane) } : null;
-    document.dispatchEvent(new CustomEvent('refnav:back', { detail: { scrollY: yOf(e.pane), pane: e.pane } }));
+    doc.dispatchEvent(new CustomEvent('refnav:back', { detail: { scrollY: yOf(e.pane), pane: e.pane } }));
     return true;
   }
 
@@ -357,15 +402,15 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
   // citation's list, the outline or find out of a section focus); it goes two screens away from where you landed
   // (Preact) the kit's pill button with the back icon; shown, then faded in a frame later (.rn-on), faded out before it hides
   const pill = (() => {
-    const host = document.createElement('div');
+    const host = doc.createElement('div');
     host.style.display = 'contents';
-    document.body.append(host);
+    doc.body.append(host);
     let shown = false, on = false, hideT = 0;
     const draw = () => render(html`<${Button} size="lg" pill icon="back" class=${`rn-back${on ? ' rn-on' : ''}`} hidden=${!shown}
       title=${`Back to where you were (${BACK_KEY})`} aria-label="Back to where you were" onClick=${() => back()}>Back<//>`, host);
     draw();
     const layer = pushLayer({ el: host.firstElementChild as HTMLElement, kind: 'pill' });     // its place in the one stacking order
-    root.onDispose(() => { clearTimeout(hideT); layer.remove(); render(null, host); host.remove(); });
+    onDispose(() => { clearTimeout(hideT); layer.remove(); render(null, host); host.remove(); });
     return {
       el: host.firstElementChild,
       show() { clearTimeout(hideT); shown = true; draw(); requestAnimationFrame(() => { on = true; draw(); }); },
@@ -385,23 +430,24 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
     if (N.history().length) pill.show(); else pill.hide();
   };
   hook();
-  root.onDispose(onChange(page.route, hook));
-  root.onDispose(() => { unhook?.(); unhook = null; hooked = null; });
-  root.listen(window, 'scroll', () => {
+  const offRouteHook = hooks.onRoute?.(hook);
+  if (offRouteHook) onDispose(offRouteHook);
+  onDispose(() => { unhook?.(); unhook = null; hooked = null; });
+  listen(win, 'scroll', () => {
     if (!landed || !nav()?.history().length) return;
-    if (Math.abs(yOf(landed.pane) - landed.y) > innerHeight * 2) { nav()!.clear(); landed = null; }
+    if (Math.abs(yOf(landed.pane) - landed.y) > win.innerHeight * 2) { nav()!.clear(); landed = null; }
   }, { passive: true, capture: true });
   const stack = { get length() { return nav()?.history().length ?? 0; } };
 
   return {
     /** every unit found, for tests: { id, blockId, labels, kind, text, index, hadLink, href, targets, connected } */
-    units: () => root.$$('.blk-render').flatMap((r) => unitsIn(r) as Unit[]).map((u) => ({
+    units: () => $$('.blk-render').flatMap((r) => unitsIn(r) as Unit[]).map((u) => ({
       id: u.id, blockId: u.blockId, labels: u.labels, kind: u.kind, text: u.text, index: u.index, hadLink: u.hadLink, href: u.href ?? null,
       targets: targetsOf(u).map((t) => t.blockId), connected: u.els.every((g) => g.isConnected),
     })),
-    rescan: () => { for (const r of root.$$('.blk-render')) scanRender(r); },
+    rescan: () => { for (const r of $$('.blk-render')) scanRender(r); },
     /** a unit's glyph elements by its id (tests) */
-    elements: (id: string) => root.$$('.blk-render').flatMap((r) => unitsIn(r) as Unit[]).find((u) => u.id === id)?.els ?? [],
+    elements: (id: string) => $$('.blk-render').flatMap((r) => unitsIn(r) as Unit[]).find((u) => u.id === id)?.els ?? [],
     jump, back,
     history: () => nav()?.history() ?? [],
     /** the hovered/focused unit's rects (from its live mark) and the mark's id, for tests */
@@ -411,5 +457,12 @@ export function installRefNav({ api, numberingState, root }: { api: RefnavApi; n
     closeCard: () => card.close(),
     title: cardTitle,
     isRefSlot: (name: string) => REF_SLOT.test(name),
+    /** everything it added goes: its listeners, card, pill and subscriptions */
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      for (const fn of owned.splice(0).reverse()) { try { fn(); } catch (e) { console.error('refnav dispose:', e); } }
+    },
   };
 }
+export type Refnav = ReturnType<typeof listenRefnav>;

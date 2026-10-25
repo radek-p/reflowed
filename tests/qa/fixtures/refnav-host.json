@@ -1,0 +1,44 @@
+{
+ "key": "knuth1984",
+ "paragraph": "01M5T9CY6065HGV1F4X8JY2XD7",
+ "target": "01M3G2JN00N41KTJ0CSGFJ92RE",
+ "list": "01M3G2JN00N41KTJ0CSGFJ92S5",
+ "bib": {
+  "kind": "bbl",
+  "source": "\\begin{thebibliography}{1}\n\n\\bibitem{knuth1984}\nDonald~E. Knuth.\n\\newblock {\\em The {\\TeX}book}.\n\\newblock Addison-Wesley, 1984.\n\n\\bibitem{lamport1994}\nLeslie Lamport.\n\\newblock {\\em {\\LaTeX}: A Document Preparation System}.\n\\newblock Addison-Wesley, second edition, 1994.\n\n\\end{thebibliography}\n",
+  "path": "refs.bbl",
+  "entries": [
+   {
+    "key": "knuth1984",
+    "type": "bibitem"
+   },
+   {
+    "key": "lamport1994",
+    "type": "bibitem"
+   }
+  ]
+ },
+ "blocks": [
+  {
+   "id": "01M3G2JN00N41KTJ0CSGFJ92RE",
+   "kind": "heading",
+   "source": "\\section{Mathematics}\\label{sec:maths}",
+   "nodelistB64": "Ci4IIBIOTE1Sb21hbjEyLUJvbGQY5sw5IhJsbXJvbWFuMTItYm9sZC5vdGYo5sw5EoACCggIASAAOABAAAoMCAAQMRgggAIBqAMBCgoIASDmzDk4AEAACgkIABBNGCCAAgIKCQgAEGEYIIACAwoJCAAQdBgggAIECgkIABBoGCCAAgUKEAgGWAOSAQkIABAtGCCAAgYKCQgAEGUYIIACBwoQCAZYA5IBCQgAEC0YIIACBgoJCAAQbRgggAIICgkIABBhGCCAAgMKCQgAEHQYIIACBAoQCAZYA5IBCQgAEC0YIIACBgoJCAAQaRgggAIJCgkIABBjGCCAAgoKCQgAEHMYIIACCwoGCAeoAZBOCg4IASAAOICABEAASAJYDxAAGICASCCAgAQoADiAgKALQABIABoECAAQARoECANgARoECANgAhoECANgAyoKCPG2IBDH5CUYACoKCOO6PRDfwScYACoLCPbAHxDwixoYniwqCwiknRkQ3ckkGJ4sKgoIgIAkENz8JxgAKgoI5swVEPS3DxgAKgsIn8YdEPCLGhieLCoKCNeDNhDh9RkYACoKCNiDEhDAlScYACoLCLPmHBDwixoYniwqCwjDyRkQ8IsaGJ4sOICAoAtSE3JlZmxvd3RleC1vdXRsaW5lLTFSD3JlZmxvd3RleC10b2MtMVIJc2VjOm1hdGhzah0KB3NlY3Rpb24YASIBMSoLTWF0aGVtYXRpY3MwAXLAAgqxAnJ0eG4geyJzIjoxLCJjIjoic2VjdGlvbiIsInIiOiJzZWN0aW9uIiwicCI6IiIsImYiOiI0IiwiaCI6InNlY3Rpb24iLCJ0IjoiMSIsIkwiOlt7InMiOjEsImwiOiJzZWM6bWF0aHMiLCJjIjoic2VjdGlvbiIsInQiOiIxIiwiayI6InNlY3Rpb24iLCJuIjpbIlNlY3Rpb24iLCJTZWN0aW9ucyIsIlNlY3Rpb24iLCJTZWN0aW9ucyJdLCJmYyI6IlNlY3Rpb25cXHByb3RlY3QgXFxub2JyZWFrc3BhY2UgIFxccnR4QE4gIiwiZkMiOiJTZWN0aW9uXFxwcm90ZWN0IFxcbm9icmVha3NwYWNlICBcXHJ0eEBOICIsImxmIjoiXFxydHhATiAifV19EObMFRiz5gogzJkH",
+   "colorMap": "editor"
+  },
+  {
+   "id": "01M5T9CY6065HGV1F4X8JY2XD7",
+   "kind": "paragraph",
+   "source": "See Section~\\ref{sec:maths}, \\cite{knuth1984} and \\href{https://example.org/rn}{the notes}.",
+   "nodelistB64": "CjQIHRIRTE1Sb21hbjEwLVJlZ3VsYXIYs+YrIhVsbXJvbWFuMTAtcmVndWxhci5vdGYos+YrEpsECgkIABBTGB2AAgEKCQgAEGUYHYACAgoJCAAQZRgdgAICChAIASD3yg44u6UHQKfuBFgNCgkIABBTGB2AAgEKCQgAEGUYHYACAgoJCAAQYxgdgAICChAIBlgDkgEJCAAQLRgdgAIDCgkIABB0GB2AAgQKCQgAEGkYHYACBQoJCAAQbxgdgAIGCgkIABBuGB2AAgcKBggHqAGQTgoQCAEg98oOOLulB0Cn7gRYDQoPCAAQMBgdgAIIkAMBqAMBCgkIABAsGB2AAgkKEAgBIPfKDjjpjglA7PEDWA0KDAgAEFsYHYACCqgDAgokCAQgmvMVKO6VHTAAcQAAAAAAAAAAigEMCAAQMRgdgAILqAMCCgwIABBdGB2AAgqoAwIKEAgBIPfKDji7pQdAp+4EWA0KCQgAEGEYHYACBgoJCAAQbhgdgAIHCgkIABBkGB2AAgwKEAgBIPfKDji7pQdAp+4EWA0KDAgAEHQYHYACBJADAgoMCAAQaBgdgAINkAMCCgwIABBlGB2AAgKQAwIKEAgBIPfKDji7pQdAp+4EWA0KDAgAEG4YHYACB5ADAgoMCAAQbxgdgAIGkAMCCgwIABB0GB2AAgSQAwIKDAgAEGUYHYACApADAgoMCAAQcxgdgAIOkAMCCgkIABAuGB2AAg8KBggHqAGQTgoOCAEgADiAgARAAEgCWA8QABiaszYggIAEKAA4gICgC0AASAAaBAgAEAEqCwiUrRgQwfAeGKx7KgsIn7kTENXPExjWPSoKCPfKDhDJ3QoYACoLCPKEERD49xoY1j0qCgjKlgwQtOMcGAAqCwia8xUQ1c8TGNY9KgoIlK0YEISuExgAKgsImvMVEO6VHRiseyoMCMqWDBCk0gQYhLoIKgwIypYMEObsIBjN+QoqCgia8xUQ7pUdGAAqCwiUrRgQ7LIeGNY9KgoIlK0YEOyyHhgAKgsI9qARENXPExjWPSoKCMqWDBCk0gQYADiAgKALWgsKCXNlYzptYXRoc1oYEhZodHRwczovL2V4YW1wbGUub3JnL3JuchwKDnJ0eHI6c2VjOm1hdGhzEPfKDhi7pQcgp+4EchwKDnJ0eGs6a251dGgxOTg0EPfKDhi7pQcgp+4E",
+   "colorMap": "editor"
+  },
+  {
+   "id": "01M3G2JN00N41KTJ0CSGFJ92S5",
+   "kind": "bibliography",
+   "source": "\\bibliography{refs}",
+   "nodelistB64": null,
+   "colorMap": null
+  }
+ ]
+}

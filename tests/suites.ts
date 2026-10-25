@@ -58,6 +58,7 @@ export const SUITES: Suite[] = [
   S('commands-units', 'unit', 2, () => node('tests/test-commands-units.ts'), FAST),   // the registry, the shortcuts' rows, the commands on a DocSession
   S('kit', 'unit', 3, () => node('tests/test-kit.ts'), FAST),
   S('editor-frame', 'unit', 2, () => node('tests/test-editor-frame.ts'), FAST),   // the block source editor in a frame's document: its own elements, undo and redo asked of onKey   // the kit's shared parts in Chromium, no app
+  S('refnav-host', 'unit', 3, () => node('tests/test-refnav-host.ts'), FAST),   // reference navigation (refnav/listen.ts) on a page with only the viewer, and in a frame: one gesture table, recorded hooks
   S('pdf-svg', 'unit', 2, () => node('engine/tests/pdf-svg.test.ts'), FAST),   // PDF pictures as SVG
   S('file-deps', 'unit', 1, () => node('engine/tests/file-deps.test.ts'), FAST),   // a stored result used only while the files its runs read are as they were
   S('keys', 'unit', 2, () => node('tests/test-keys.ts'), { ...FAST, cold: true, note: 'result keys: the compile path' }),   // result keys memoised, byte-identical
@@ -183,7 +184,7 @@ export const EST_SECONDS: Record<string, number> = {
   typecheck: 1, select: 1, browsers: 1, 'static-server': 1, 'engine-stamp': 1, 'engine-build-id': 1, 'seed-title-form': 1, 'intro-versions': 1, 'site-intro': 1, 'w15-units': 1, 'arch-units': 1, 'doc-units': 1, 'commands-units': 1, kit: 3,
   'pdf-svg': 1, 'file-deps': 1, 'loading-units': 1, resources: 40, 'resources-setting': 25, 'resources-origin': 90, 'workbench-units': 2, workbench: 120, keys: 1, 'motion-units': 1, 'view-units': 1, minify: 1, tex: 1, 'tex-lex': 1, 'tex-calls': 1,
   provenance: 1, brand: 1, 'w4-units': 1, 'cite-units': 1, 'cite-engine': 38, 'bundle-cache': 3, 'engine-node': 90,
-  'app-bundle': 1, 'dev-seed': 12, 'webkit-open': 11, 'fmt-early': 60, 'fewer-requests': 30, 'fewer-requests-release': 40, 'fmt-early-release': 180, 'fixture-cache': 20, recovery: 18, 'fonts-dump': 2, 'editor-frame': 3, 'page-fonts': 25, 'live-preview': 30, 'colour-maps': 15, home: 2, 'offered-kinds': 15, 'reset-dev': 1, 'home-samples-dev': 29, w10: 37, w3: 27, 'e2e-dev': 140,
+  'app-bundle': 1, 'dev-seed': 12, 'webkit-open': 11, 'fmt-early': 60, 'fewer-requests': 30, 'fewer-requests-release': 40, 'fmt-early-release': 180, 'fixture-cache': 20, recovery: 18, 'fonts-dump': 2, 'editor-frame': 3, 'refnav-host': 6, 'page-fonts': 25, 'live-preview': 30, 'colour-maps': 15, home: 2, 'offered-kinds': 15, 'reset-dev': 1, 'home-samples-dev': 29, w10: 37, w3: 27, 'e2e-dev': 140,
   panes: 82, 'two-editors': 60, follow: 40, 'popover-keys': 40, 'kept-docs': 1, motion: 142, widths: 240, notes: 19, settings: 18, view: 7, files: 10, chrome: 60,
   sidebar: 11, inspector: 10, 'refs-panel': 30, 'selection-dev': 21, 'cref-dev': 3, 'popover-hold': 45, 'ios-zoom': 30, 'mobile-fit': 60, 'far-dev': 100, 'cite-card-dev': 226,
   'cite-dev': 76, sheets: 4, 'caret-bounds': 1289, boot: 54,
@@ -233,7 +234,7 @@ export const RULES: Rule[] = [
   { why: 'store, io, home', paths: ['app/src/store/**', 'app/src/io/**', 'app/src/home/**'], suites: STORE },
   { why: 'TeX scanning', paths: ['app/src/tex/**'], suites: ['tex', 'tex-lex', 'tex-calls', 'keys', 'engine-node', 'caret-math-dev'] },
   { why: 'references, bibliography', paths: ['app/src/refs/**', 'app/src/bib/**', 'app/src/bibpane/**'], suites: ['refs-panel', 'w4-units', 'cite-units', 'cite-engine', 'cref-dev', 'cite-dev', 'cite-card-dev', 'panes'] },
-  { why: 'reference navigation', paths: ['app/src/refnav/**'], suites: ['w10', 'cite-card-dev', 'refnav-hit'] },
+  { why: 'reference navigation', paths: ['app/src/refnav/**'], suites: ['w10', 'cite-card-dev', 'refnav-hit', 'refnav-host'] },
   { why: 'nesting', paths: ['app/src/nesting/**'], suites: ['nested-seed', 'panes'] },
   { why: 'the title form', paths: ['app/src/meta/**'], suites: ['seed-title-form', 'meta-dev'] },
   { why: 'notes, view', paths: ['app/src/notes/**', 'app/src/view/**'], suites: ['notes', 'view-units', 'view', 'ios-zoom', 'zoom-caret'] },
