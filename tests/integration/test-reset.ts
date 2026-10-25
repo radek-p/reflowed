@@ -1,5 +1,5 @@
-// The dev server's /reset page: forgets every IndexedDB database and local/session storage of the origin after the
-// confirmation. It runs the app's own code (app/src/store/wipe.js, as the Documents view's "Reset local
+// The dev server's /reset page: forgets the app's IndexedDB databases and localStorage keys after the confirmation,
+// and nothing else of the origin (another page's database and keys stay). It runs the app's own code (app/src/store/wipe.js, as the Documents view's "Reset local
 // data…" does in the release; tests/test-samples.ts tests that one), and the app's other tabs follow it (reload).
 //   node tests/integration/test-reset.ts [base=http://127.0.0.1:8150]
 import { createRequire } from 'node:module';
@@ -16,16 +16,17 @@ await page.goto(`${base}/`);
 await page.waitForSelector('.rh-row[data-doc-id]');
 check("the Documents view's footer has Reset local data… (no separate dev link)", await page.locator('.home-foot #reset-local').isVisible() && await page.locator('#dev-reset').count() === 0);
 await page.evaluate(() => new Promise((ok) => { const r = indexedDB.open('test-reset-db', 1); r.onupgradeneeded = () => r.result.createObjectStore('x'); r.onsuccess = () => { r.result.close(); ok(null); }; }));
-await page.evaluate(() => { localStorage.setItem('test-reset', '1'); sessionStorage.setItem('test-reset', '1'); });
+await page.evaluate(() => { localStorage.setItem('test-reset', '1'); localStorage.setItem('rtx-editor.test-reset', '1'); sessionStorage.setItem('test-reset', '1'); });
 // the reset in the same tab (no app page open meanwhile, so nothing comes back before the checks)
 await page.goto(`${base}/reset?stay`);
 check('/reset runs the app\'s wipe module', await page.evaluate(() => document.querySelector('script[type=module]')?.textContent?.includes("from '/src/store/wipe.js'") ?? false));
 await page.click('#go');
 await page.waitForFunction(() => document.title === 'Reset done');
 const dbs = await page.evaluate(async () => (await indexedDB.databases()).map((d) => d.name));
-check('every database deleted', dbs.length === 0, JSON.stringify(dbs));
-check('local storage cleared', await page.evaluate(() => localStorage.length === 0));
-check('session storage cleared', await page.evaluate(() => sessionStorage.length === 0));
+check("the app's databases deleted, another page's kept", JSON.stringify(dbs) === JSON.stringify(['test-reset-db']), JSON.stringify(dbs));
+const keys = await page.evaluate(() => Object.keys(localStorage).sort());
+check("the app's localStorage keys removed, another page's kept", JSON.stringify(keys) === JSON.stringify(['test-reset']), JSON.stringify(keys));
+check('session storage kept (the app keeps nothing there)', await page.evaluate(() => sessionStorage.getItem('test-reset') === '1'));
 // an app tab open while the reset happens in another: it is told and reloads, as on a first visit
 const app = await ctx.newPage();
 await app.goto(`${base}/`);

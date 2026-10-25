@@ -1,8 +1,8 @@
 // "Reset local data…" (the Documents view's footer, in the release and on the dev server): the kit's Dialog
 // says what goes (every document with its versions, settings and view preferences, cached results) and offers
-// "Export all first" (io/export-all.ts: one zip of every document's Export .zip); Reset then forgets the origin's
-// data (store/wipe.js, the code the dev server's /reset page runs too) and reloads, so the page opens as in a new
-// profile: the sample papers only. Esc, the close button and Cancel close it; the focus goes back to the button.
+// "Export all first" (io/export-all.ts: one zip of every document's Export .zip); Reset then forgets ReflowEd's own
+// data, no other page's on the origin (store/wipe.js, the code the dev server's /reset page runs too) and reloads, so
+// the page opens as in a new profile: the sample papers only. Esc, the close button and Cancel close it; the focus goes back to the button.
 //   dialog#rtx-reset-local [data-action=export-all | cancel | reset], .rtx-reset-status (role=status)
 //
 //   openResetDialog({ store, reload? })   // reload(): after the wipe (default location.reload())
@@ -10,7 +10,7 @@ import { signal } from '@preact/signals';
 import { html, Button, Dialog, openLayer } from '../design/ui/index.js';
 import { exportAllZip } from '../io/export-all.ts';
 import { download } from '../io/download.ts';
-import { announceReset, wipeOrigin } from '../store/wipe.js';
+import { announceReset, wipeLocalData } from '../store/wipe.js';
 
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
@@ -22,7 +22,8 @@ function ResetBody({ count, fromDisk }) {
       <li>settings and view preferences;</li>
       <li>cached typesetting results.</li>
     </ul>
-    <p>The page then opens as on a first visit, with the sample papers only. This cannot be undone.
+    <p>Nothing else this site keeps in the browser is touched. The page then opens as on a first visit, with the
+      sample papers only. This cannot be undone.
       “Export all first” saves every document as a .zip you can import again; versions are not in it.</p>
     ${fromDisk ? html`<p class="rtx-reset-note">ReflowEd files opened from disk usually share this data in a browser, so it goes for them too.</p>` : null}`;
 }
@@ -53,7 +54,7 @@ export function openResetDialog({ store, reload = () => location.reload() }) {
     say('Resetting…', 'busy');
     try {
       store.close?.();                                 // our own connection first; other tabs close theirs on versionchange
-      await wipeOrigin({ onBlocked: () => say('Waiting for other ReflowEd tabs to let go of the data: close them to finish.', 'busy') });
+      await wipeLocalData({ onBlocked: () => say('Waiting for other ReflowEd tabs to let go of the data: close them to finish.', 'busy') });
       announceReset();
       say('Done. Opening as on a first visit…', 'done');
       document.documentElement.dataset.resetDone = '1';

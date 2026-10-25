@@ -93,22 +93,22 @@ async function devSeed() {
 }
 if (SEEDED) await devSeed();
 
-// /reset (dev only, a URL to type): forgets everything this origin keeps after a confirmation, then opens the
+// /reset (dev only, a URL to type): forgets everything the app keeps in this browser after a confirmation, then opens the
 // app afresh, as on a first visit. The same code as the app's own "Reset local data…" (the Documents
 // view's footer, in the release too): app/src/store/wipe.js, imported from here.
 const RESET_PAGE = `<!doctype html><meta charset="utf-8"><title>Reset local data</title>
 <meta name="color-scheme" content="light dark">
 <body style="font:15px/1.5 system-ui,sans-serif;max-width:32em;margin:15vh auto;padding:0 16px">
 <h1 style="font-size:20px">Reset local data</h1>
-<p>Forget every document, version and cached result this dev server's page keeps in this browser
-(IndexedDB, local and session storage, caches). The app then opens as on a first visit.</p>
+<p>Forget every document, version, setting and cached result the app keeps in this browser
+(its IndexedDB databases and localStorage keys; nothing else of this origin). The app then opens as on a first visit.</p>
 <p><button id="go" style="font:inherit;padding:6px 14px">Reset</button> <a href="/">Cancel</a></p>
 <p id="out" role="status"></p>
 <script type="module">
 const out = document.getElementById('out');
-import { wipeOrigin, announceReset } from '/src/store/wipe.js';
+import { wipeLocalData, announceReset } from '/src/store/wipe.js';
 async function reset() {
-  const r = await wipeOrigin({ onBlocked: () => { out.textContent = 'Waiting for the app’s other tabs: close them to finish.'; } });
+  const r = await wipeLocalData({ onBlocked: () => { out.textContent = 'Waiting for the app’s other tabs: close them to finish.'; } });
   announceReset();
   return r.databases.length;
 }
