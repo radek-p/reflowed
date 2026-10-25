@@ -355,7 +355,14 @@ export function createWidths({ panes, relayout, laidAt = null, state = null, red
     keep(st.slices, 400);
     nextH = requestAnimationFrame(() => { nextH = 0; schedule(); });
   }
-  function done() { letHeights(); for (const fn of waiters.splice(0)) fn(); }
+  // nothing pinned or held tall any more: the observers go too (each held its pane and the blocks it watched: a pane
+  // closed after its change kept its detached blocks alive until the next pin); the next change makes them again
+  function done() {
+    letHeights();
+    for (const io of ios.values()) io.disconnect();
+    ios.clear();
+    for (const fn of waiters.splice(0)) fn();
+  }
   /** the typeset blocks in view in every pane now (after the re-breaks: a narrower column holds fewer) */
   function countShown() {
     let n = 0;

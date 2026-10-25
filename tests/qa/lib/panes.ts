@@ -7,8 +7,11 @@
 //   await splitB(page)               the window bar's split (a second group, the same document): pane B's selector,
 //                                    once its blocks are typeset
 //   await closePane(page, sel)       closes that pane (its tab)
+//   idOf(sel)                        a pane's tab id, from its selector
 export const FOCUSED = '[data-part="page"]';
 export const paneSel = (id: string) => `main.rtx-pane[data-pane="${id}"]`;
+/** a pane's tab id, from its selector */
+export const idOf = (sel: string) => /data-pane="([^"]+)"/.exec(sel)![1]!;
 
 /** the document panes in the layout's order (tab ids) */
 export const paneIds = (page: any): Promise<string[]> => page.evaluate(() => {
@@ -29,14 +32,15 @@ export async function splitB(page: any): Promise<string> {
   await page.evaluate(() => (window as any).editorAPI.workbench().run('splitRight'));
   await page.waitForFunction((b: string[]) => Object.keys((window as any).editorAPI.editors()).some((p) => !b.includes(p)), before);
   const id = (await paneIds(page)).find((x) => !before.includes(x))!;
-  await page.waitForSelector(`${paneSel(id)} .blocks > .blk .blk-render > .latex-block`);
+  // (a condition, not waitForSelector: an element handle would keep the pane's view alive, as a page's console would)
+  await page.waitForFunction((s: string) => !!document.querySelector(`${s} .blocks > .blk .blk-render > .latex-block`), paneSel(id));
   await page.evaluate(() => (window as any).editorAPI.whenIdle());
   return paneSel(id);
 }
 
 /** closes the pane `sel` (its tab) */
 export async function closePane(page: any, sel: string) {
-  const id = /data-pane="([^"]+)"/.exec(sel)![1];
+  const id = idOf(sel);
   await page.evaluate((t: string) => (window as any).editorAPI.workbench().close(t), id);
   await page.waitForFunction((t: string) => !(window as any).editorAPI.editors()[t], id);
   await page.evaluate(() => (window as any).editorAPI.whenIdle());

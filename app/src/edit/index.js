@@ -132,13 +132,15 @@ export function createEditing(core) {
     return s;
   }
 
-  // a press outside the block a pane's editor has open (and outside the overlay layer and the chrome) closes that
-  // editor; a press in the other pane leaves it alone
+  // a press in a pane outside the block that pane's editor has open (and outside the overlay layer) closes that
+  // editor; a press in another pane, or in no pane (the chrome around the panes: a tab strip, a sash, the bar, a
+  // side panel), leaves it alone
   const onPress = (e) => {
     if (!core.hasDoc()) return;
     const where = core.paneOf(e.target);
+    if (!where) return;
     for (const s of open()) {
-      if (where && where !== s.pane) continue;
+      if (where !== s.pane) continue;
       if (s.surface?.root.contains(e.target) && !e.target.closest('.gutter')) continue;
       if (ownsPress(e.target)) continue;        // a layer (menus, popovers, toasts, CodeMirror's tooltips) or the chrome
       if (e.target.closest('.blk-render, .blk-preview')) continue;
