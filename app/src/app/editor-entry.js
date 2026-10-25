@@ -12,7 +12,15 @@
 //     ref = { type: 'ref' | 'cite', key, cmd }
 //     Option = { label, detail?, info?, boost? }
 //   onKey is asked for: escape, mod-enter, shift-enter, backspace-empty,
-//   backspace-start, slash-empty, up-top, down-bottom, alt-up, alt-down.
+//   backspace-start, slash-empty, up-top, down-bottom, alt-up, alt-down, and undo (Mod-z) and redo (Mod-Shift-z,
+//   Mod-y): CodeMirror's own history is off, so a host keeps the undo stack (onChange's updates have the changes).
+//
+//   What a host styles (the editor's page: view/style.js and workbench/src/theme-map.ts):
+//     the highlighting's colours, CSS custom properties --cm-keyword (a command), --cm-atom (an environment name),
+//     --cm-bracket, --cm-comment, --cm-number, --cm-math, --cm-error;
+//     .cm-caretLine, the band on the caret's visual line (view/caret-line.js: an element in the scroller, placed by
+//     the plugin; absolute, under the text, a tint);
+//     .cm-can-scroll on the scroller while its text is taller than its box (overscroll-behavior: contain then).
 import { EditorState, StateField, StateEffect, Compartment, Prec, Annotation, Transaction } from '@codemirror/state';
 import { caretLine } from '../view/caret-line.js';   // the caret's visual line, banded
 import { EditorView, keymap, placeholder as placeholderExt, drawSelection, Decoration, hoverTooltip, MatchDecorator, ViewPlugin } from '@codemirror/view';

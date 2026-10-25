@@ -6,7 +6,7 @@ import { ViewPlugin } from '@codemirror/view';
 
 export const caretLine = ViewPlugin.fromClass(class {
   constructor(view) {
-    this.el = document.createElement('div');
+    this.el = view.dom.ownerDocument.createElement('div');   // the editor's own document (a frame's, say)
     this.el.className = 'cm-caretLine';
     this.el.setAttribute('aria-hidden', 'true');
     view.scrollDOM.prepend(this.el);
