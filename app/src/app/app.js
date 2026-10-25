@@ -22,8 +22,7 @@
 import { createEditor } from './editor-entry.js';
 import { signal } from '@preact/signals';
 import { bump } from './page-state.ts';                    // the editor's signals (its container's, root.state)
-import { advanced, registerAdvanced } from '../settings/advanced.js';
-registerAdvanced({ id: 'menu-notes', label: 'Hide notes and Comments as notes in the ⋯ menu', where: 'Document menu' });
+import { advanced } from '../settings/advanced.js';
 import { kindLabel, markerOf as markerKind } from '../doc/kinds.js';
 import { createCommands, editorCommands, createEditorKeys } from '../commands/index.js';   // every intent: menus, keys, editorAPI
 import { scanHeadings, scanTodos, todoMacros, countWords, texToText, blankComments } from '../tex/texscan.js';
@@ -355,7 +354,6 @@ export function createDocEditor(ctx) {
     svgFigs,                                                                         // drawn figures
     { id: 'inspector', blockItems: (id, item, anchor) => (advanced.peek() && ctx.inspector?.available() ? [item('Inspect boxes and glue', 'inspect',   // advanced
       () => ctx.inspector.open({ block: id, pane: anchor?.closest?.('[data-pane]')?.dataset.pane ?? null }))] : []) },   // in the pane the menu was opened in
-    { id: 'notes', docItems: (item) => (advanced.peek() ? (ctx.notes?.menuItems?.(item) ?? []) : []) },   // Hide notes, Comments as notes
   ]);
 
   // ── Editing (../edit/: an editing session per pane, two at once) ──
@@ -463,7 +461,7 @@ export function createDocEditor(ctx) {
   const openSlashMenu = (anchor, onPick, onCancel) => menus.openSlash(anchor, onPick, onCancel);
   const openBlockMenu = (anchor, id) => menus.openBlock(anchor, id), openDocMenu = (anchor) => menus.openDoc(anchor), closeMenu = (c) => menus.close(c);
 
-  // a press outside a menu and Escape: the kit's one overlay layer (chrome/menu.js)
+  // a press outside a menu and Escape: the kit's one overlay layer (chrome/menu.ts)
 
   // ── Files: versions, the seed reset and banner, import, exports (app/doc-files.ts) ──
   const files = createDocFiles({ doc: () => S.doc, store, io: () => ctx.io, leaveEditors: () => edits.leaveAll(), settled, toast, setStatus, forExport: (d) => feats.forExport(d),
@@ -603,7 +601,7 @@ export function createDocEditor(ctx) {
   }
   // the preamble is in no pane: Document settings, a side sheet (settings/) the outline's first entry opens
   const settings = createSettings({ root,
-    doc: () => S.doc, readOnly: () => isReadOnly(S.doc), notes: ctx.notes ?? null, bibInfo: () => meta.bibInfo(),
+    doc: () => S.doc, readOnly: () => isReadOnly(S.doc), bibInfo: () => meta.bibInfo(),
     backends: () => ctx.backends.map((b) => ({ id: b.id, label: b.label })), backend: () => backend.id, setBackend: (id) => setBackend(id),
     applyPreamble: (text) => { perform('Edit the preamble', () => meta.putPreamble(text)); },
   });
@@ -818,7 +816,7 @@ export function createDocEditor(ctx) {
     paneBars.closeMenu?.();
   }
 
-  return { open, close, dispose, api, get doc() { return S.doc; }, session: S, status: results.status.value, title, section: (p) => paneStates.of(p ?? panes.first.id).section,   /* status and crumbs as data */ addPane: (id, c) => panes.add(id, c), removePane: (id) => panes.remove(id),   /* a guest's other panes */ writesIdle: () => { flushTyping(); return writer.idle(); }, run: command, nav,   /* app/doc-host.js */ backendId: () => backend?.id ?? null, setTitle: (t) => setTitle(t), outline: () => panels.outline(), focusedSection: (p) => sectionFocus.get(p ?? panes.focused().id),   /* a tab's section menu */ toggleFocus, get widths() { return panes.widths; }, activate, deactivate, bibHost, filesHost, panes: () => panes, perf };
+  return { open, close, dispose, api, get doc() { return S.doc; }, session: S, commands,   /* the menus' entries (the main menu: chrome/main-menu.ts) */ status: results.status.value, title, section: (p) => paneStates.of(p ?? panes.first.id).section,   /* status and crumbs as data */ addPane: (id, c) => panes.add(id, c), removePane: (id) => panes.remove(id),   /* a guest's other panes */ writesIdle: () => { flushTyping(); return writer.idle(); }, run: command, nav,   /* app/doc-host.js */ backendId: () => backend?.id ?? null, setTitle: (t) => setTitle(t), outline: () => panels.outline(), focusedSection: (p) => sectionFocus.get(p ?? panes.focused().id),   /* a tab's section menu */ toggleFocus, get widths() { return panes.widths; }, activate, deactivate, bibHost, filesHost, panes: () => panes, perf };
 }
 
 export { scanHeadings, scanTodos, todoMacros };

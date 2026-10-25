@@ -6,8 +6,9 @@
 // The outline's Preamble entry opens it at the Preamble tab (a full CodeMirror editor, the focus in it); the tabs
 // (← →); editing the preamble changes nothing until the sheet closes, then every block typesets again with it;
 // undo puts the old preamble back (the blocks again); Cancel discards; Esc applies; a preamble error: the outline
-// badge, the tab's count, the list (a click selects the line); the engine applies on close; the document menu
-// opens it; Show notes / Comments as notes; light and dark; 390 px.
+// badge, the tab's count, the list (a click selects the line); the engine applies on close; the main menu (Document ›)
+// and the Settings panel open it; the notes' switches are the Settings panel's (they apply at once), none here; light and
+// dark; 390 px.
 // Screenshots and results: test-results/settings/.
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -198,32 +199,42 @@ await idle();
   check('... and back', (await api('backend')) === b0);
 }
 
-// ── notes options on the Engine and view tab ──────────────────────────────────
+// ── this document's settings only: the notes' switches are the Settings panel's, applied at once ─────────────
 {
   await openFromOutline();
   await page.click('#settings-sheet [data-tab="engine"]');
-  const has = await page.locator('#ss-show-notes').count();
-  if (has) {
-    await page.uncheck('#ss-show-notes');
-    const hid = await page.evaluate(() => (window as any).editorAPI.notes().settings().hidden);
-    await page.check('#ss-show-notes');
-    const shown = await page.evaluate(() => !(window as any).editorAPI.notes().settings().hidden);
-    await page.uncheck('#ss-comments');
-    const stillOn = await page.evaluate(() => (window as any).editorAPI.notes().settings().comments);
-    await closeWith('done');
-    const off = await page.evaluate(() => (window as any).editorAPI.notes().settings().comments);
-    check('notes: Show notes applies at once (a view option); Comments as notes on close', hid === true && shown && stillOn === true && off === false, { hid, shown, stillOn, off });
-    await page.evaluate(() => (window as any).editorAPI.notes().setComments(true));
-    await idle();
-  } else { check('notes: the options are on the Engine and view tab', false); await closeWith('cancel'); }
+  const here = await page.evaluate(() => ({ notes: document.querySelectorAll('#settings-sheet #ss-show-notes, #settings-sheet #ss-comments').length, server: document.querySelectorAll('#settings-sheet #ss-resource-server').length,
+    engine: !!document.querySelector('#settings-sheet #backend-select'), tab: document.querySelector('#settings-sheet [data-tab="engine"]')?.textContent?.trim() }));
+  check('the Engine tab: the engine only (no notes switches, no resource server: the Settings panel\'s)', here.engine && here.notes === 0 && here.server === 0 && here.tab === 'Engine', here);
+  await closeWith('cancel');
+  await page.click('#btn-main-menu');
+  await page.click('.main-menu [data-action="settings"]');
+  await page.waitForSelector('[data-panel-view="app-settings"] #set-note-chips');
+  await page.uncheck('[data-panel-view="app-settings"] #set-note-chips');
+  const hid = await page.evaluate(() => (window as any).editorAPI.notes().settings().hidden);
+  await page.check('[data-panel-view="app-settings"] #set-note-chips');
+  const shown = await page.evaluate(() => !(window as any).editorAPI.notes().settings().hidden);
+  await page.uncheck('[data-panel-view="app-settings"] #set-comments');
+  const off = await page.evaluate(() => (window as any).editorAPI.notes().settings().comments);
+  check('the Settings panel\'s Note chips and Comments as notes apply at once', hid === true && shown && off === false, { hid, shown, off });
+  await page.check('[data-panel-view="app-settings"] #set-comments');
+  await idle();
+  // its This document section opens Document settings
+  await page.click('[data-panel-view="app-settings"] [data-setting="doc-settings"] button');
+  const s0 = await sheet();
+  check('the Settings panel\'s "Document settings" opens the sheet', !!s0?.open && s0.tab === 'preamble');
+  await closeWith('cancel');
+  await page.click('[data-ptab="app-settings"] [data-action="close-panel"]');
+  await page.waitForFunction(() => !document.querySelector('[data-panel-view="app-settings"]'));
 }
 
-// ── the document menu; light and dark; 390 px ─────────────────────────────────────
+// ── the main menu; light and dark; 390 px ─────────────────────────────────────
 {
-  await page.click('#btn-doc-menu');
-  await page.locator('.doc-menu [role="menuitem"]').filter({ hasText: /Document settings/ }).first().click();
+  await page.click('#btn-main-menu');
+  await page.click('.main-menu [data-action="document"]');
+  await page.click('.main-menu [data-action="doc-settings"]');
   const s = await sheet();
-  check('the document menu\'s "Document settings" opens it', !!s?.open && s.tab === 'preamble');
+  check('the main menu\'s Document › Document settings… opens it', !!s?.open && s.tab === 'preamble');
   const measure = () => page.evaluate(() => {
     const cv = document.createElement('canvas').getContext('2d')!;
     const rgba = (c: string) => { const sr = c.match(/^color\(srgb ([\d.e-]+) ([\d.e-]+) ([\d.e-]+)(?: \/ ([\d.e-]+))?\)$/); if (sr) return [+sr[1] * 255, +sr[2] * 255, +sr[3] * 255, sr[4] == null ? 1 : +sr[4]];

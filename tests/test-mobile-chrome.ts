@@ -5,13 +5,13 @@
 //
 // phone    WebKit with the iPhone 13 profile and Chromium with the Pixel 7 profile (a width rule: sides.ts OVERLAY_MAX_W):
 //          - one row: the document's tab is in the bar (its name and section), no tab strip row, the bar one row high,
-//            the pane's text starting under it; the app's mark not in the bar; no save status in the bar;
+//            the pane's text starting under it; the main menu (the app's icon) in the bar; no save status in the bar;
 //          - unsaved: a block write that fails shows the tab's dot (in its × slot) and a toast "Not saved" with Retry;
 //            Retry (the store working again) saves it and the dot goes;
 //          - three tabs: still one row, the active tab alone with all the room, a count "3" after it; the count opens
 //            the group's tabs as a list, a row activates its tab;
 //          - the keyboard (a stand-in visualViewport, as test-mobile-fit) while a block is edited: screenshots.
-// desktop  Chromium 1280 × 800: as before: the tabs share the bar (all three drawn, no count), the mark shown, no save
+// desktop  Chromium 1280 × 800: as before: the tabs share the bar (all three drawn, no count), the main menu shown, no save
 //          status in the bar either.
 // Waits on state (whenIdle, conditions, frames), never on fixed times.
 import { createRequire } from 'node:module';
@@ -75,7 +75,7 @@ const CHROME = () => {
   return {
     win: innerWidth, bar: r(bar), tabsInBar: inBar.length, rowStrips: rows.length,
     tab: inBar[0] ? { box: r(inBar[0]), name: inBar[0].querySelector('.wb-tab-name')?.textContent ?? '', sec: inBar[0].querySelector('.wb-tab-sec, .wb-tab-sub-label')?.textContent?.trim() ?? '' } : null,
-    markOn: document.querySelectorAll('.wb-bar .wb-mark-part[data-on="true"]').length,
+    menu: !!document.querySelector('.wb-bar #btn-main-menu .rtx-wb-logo svg'),
     saveInBar: !!document.querySelector('#save-state, .save-state'), barText: (bar?.textContent ?? '').replace(/\s+/g, ' ').trim(),
     count: count ? { text: count.textContent ?? '', label: count.getAttribute('aria-label') } : null,
     textTop: pane && pr ? Math.round(pr.top + (parseFloat(getComputedStyle(pane).scrollPaddingTop) || 0)) : null,
@@ -93,7 +93,7 @@ async function phone(browserType: any, device: string, tag: string) {
     check(`[${tag}] one row: the document's tab in the bar, no tab strip row (${c0.tabsInBar} in the bar, ${c0.rowStrips} rows)`, c0.tabsInBar === 1 && c0.rowStrips === 0, c0);
     check(`[${tag}] one row: the bar one row high (${c0.bar?.h} px) and the text starts under it (${c0.textTop} ≤ ${c0.bar?.bottom})`, !!c0.bar && c0.bar.h <= 56 && c0.textTop != null && c0.textTop <= c0.bar.bottom + 1, c0);
     check(`[${tag}] the tab shows the document's name and its section ("${c0.tab?.name}" › "${c0.tab?.sec}")`, !!c0.tab && c0.tab.name.length > 0 && c0.tab.sec.length > 0 && c0.tab.box.w > c0.win * 0.4, c0.tab);
-    check(`[${tag}] no app mark and no save status in the bar, no count with one tab`, c0.markOn === 0 && !c0.saveInBar && !/Saved|Saving/.test(c0.barText) && !c0.count, c0);
+    check(`[${tag}] the main menu (the app's icon) and no save status in the bar, no count with one tab`, c0.menu && !c0.saveInBar && !/Saved|Saving/.test(c0.barText) && !c0.count, c0);
 
     // unsaved: the store refuses block writes; the tab's dot and the toast; Retry once it works again
     const id = await page.evaluate(() => (window as any).editorAPI.blocks().find((b: any) => b.kind === 'paragraph').id);
@@ -165,7 +165,7 @@ async function desktop() {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const { page, errors } = await openPage(ctx);
     const c0 = await page.evaluate(CHROME);
-    check(`[${tag}] one tab: in the bar, the mark shown, no count, no save status`, c0.tabsInBar === 1 && c0.rowStrips === 0 && c0.markOn > 0 && !c0.count && !c0.saveInBar && !/Saved|Saving/.test(c0.barText), c0);
+    check(`[${tag}] one tab: in the bar, the main menu shown, no count, no save status`, c0.tabsInBar === 1 && c0.rowStrips === 0 && c0.menu && !c0.count && !c0.saveInBar && !/Saved|Saving/.test(c0.barText), c0);
     await page.evaluate(async () => { const E = (window as any).editorAPI, wb = E.workbench(); const doc = E.route().id; for (let k = 0; k < 2; k++) wb.open({ view: 'document', state: { doc } }); await E.whenIdle(); });
     await frames(page, 3); await idle(page);
     const c3 = await page.evaluate(CHROME);

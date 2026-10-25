@@ -41,6 +41,7 @@ import { featureFailed } from './release-mode.js';
 import { h } from './app.js';
 import '../files/index.ts';                     // the Files panel (advanced): a registered side panel
 import type { EditorRoot } from './editor-root.ts';
+import type { DocCommands } from '../chrome/main-menu.ts';
 import type { EditorServices, Router } from './mount.ts';
 import type { DocStatus } from '../doc/status.ts';
 import type { OutlineItem } from '../doc/panels.ts';
@@ -48,7 +49,9 @@ import type { Layout, Pane, Widths } from '../panes/types.ts';
 
 /** a document editor (app/app.js createDocEditor), as this module uses it */
 export interface DocEditor {
-  readonly doc: { id: string; title?: string } | null;
+  readonly doc: { id: string; title?: string; preamble?: { source: string } } | null;
+  /** its command registry (commands/registry.js): the main menu's entries */
+  readonly commands: DocCommands;
   readonly status: ReadonlySignal<DocStatus>;
   readonly title: Signal<string>;
   readonly api: Record<string, (...a: never[]) => unknown>;

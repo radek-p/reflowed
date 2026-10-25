@@ -7,7 +7,7 @@
 //   showPreambleErrors(root, its signal) · preambleErrorsOf(root) ([{ line, message }]) · preambleProblemsOf(root)
 //   (their count: the outline entry's badge)
 //
-// host: doc(), readOnly(), backends() [{ id, label }], backend() id, bibInfo() text, notes (notes/index.js, or null),
+// host: doc(), readOnly(), backends() [{ id, label }], backend() id, bibInfo() text,
 //       applyPreamble(text)   one undoable edit (the app's perform): every block typesets again
 //       setBackend(id)        the engine (typesets every block again)
 import { signal, computed } from '@preact/signals';
@@ -47,8 +47,6 @@ export function createSettings(host) {
     let any = false;
     if (doc && c.preamble != null && c.preamble !== doc.preamble.source) { host.applyPreamble(c.preamble); any = true; }
     if (c.backend && c.backend !== host.backend()) { host.setBackend(c.backend); any = true; }
-    const ns = host.notes?.settings?.();
-    if (ns && c.comments != null && c.comments !== ns.comments) { host.notes.setComments(c.comments); any = true; }
     return any;
   }
   function open({ tab = 'preamble', line = null } = {}) {

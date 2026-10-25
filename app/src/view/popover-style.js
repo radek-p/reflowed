@@ -1,4 +1,4 @@
-// The View popover's CSS (view/popover.js), on the kit's tokens: light, dark, sepia and contrast follow from them.
+// The View popover's CSS (view/popover.ts; its rows in the Settings panel too), on the kit's tokens: light, dark, sepia and contrast follow from them.
 // A <style> of its own (the builds need no CSS loader). The theme swatches keep literal colours: they show each theme.
 const CSS = String.raw`
 .rtx-vp { width: 318px; max-width: calc(100vw - 16px); max-height: calc(100vh - 60px); overflow-y: auto; padding: var(--ui-1) 0 var(--ui-2); }
@@ -7,6 +7,8 @@ const CSS = String.raw`
 .rtx-vp-row + .rtx-vp-row { border-top: 1px solid var(--ui-border-soft); }
 .rtx-vp-cap { display: flex; justify-content: space-between; align-items: baseline; gap: var(--ui-2); margin: 0 0 var(--ui-2); font-size: var(--ui-text-xs); font-weight: var(--ui-medium); color: var(--ui-ink-2); }
 .rtx-vp-cap output, .rtx-vp-cap > span + span { font-weight: 400; font-variant-numeric: tabular-nums; color: var(--ui-ink-2); }
+.rtx-vp-hint { margin: calc(-1 * var(--ui-1)) 0 var(--ui-2); font-size: var(--ui-text-xs); color: var(--ui-ink-2); }
+.rtx-vp-align { margin-top: var(--ui-2); }
 .rtx-vp-seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; box-sizing: border-box; }
 .rtx-vp-seg > button { padding: 0 2px; font-size: var(--ui-text-sm); white-space: nowrap; }
 .rtx-vp-range { width: 100%; margin: var(--ui-2) 0 0; accent-color: var(--ui-accent); }
@@ -25,10 +27,6 @@ const CSS = String.raw`
 .rtx-vp-sw[data-t="sepia"] { background: #f4ecd8; color: #453a26; }
 .rtx-vp-sw[data-t="contrast"] { background: #fff; color: #000; box-shadow: inset 0 0 0 2px #000; }
 .rtx-vp-sw[data-t="system"] { background: linear-gradient(135deg, #fff 50%, #191919 50%); color: #888; }
-.rtx-vp-toggles { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ui-1) var(--ui-3); }
-.rtx-vp-toggles label { display: flex; align-items: center; gap: var(--ui-2); min-height: var(--ui-row); cursor: pointer; color: var(--ui-ink); font-size: var(--ui-text-sm); }
-.rtx-vp-toggles label[hidden] { display: none; }
-.rtx-vp-toggles input { accent-color: var(--ui-accent); margin: 0; }
 .rtx-vp-note { margin: var(--ui-2) 0 0; font-size: var(--ui-text-xs); color: var(--ui-ink-2); }
 .rtx-vp-keys { padding: var(--ui-1) var(--ui-3) 0; font-size: var(--ui-text-xs); color: var(--ui-ink-2); }
 `;

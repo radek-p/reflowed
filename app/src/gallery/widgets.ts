@@ -166,7 +166,7 @@ function InPane({ children }: { children?: ComponentChildren }) {
 interface SettingsApi { setTab(t: string): void }
 function Settings({ g, tab, errors }: { g: Gallery; tab: string; errors: { line: number; message: string }[] }) {
   const doc = testFixtureDocument() as { preamble: string; blocks: unknown[] };
-  // the panel's host (settings/index.js gives the editor's): the fixture's preamble and blocks, the page's engines and notes
+  // the panel's host (settings/index.js gives the editor's): the fixture's preamble and blocks, the page's engines
   const host = useRef({
     doc: () => ({ preamble: { source: doc.preamble }, blocks: doc.blocks }),
     readOnly: () => false,
@@ -174,7 +174,6 @@ function Settings({ g, tab, errors }: { g: Gallery; tab: string; errors: { line:
     backends: () => [{ id: 'engine', label: 'In browser · Tectonic' }, { id: 'none', label: 'None (the sources only)' }],
     backend: () => 'engine',
     bibInfo: () => '4 entries (refs.bib), 3 cited',
-    notes: g.services.notes,
     openReferences: () => {},
   }).current;
   const api = useRef<SettingsApi | null>(null);
@@ -203,7 +202,7 @@ export function SheetsSection({ g }: { g: Gallery }) {
       <div class="gal-cells gal-cells--top">
         <${Cell} label="Preamble, with two problems"><${Settings} g=${g} tab="preamble" errors=${[{ line: 3, message: 'Undefined control sequence \\usepackag.' }, { line: 9, message: 'LaTeX Error: Missing \\begin{document}.' }]} /><//>
         <${Cell} label="Bibliography"><${Settings} g=${g} tab="bib" errors=${[]} /><//>
-        <${Cell} label="Engine and view"><${Settings} g=${g} tab="engine" errors=${[]} /><//>
+        <${Cell} label="Engine"><${Settings} g=${g} tab="engine" errors=${[]} /><//>
       </div>
     <//>
     <${Group} title="The title form" g="title-form">

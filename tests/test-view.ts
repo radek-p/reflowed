@@ -1,12 +1,12 @@
-// The View popover (app/src/view/popover.js) and its top bar button ("Aa", view/view-button.js), in headless Chromium
+// The View popover (app/src/view/popover.ts) and its top bar button ("Aa", view/view-button.js), in headless Chromium
 // on the dev app (the engine). Written before their Preact migration, run on the old code first, so the migration keeps the
 // behaviour. Waits on DOM state and the app's idle, never on fixed times.
 //
 //   node tests/test-view.ts [http://localhost:8175/]
 //
-// The button (labelled, aria-haspopup/expanded, in the top bar before the menu); opening (click, ⌥⌘V) puts the focus
+// The button (labelled, aria-haspopup/expanded, at the top bar's right); opening (click, ⌥⌘V) puts the focus
 // on the chosen option; the popover under the button, inside the window; every control applies at once and shows
-// its state (width segments, the slider, text size, colours, lines, note chips, block handles); Esc closes it with
+// its state (width segments, the slider, text size, line ends, colours; no switches: the Settings panel's); Esc closes it with
 // the focus back on the button, a press outside closes it; light and dark readable; 390 px.
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -62,12 +62,12 @@ const state = () => page.evaluate(() => {
 {
   const b = await page.evaluate(() => {
     const el = document.getElementById('btn-view');
-    const menu = document.getElementById('btn-doc-menu');
+    const menu = document.getElementById('btn-main-menu');
     return el && { tag: el.tagName, label: el.getAttribute('aria-label'), popup: el.getAttribute('aria-haspopup'), expanded: el.getAttribute('aria-expanded'), title: el.title,
-      inBar: !!el.closest('.wb-bar'), beforeMenu: !!menu && !!(el.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING), h: el.getBoundingClientRect().height, menuH: menu?.getBoundingClientRect().height ?? 0, svg: !!el.querySelector('svg') };
+      inBar: !!el.closest('.wb-bar-right'), h: el.getBoundingClientRect().height, menuH: menu?.getBoundingClientRect().height ?? 0, svg: !!el.querySelector('svg') };
   });
-  check('the View button: in the window bar before the menu, labelled, a popup button, an icon, the bar\'s control height (the menu button\'s)', !!b && b.tag === 'BUTTON' && b.label === 'View options' && b.popup === 'dialog' && b.expanded === 'false'
-    && /View: width, text size, colours/.test(b.title) && b.inBar && b.beforeMenu && b.svg && Math.abs(b.h - b.menuH) < 0.5 && b.h >= 24, b);
+  check('the View button: at the window bar\'s right, labelled, a popup button, an icon, the bar\'s control height (the main menu button\'s)', !!b && b.tag === 'BUTTON' && b.label === 'View options' && b.popup === 'dialog' && b.expanded === 'false'
+    && /View: width, text size, colours/.test(b.title) && b.inBar && b.svg && Math.abs(b.h - b.menuH) < 0.5 && b.h >= 24, b);
 }
 // ── open, close ──────────────────────────────────────────────────────────────
 {
@@ -77,8 +77,9 @@ const state = () => page.evaluate(() => {
   const exp = await page.getAttribute('#btn-view', 'aria-expanded');
   check('a click opens it: a dialog "View options", the button expanded, the focus on the chosen width', await isOpen() && exp === 'true' && s.focus === (await settings()).width
     && (await page.getAttribute('#rtx-view-pop', 'role')) === 'dialog' && (await page.getAttribute('#rtx-view-pop', 'aria-label')) === 'View options', { s: s.focus, exp });
-  check('under its button, right-aligned with it, inside the window', s.box.top >= s.btn.bottom && s.box.top - s.btn.bottom < 12 && Math.abs(s.box.right - s.btn.right) < 2 && s.box.left >= 0, s);
-  check('its options: the widths, the colours (the lines are an advanced feature)', ['Narrow', 'Medium', 'Wide', 'Paper', 'Fit', 'Light', 'Dark'].every((l) => s.radios.some((r) => r.includes(l))), s.radios);
+  // (the button is the bar's last control: right-aligned with it, but kept 8 px inside the window's edge: the kit's place())
+  check('under its button, right-aligned with it, inside the window', s.box.top >= s.btn.bottom && s.box.top - s.btn.bottom < 12 && Math.abs(s.box.right - Math.min(s.btn.right, 1280 - 8)) < 2 && s.box.left >= 0, s);
+  check('its options: the widths, the line ends, the colours', ['Narrow', 'Medium', 'Wide', 'Paper', 'Fit', 'Justified', 'Ragged right', 'Light', 'Dark'].every((l) => s.radios.some((r) => r.includes(l))), s.radios);
   await page.screenshot({ path: join(OUT, '01-open.png') });
   await page.keyboard.press('Escape');
   const after = await page.evaluate(() => ({ focus: document.activeElement?.id, exp: document.getElementById('btn-view')!.getAttribute('aria-expanded') }));
@@ -121,40 +122,23 @@ const state = () => page.evaluate(() => {
   await page.click('#rtx-view-pop [data-t="sepia"]');
   s = await state();
   check('colours: Sepia applies (the page\'s class), its swatch checked', (await settings()).theme === 'sepia' && s.t.join() === 'sepia' && (await page.evaluate(() => document.documentElement.classList.contains('sepia'))), s.t);
-  // "Show advanced features", off by default: no Lines row, no Note chips or Block handles switches; a stored
-  // ragged right and hidden handles give way to the defaults until it is on
-  await page.evaluate(() => (window as any).editorAPI.view().set({ align: 'left', handles: false }));
-  await idle();
-  s = await state();
-  const offApplied = await page.evaluate(() => ({ align: document.documentElement.style.getPropertyValue('--latex-align') || 'justify', noHandles: document.documentElement.hasAttribute('data-no-handles') }));
-  const adv0 = s.toggles.find((t: any) => /Show advanced features/.test(t.label));
-  check('advanced features: off by default; Ragged right, Note chips and Block handles hidden; the defaults apply (justified, handles)',
-    !!adv0 && !adv0.on && s.a.length === 0 && !s.toggles.some((t: any) => /Note chips|Block handles/.test(t.label)) && offApplied.align === 'justify' && !offApplied.noHandles, { toggles: s.toggles, a: s.a, offApplied });
-  await page.locator('#rtx-view-pop #rtx-vp-advanced').check();
-  await idle();
-  s = await state();
-  const onApplied = await page.evaluate(() => ({ align: document.documentElement.style.getPropertyValue('--latex-align') || 'justify', noHandles: document.documentElement.hasAttribute('data-no-handles'), stored: localStorage.getItem('rtx-editor.advanced') }));
-  check('advanced features on: the controls show, the stored choices apply again, kept for the next visit', s.a.join() === 'left' && s.toggles.some((t: any) => /Block handles/.test(t.label)) && onApplied.align === 'left' && onApplied.noHandles && onApplied.stored === '1', { a: s.a, onApplied });
-  await page.evaluate(() => (window as any).editorAPI.view().set({ align: 'justify', handles: true }));
-  await idle();
+  // the line ends: Justified / Ragged right, always there (no switch gates them, none is here: the Settings panel has
+  // the rest); a stored ragged right and hidden handles apply as they are
+  check('no switches in the View options (block handles, note chips and the advanced switch are the Settings panel\'s)', s.toggles.length === 0, s.toggles);
   await page.click('#rtx-view-pop [data-a="left"]');
   s = await state();
-  check('lines: Ragged right applies, checked', (await settings()).align === 'left' && s.a.join() === 'left');
+  const ragged = await page.evaluate(() => document.documentElement.style.getPropertyValue('--latex-align'));
+  check('line ends: Ragged right applies, checked', (await settings()).align === 'left' && s.a.join() === 'left' && ragged === 'left', { a: s.a, ragged });
   await page.click('#rtx-view-pop [data-a="justify"]');
-  const notes = s.toggles.find((t: any) => /Note chips/.test(t.label));
-  const handles = s.toggles.find((t: any) => /Block handles/.test(t.label));
-  check('switches: Note chips (shown: the notes are on) and Block handles, both on', !!notes && notes.shown && notes.on && !!handles && handles.on, s.toggles);
-  await page.locator('#rtx-view-pop label').filter({ hasText: 'Note chips' }).locator('input').uncheck();
-  const hid = await page.evaluate(() => (window as any).editorAPI.notes().settings().hidden);
-  await page.locator('#rtx-view-pop label').filter({ hasText: 'Note chips' }).locator('input').check();
-  await page.locator('#rtx-view-pop label').filter({ hasText: 'Block handles' }).locator('input').uncheck();
-  const h0 = (await settings()).handles;
-  await page.locator('#rtx-view-pop label').filter({ hasText: 'Block handles' }).locator('input').check();
-  check('switches apply at once (notes hidden, handles off), and back', hid === true && h0 === false && (await settings()).handles === true
-    && (await page.evaluate(() => !(window as any).editorAPI.notes().settings().hidden)));
+  s = await state();
+  check('… and Justified again', (await settings()).align === 'justify' && s.a.join() === 'justify');
+  await page.evaluate(() => (window as any).editorAPI.view().set({ align: 'left', handles: false }));
+  await idle();
+  const stored = await page.evaluate(() => ({ align: document.documentElement.style.getPropertyValue('--latex-align') || 'justify', noHandles: document.documentElement.hasAttribute('data-no-handles') }));
+  check('a stored ragged right and hidden handles apply as they are (no advanced switch gates them)', stored.align === 'left' && stored.noHandles, stored);
+  await page.evaluate(() => (window as any).editorAPI.view().set({ align: 'justify', handles: true }));
+  await idle();
   check('the popover stays open while its controls are used', await isOpen());
-  await page.locator('#rtx-view-pop #rtx-vp-advanced').uncheck();
-  check('advanced features off again: the switches go', !(await state()).toggles.some((t: any) => /Block handles/.test(t.label)) && (await page.evaluate(() => localStorage.getItem('rtx-editor.advanced'))) === null);
   await page.keyboard.press('Escape');
 }
 // ── light and dark; 390 px ─────────────────────────────────────────────────────

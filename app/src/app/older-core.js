@@ -1,6 +1,6 @@
 // The prompt for a document an older ReflowEd made (store/policy.ts: its core version is older). The
 // document is never migrated or rewritten: it opens read-only behind this prompt, which offers
-//   Export .tex / Export .zip   the files, as the ⋯ menu's exports
+//   Export .tex / Export .zip   the files, as the main menu's Export submenu writes them
 //   Start anew                  that .tex imported as a new document (io/start-anew.ts), which then opens;
 //                               the older document stays as it is, for the older build
 //   Close                       keep reading it here, read-only

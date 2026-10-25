@@ -78,7 +78,7 @@ migration; new UI is Preact (`html\`…\`` from `ui/core.js`).
 
 ## The one overlay layer (`ui/layers.js`)
 
-Everything that floats registers there: menus (`chrome/menu.js`), the kit's Popover (the notes popover, bibpane and
+Everything that floats registers there: menus (`chrome/menu.ts`), the kit's Popover (the notes popover, bibpane and
 home menus), the View popover, the reference card, Dialogs and Sheets (as `modal`), the toast stack and the Back pill.
 
 - **Stacking:** tiers from the tokens, `--ui-z-pill` < `--ui-z-float` < `--ui-z-toast` < `--ui-z-tip`; within a tier a

@@ -22,9 +22,6 @@ const CSS = String.raw`
 .ss-field { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-3); min-height: var(--ui-h-lg); }
 .ss-label { color: var(--ui-ink); }
 .ss-value { color: var(--ui-ink-2); text-align: right; }
-.ss-url { flex: 1 1 auto; max-width: 60%; }
-.ss-problem { color: var(--ui-danger); }
-.ss-check { width: 16px; height: 16px; margin: 0; accent-color: var(--ui-accent); }
 `;
 
 export function installSettingsStyle() {

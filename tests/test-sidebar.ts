@@ -44,11 +44,11 @@ const leftOpen = () => page.evaluate(() => !(window as any).editorAPI.workbench(
 // ── the brand (the window bar's) and the left column's hide button, Ctrl/⌘B ──────────────────────────────────────
 {
   const top = await page.evaluate(() => {
-    const mark = document.querySelector('.wb-bar .wb-bar-mark'), c = document.querySelector('[data-side="left"] .wb-side-hide') as HTMLElement | null;
-    return { brand: !mark?.querySelector('.rtx-wb-brand'), logo: !!mark?.querySelector('.rtx-wb-logo svg'),
+    const menu = document.querySelector('.wb-bar #btn-main-menu'), c = document.querySelector('[data-side="left"] .wb-side-hide') as HTMLElement | null;
+    return { brand: !menu?.querySelector('.rtx-wb-brand'), logo: !!menu?.querySelector('.rtx-wb-logo svg'),
       close: c && { label: c.getAttribute('aria-label'), title: c.title, tag: c.tagName, h: c.getBoundingClientRect().height } };
   });
-  check('brand: the app icon in the window bar, no word', top.brand && top.logo, top);
+  check('brand: the app icon in the window bar (the main menu\'s button), no word', top.brand && top.logo, top);
   check('hide: a labelled button with its shortcut, 20–32 px (a kit control)', !!top.close && top.close.tag === 'BUTTON' && /Hide left/.test(top.close.label ?? '') && /Ctrl\+B|⌘B/.test(top.close.title) && top.close.h >= 20 && top.close.h <= 33, top.close);
   await page.click('[data-side="left"] .wb-side-hide');
   await page.waitForFunction(() => (window as any).editorAPI.workbench().sides.peek().left.collapsed);

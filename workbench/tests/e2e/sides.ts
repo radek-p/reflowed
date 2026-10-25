@@ -319,3 +319,33 @@ group('side open/close: the main area and the top bar follow the column' + "'" +
   check('reduced motion: closing is instant (the main area at the edge, the slot at 32 px, nothing running, two frames later)', rm.main === 0 && rm.slot === 32 && rm.anims === 0, rm);
   await ctx.close();
 });
+
+// ── a closable panel (panel.onClose): the close on its own tab and Close in its menu call it (the host takes the panel
+//    away: unregisters its type); registered again, it comes back where it was; a panel with a default width (panel.width)
+//    gives its column that width ──
+group('closable panel: the close on its tab and in its menu, back where it was; a panel\'s default width', async () => {
+  const page = await fresh({ sides: true, w: 1500 });
+  await settled(page);
+  const add = () => page.evaluate(() => { const w = window as any, d = w.demo;
+    w.__offTool = d.wb.registerView({ id: 'tool', title: () => 'Tool', icon: 'settings', panel: { side: 'right', width: { share: 1 / 3, min: 380, max: 560 }, onClose: () => w.__offTool() }, Component: () => null });
+    d.wb.showPanel('tool'); });
+  await add();
+  await waitSide(page, 'right', 'references,tool');
+  await page.waitForSelector('[data-ptab="tool"] [data-action="close-panel"]');
+  const t = await page.evaluate(() => ({ inTab: document.querySelectorAll('[data-ptab="tool"] [data-action="close-panel"]').length, others: document.querySelectorAll('[data-ptab]:not([data-ptab="tool"]) [data-action="close-panel"]').length,
+    w: Math.round(document.querySelector('aside[data-side="right"]')!.getBoundingClientRect().width), area: Math.round(document.querySelector('.wb-root')!.getBoundingClientRect().width) }));
+  check('its close is on its own tab (one), no other panel has one', t.inTab === 1 && t.others === 0, t);
+  check('its column takes its default width: a third of the window within its bounds', Math.abs(t.w - Math.max(380, Math.min(560, t.area / 3))) <= 2, t);
+  await page.click('[data-ptab="tool"] [data-action="close-panel"]');
+  await waitSide(page, 'right', 'references');
+  check('the close on its tab closes it (its type gone, out of the column)', await page.evaluate(() => !(window as any).demo.wb.viewType('tool')));
+  await add();
+  await waitSide(page, 'right', 'references,tool');
+  check('registered again: back where it was', true);
+  await page.click('[data-ptab="tool"]', { button: 'right' });
+  await page.waitForSelector('[role="menu"][aria-label="Panel actions"] [data-item="close-panel"]');
+  await page.click('[role="menu"][aria-label="Panel actions"] [data-item="close-panel"]');
+  await waitSide(page, 'right', 'references');
+  check('its tab\'s menu has Close; it closes it', true);
+  await page.close();
+});

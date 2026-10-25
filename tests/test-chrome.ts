@@ -155,7 +155,7 @@ if (!ONLY || ONLY === '132') {
     new MutationObserver((l) => l.forEach((m) => { if (!(m.target as Element).closest('.wb-tab, .wb-strip')) w.__styleChanges.push(`${(m.target as Element).id || (m.target as Element).className} ${m.attributeName}`); }))
       .observe(bar, { subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
     const watch = () => {
-      for (const e of bar.querySelectorAll('#btn-view, #btn-doc-menu')) {
+      for (const e of bar.querySelectorAll('#btn-view, #btn-main-menu')) {
         const r = e.getBoundingClientRect(); (w.__places[e.id || e.className] ??= new Set()).add(`${Math.round(r.left)},${Math.round(r.top)}`);
       }
       w.__sections.add(bar.querySelector('.wb-tab--on .wb-tab-sec')?.textContent ?? '');
@@ -172,7 +172,7 @@ if (!ONLY || ONLY === '132') {
   check('the scroll passed several sections (the crumbs changed)', r.sections.length >= 3, { steps, sections: r.sections });
   check('no class or style change in the top bar during the scroll (beyond the first)', r.changes.length <= 1, r.changes);
   // (the bar has no save state: it is on the tab, tests/test-mobile-chrome.ts; the bar's own places are its two buttons)
-  check('the buttons keep their place', Object.values(r.places).every((v: any) => v.length === 1) && ['btn-view', 'btn-doc-menu'].every((k) => k in r.places), r.places);
+  check('the buttons keep their place', Object.values(r.places).every((v: any) => v.length === 1) && ['btn-view', 'btn-main-menu'].every((k) => k in r.places), r.places);
   const bar = layers.filter((l) => l.backendNodeId === node.backendNodeId);
   check('the top bar is its own compositor layer', bar.length === 1, { layers: layers.length, bar: bar.length });
   await ctx.close();

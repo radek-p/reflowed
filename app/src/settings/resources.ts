@@ -1,7 +1,7 @@
 // The TeX resource server: the address of a static HTTP server with a TeX Live tree, where the
 // engine fetches a package, class or font the embedded set lacks. A preference of this browser (localStorage, as the
-// View options), set in Document settings, Engine and view, behind "Show advanced features": with the switch
-// off the address is the default.
+// View options), set in the Settings panel's Advanced section (settings/resource-field.ts), behind "Show advanced
+// features": with the switch off the address is the default.
 //
 // The default: a page served over http(s) looks for the tree beside itself, at texlive/2022/
 // relative to the page, so no CORS is needed. That address is only assumed:
@@ -32,7 +32,7 @@ const fromPage = ((): string | null => { try { return pageParams().get('resource
 export const resourceChoice = computed(() => chooseServer({ fromPage, stored: storedServer.value, advancedOn: !!advanced.value, fallback: DEFAULT_RESOURCE_SERVER }));
 export const resourceServer = computed(() => resourceChoice.value.url);
 
-registerAdvanced({ id: 'resource-server', label: 'The TeX resource server', where: 'Document settings, Engine and view' });
+registerAdvanced({ id: 'resource-server', label: 'The TeX resource server', where: 'Settings, Advanced' });
 
 /** '' when it can be used: empty (the default), none, or an http(s) address */
 export function checkServerAddress(text: string | null | undefined): string {

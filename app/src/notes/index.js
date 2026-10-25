@@ -14,7 +14,7 @@
 //   - defines the kind `rtxnote` with the viewer (reflowtex.host.define):
 //     the chip in the line, and a popover in the page;
 //   - gives the app a colour per author, a way to open a note from the TODO
-//     panel, and two menu items (Hide notes, Comments as notes).
+//     panel, and its two settings (settings(), setHidden, setComments: the Settings panel's Notes section).
 //
 // UI (Preact on the design kit): chip.js (the chip), popover.js (the kit's Popover with the message and the
 // actions), colours.js (author colours, ink, initials), style.js (tokens). This module keeps the logic.
@@ -265,13 +265,6 @@ export function installNotes({ backends = [], params = new URLSearchParams(locat
     openNote,
     /** the cache key's part that is ours (comments on/off change what a block compiles to) */
     keySalt: (backend) => (wants(backend) ? `+notes${settings.comments ? '' : '-nc'}` : ''),
-    /** items for the ⋯ menu: menuItem(label, action, fn) is the app's */
-    menuItems(menuItem) {
-      return [
-        menuItem(settings.hidden ? 'Show notes' : 'Hide notes', 'notes-hidden', () => setHidden(!settings.hidden)),
-        menuItem(settings.comments ? 'Comments as notes: on' : 'Comments as notes: off', 'notes-comments', () => setComments(!settings.comments)),
-      ];
-    },
     settings: () => ({ ...settings }),
     setHidden, setComments,
     /** tests: chips in the page, with what they stand for */

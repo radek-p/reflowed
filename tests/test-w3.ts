@@ -432,9 +432,10 @@ const loadMs = Date.now() - t0;
     check('long: its pictures are there and have no Edit figure button', figs.blocks >= 7 && figs.images >= 7 && figs.svg === 0 && editBtns === 0,
       `${figs.blocks} figures, ${figs.images} PDF or raster files, ${figs.svg} SVG, ${editBtns} buttons`);
   }
-  // versions from the menu
-  await p.click('#btn-doc-menu');
-  await p.click('.doc-menu [data-action="versions"]');
+  // versions from the main menu (Document ›)
+  await p.click('#btn-main-menu');
+  await p.click('.main-menu [data-action="document"]');
+  await p.click('.main-menu [data-action="versions"]');
   await p.waitForSelector('dialog.versions-dialog .rv');
   const vIdle = () => p.evaluate(() => (document.querySelector('dialog.versions-dialog') as any)._versions?.idle?.());
   await vIdle();
@@ -452,9 +453,10 @@ const loadMs = Date.now() - t0;
   await p.click('dialog.versions-dialog [data-action="close-versions"]');
   const vClosed = await p.waitForFunction(() => !document.querySelector('dialog.versions-dialog'), null, { timeout: 3000 }).then(() => true, () => false);
   check('versions: "Versions of “title”", Close closes it', /^Versions of “.+”$/.test(vTitle ?? '') && vClosed, { vTitle, vClosed });
-  // export .tex from the menu
-  await p.click('#btn-doc-menu');
-  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('.doc-menu [data-action="export-tex"]')]);
+  // export .tex from the main menu (Export ›)
+  await p.click('#btn-main-menu');
+  await p.click('.main-menu [data-action="export"]');
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('.main-menu [data-action="export-tex"]')]);
   const text = await (await import('node:fs/promises')).readFile(await dl.path(), 'utf8');
   check('export .tex (io.exportTex) has the preamble and the body', /\\documentclass/.test(text) && /\\begin\{document\}/.test(text) && text.includes('Where your document lives'), `${dl.suggestedFilename()} ${text.length} chars`);
 }
@@ -486,14 +488,15 @@ for (const [platform, want] of [
   ['MacIntel', { find: '⌘F', focus: '⇧⌘F', dup: '⌘D', undo: '⌘Z  ⇧⌘Z', split: '⌘Enter', move: '⌥↑' }],
 ] as const) {
   const { ctx, page: p } = await newPage('?seed=sample&backend=none#/doc/sample', { platform });
-  await p.click('#btn-doc-menu');
-  const keyOf = (action: string) => p.locator(`.doc-menu [data-action="${action}"] .mi-key`).textContent();
+  await p.click('#btn-main-menu');
+  const keyOf = (action: string) => p.locator(`.main-menu [data-action="${action}"] .mi-key`).textContent();
+  await p.click('.main-menu [data-action="view"]');      // (Focus mode: View ›)
   const menu = { find: await keyOf('find'), focus: await keyOf('focus') };
-  await p.click('.doc-menu [data-action="keys"]');
+  await p.click('.main-menu [data-action="keys"]');
   await p.waitForSelector('dialog.shortcuts dt');
   const rows: Record<string, string> = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll('dialog.shortcuts dt')].map((dt) => [dt.nextElementSibling?.textContent ?? '', dt.textContent ?? ''])));
   const dialog = { dup: rows['Duplicate'], undo: rows['Undo / redo block changes'], split: rows['Split the block at the caret'], move: rows['Move the block']?.split(' ')[0] };
-  check(`shortcut labels (${platform}): the document menu and the shortcuts dialog`, menu.find === want.find && menu.focus === want.focus && dialog.dup === want.dup
+  check(`shortcut labels (${platform}): the main menu and the shortcuts dialog`, menu.find === want.find && menu.focus === want.focus && dialog.dup === want.dup
     && dialog.undo === want.undo && dialog.split === want.split && dialog.move === want.move, { menu, dialog });
   await ctx.close();
 }

@@ -17,8 +17,8 @@ export default async function (h: Harness): Promise<void> {
       status: E.workbench().getDocStatus(E.route().id) };
   }, tab);
   check('open: the pane is in the tab\'s host, every block typeset', v.inHost && v.blocks > 5 && v.shown === v.total, v);
-  const bar = await page.evaluate(() => [...document.querySelectorAll('.rtx-wb-bar button')].map((b) => { const r = b.getBoundingClientRect(); return `${Math.round(r.width)}x${Math.round(r.height)}:${getComputedStyle(b).borderRadius}`; }));
-  check('the bar: View and the document menu (no split button since 2026-10-18), one control metric (the workbench kit\'s)', bar.length === 2 && new Set(bar).size === 1, bar);
+  const bar = await page.evaluate(() => [...document.querySelectorAll('.rtx-wb-bar button, #btn-main-menu')].map((b) => { const r = b.getBoundingClientRect(); return `${Math.round(r.height)}:${getComputedStyle(b).borderRadius}`; }));
+  check('the bar: the main menu (left) and View (right), no split button; one control metric (the workbench kit\'s height and radius)', bar.length === 2 && new Set(bar).size === 1, bar);
   check('open: idle, the document has no status (nothing typesetting, no error, saved)', !v.status.typesetting && !v.status.errors && !v.status.unsaved, v.status);
   // the crumbs: the tab names the document and the section in view
   const crumb = await page.evaluate((id: string) => {

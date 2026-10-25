@@ -11,10 +11,10 @@ export default async function (h: Harness): Promise<void> {
     const b = document.querySelector('.wb-bar')!;
     const labels = [...b.querySelectorAll('button')].map((x) => x.getAttribute('aria-label') ?? x.textContent?.trim() ?? '');
     const svgs = [...document.querySelectorAll('.wb-bar svg.ui-icon, .wb-ptabs svg.ui-icon')];
-    return { split: !!document.querySelector('#btn-split'), labels, menu: !!b.querySelector('#btn-doc-menu'), view: !!b.querySelector('#btn-view'),
+    return { split: !!document.querySelector('#btn-split'), labels, menu: !!b.querySelector('#btn-main-menu'), view: !!b.querySelector('#btn-view'),
       icons: svgs.length, grid: svgs.every((s) => s.getAttribute('viewBox') === '0 0 24 24' && s.getAttribute('stroke-width') === '1.75') };
   });
-  check('bar: no split button (no #btn-split, no "Split view" label); the View and the document menu buttons are there',
+  check('bar: no split button (no #btn-split, no "Split view" label); the View and the main menu buttons are there',
     !bar.split && !bar.labels.some((l: string) => /split/i.test(l)) && bar.menu && bar.view, bar);
   check('bar and side tabs: the icons are the registry\'s (24-unit grid, stroke 1.75)', bar.icons > 3 && bar.grid, bar);
 

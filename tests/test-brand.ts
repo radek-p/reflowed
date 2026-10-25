@@ -1,4 +1,4 @@
-// The ReflowEd icon (app/src/chrome/wordmark/icon.svg): in the window bar (icon only, no word) and as the
+// The ReflowEd icon (app/src/chrome/wordmark/icon.svg): in the window bar (the main menu's button: icon only, no word) and as the
 // favicon, the same drawing in both; the PNG favicons and the apple-touch-icon (Safari) rendered from it by scripts/icons.ts.
 //   node tests/test-brand.ts
 import { readFileSync } from 'node:fs';
@@ -16,7 +16,7 @@ const iconFile = readFileSync(join(here, '../app/src/chrome/wordmark/icon.svg'),
 const host = readFileSync(join(here, '../app/src/wb/host.ts'), 'utf8');
 const glyph = (s: string) => /<path[^>]* d="([^"]+)"/.exec(s)?.[1] ?? '';
 check('bar icon: the tile and the glyph themable (classed shapes)', /class="rfed-mark-tile"/.test(iconFile) && /class="rfed-mark-glyph"/.test(iconFile));
-check('bar shows the icon only (no word part)', /mark: \{\s*icon:[^\n]*\n\s*\},/.test(host));
+check('bar shows the icon only, as the main menu\'s button (no word, no decorative mark)', /id="btn-main-menu"/.test(host) && /class="rtx-wb-logo"[^\n]*__html: ICON_SVG/.test(host) && !/\bmark: \{/.test(host));
 const icon = /<link rel="icon" href="data:image\/svg\+xml,([^"]+)">/.exec(html)?.[1];
 check('favicon is an inline SVG', !!icon);
 const svg = icon ? decodeURIComponent(icon) : '';

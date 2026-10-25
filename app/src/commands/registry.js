@@ -3,7 +3,8 @@
 // editor's keys, the shortcuts dialog and editorAPI (the tests) all call it. A command is
 //
 //   { id: 'block.delete', label: 'Delete', key?: 'delete' (its menu entry's data-action), shortcut?: '⌫' (shown in
-//     menus), keys?: '⌫ / Del' and help?: 'Delete the selected block' (a row of the shortcuts dialog, in `order`),
+//     menus), icon?: 'trash' (its menu entry's, an icon-set name), keys?: '⌫ / Del' and help?: 'Delete the selected
+//     block' (a row of the shortcuts dialog, in `order`),
 //     when?(c, input) -> bool (disabled when false), run(c, input) -> result, edits?: bool, destructive?: bool }
 //
 //   const commands = createCommands({ context: (via) => c })   c: what a command acts on (the editor's: its
@@ -11,7 +12,7 @@
 //   commands.define(cmd | cmd[]) · commands.has(id) · commands.get(id) · commands.list()
 //   commands.call(id, input, { via }) -> run's result; undefined when `when` says no (via: 'ui' | 'key' | 'test' | …)
 //   commands.enabled(id, input) -> bool
-//   commands.menuItem(id, input, { label, disabled }) -> a menu entry (chrome/menu.js item) that calls the command
+//   commands.menuItem(id, input, { label, disabled }) -> a menu entry (chrome/menu-model.ts item) that calls the command
 //   commands.shortcuts() -> [keys, help] rows, in the order commands were defined (the shortcuts dialog)
 // Probes (counters, whenIdle, views) are not commands: they stay editorAPI's.
 
@@ -49,8 +50,8 @@ export function createCommands({ context, keep = 100 }) {
     list: () => [...cmds.values()].map(describe),
     menuItem(id, input = {}, { label = null, disabled = null } = {}) {
       const c = find(id);
-      // chrome/menu.js item()'s shape (no import: the registry has no DOM)
-      return { label: label ?? c.label, key: c.key ?? id, fn: () => call(id, input, { via: 'ui' }), disabled: disabled ?? !enabled(id, input), shortcut: c.shortcut ?? '' };
+      // chrome/menu-model.ts item()'s shape (no import: the registry has no DOM)
+      return { label: label ?? c.label, key: c.key ?? id, fn: () => call(id, input, { via: 'ui' }), disabled: disabled ?? !enabled(id, input), shortcut: c.shortcut ?? '', ...(c.icon ? { icon: c.icon } : {}) };
     },
     shortcuts: () => [...cmds.values()].filter((c) => c.keys && c.help).map((c) => [typeof c.keys === 'function' ? c.keys() : c.keys, c.help]),
     recent: (n = 20) => ring.slice(-n),

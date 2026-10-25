@@ -91,7 +91,12 @@ const homeMenu = async (title: string, action: string) => {
   await rowOf(title).first().locator('[data-action=more]').click();
   await page.click(`.rh-pop [data-action=${action}]`);
 };
-const docMenu = async (action: string) => { await page.click('#btn-doc-menu'); await page.click(`.doc-menu [data-action="${action}"]`); };
+/** a document action from the main menu, in its submenu (Document ›, Export ›) */
+const docMenu = async (action: string) => {
+  await page.click('#btn-main-menu');
+  await page.click(`.main-menu [data-action="${action.startsWith('export') ? 'export' : 'document'}"]`);
+  await page.click(`.main-menu [data-action="${action}"]`);
+};
 const statesOf = (bs: any[]) => bs.reduce((m: Record<string, number>, b: any) => ({ ...m, [b.state]: (m[b.state] ?? 0) + 1 }), {});
 /** bring a block into view and wait until the viewer has drawn it (it draws lazily, in view) */
 const reveal = async (id: string) => {

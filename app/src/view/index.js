@@ -1,21 +1,22 @@
-// view options — column width, text size, colours, justification, the
-// edit layout, note chips and block handles — in one popover in the top bar,
+// view options — column width, text size, colours, justification in one popover in the top bar (view/popover.ts),
+// and the edit layout and block handles in the Settings panel (settings/panel.ts, which draws the popover's rows too),
 //
-//   const view = await installView({ notes })    main.js, once the viewer and the companion are loaded
+//   const view = await installView()    app/services.ts, once the viewer and the companion are loaded
 //     The options are the page's (a user preference, on <html> like the theme). view.attach(root) gives an editor
 //     (its container: app/editor-root.ts) its View button (app/mount.ts); the first one attached is the shell the
 //     column's width is measured in
 //     The column (--col) is each pane's, on its tab (the workbench's panes); an editor with no such panes has the
 //     page's (--col, --rtx-free) on its shell; <body> has only the blocks' zoom (--rtx-view-zoom)
 //   view.settings / view.set(patch) / view.zoomBy(dir) / view.measure() / view.open() / view.close()
+//   view.changed                                  a signal: bumped whenever the options are applied (the Settings panel
+//                                                 draws its rows again)
 //   view.editLayoutFor(blockEl) -> { mode, … }    app.js, entering a block (edit-layout.js)
 //   view.colorMap                                 the name blocks carry as data-color-map (app.js mount)
 //   view.livePreview()                            app.js: compile the block being edited as it is typed
 import { applyTheme } from '../design/theme.ts';
 import { loadSettings, saveSettings, stepZoom, resolveTheme, WIDTHS, SLIDER, PX_PER_PT, DEFAULTS } from './settings.js';
 import { installStyle } from './style.js';
-import { effect, untracked } from '@preact/signals';
-import { advanced } from '../settings/advanced.js';
+import { signal } from '@preact/signals';
 import { createPopover } from './popover.ts';
 import { mountViewButton } from './view-button.js';
 import { installBlink } from './blink.js';
@@ -51,8 +52,7 @@ export const EDITOR_COLOURS = {
 };
 
 
-/** @param {{ notes?: object | null }} [o] */
-export async function installView({ notes = null } = {}) {
+export async function installView() {
   let editor = null;                              // the editor whose shell the column is measured in: the first attached
   let observed = null, ro = null;                 // the shell observed (fit and paper follow its width) and its observer
   installStyle();
@@ -66,6 +66,7 @@ export async function installView({ notes = null } = {}) {
   // where it is read, each pane's on its tab (writePanes), a mounted editor's on its shell (writeShells)
   const zoomOn = () => document.body ?? root;
   const s = loadSettings();
+  const changed = signal(0);                      // bumped by apply(): the Settings panel draws its rows again
 
   // the viewer's colour maps: ours added to whatever the page has (view/colour-maps.js)
   registerColourMap(COLOR_MAP, EDITOR_COLOURS);
@@ -167,8 +168,7 @@ export async function installView({ notes = null } = {}) {
     }
     setOn(zoomOn(), '--rtx-view-zoom', String(l.eff));
     // justification: the viewer's --latex-align, read at every layout; lay the blocks out again
-    // ragged right and hidden handles are advanced features: with the switch off, the defaults
-    const adv = advanced.peek(), align = adv ? s.align : DEFAULTS.align, handles = adv ? s.handles : DEFAULTS.handles;
+    const { align, handles } = s;
     const alignWas = root.style.getPropertyValue('--latex-align') || 'justify';
     if (align === 'left') root.style.setProperty('--latex-align', 'left'); else root.style.removeProperty('--latex-align');
     if (alignWas !== align) relayoutAll();
@@ -177,6 +177,7 @@ export async function installView({ notes = null } = {}) {
     writeShells(paneRows, l, sw);
     last = l;
     pop?.sync();
+    changed.value++;
   }
   function relayoutAll() {
     // through panes/widths.js (set by main.js): the blocks in view first within a frame's budget, the rest
@@ -297,8 +298,7 @@ export async function installView({ notes = null } = {}) {
     /** \textwidth from the preamble's warm (pt): the paper column from the first paint */
     textwidthHint(pt) { const was = tw.get(); tw.learn(pt); if (tw.get() !== was && s.width === 'paper') apply(); },
     zoomBy(dir) { set({ zoom: stepZoom(s.zoom, dir) }); },
-    setNotes(on) { notes?.setHidden?.(!on); pop?.sync(); },
-    get notes() { return notes?.settings ? notes : null; },
+    changed,
     open: () => pop.open(btnNow()), close: () => pop.close(), toggle: () => pop.toggle(btnNow()), get isOpen() { return pop.isOpen; },
     /** another editor's View button (its container: app/editor-root.ts) -> off */
     attach,
@@ -330,6 +330,5 @@ export async function installView({ notes = null } = {}) {
     if (c === 'KeyV') { e.preventDefault(); view.toggle(); }
   });
 
-  effect(() => { advanced.value; untracked(() => apply()); });   // and again when the advanced switch changes
   return view;
 }

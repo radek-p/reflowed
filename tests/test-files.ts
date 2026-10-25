@@ -1,4 +1,4 @@
-// The Files panel: hidden by default; the "Show advanced features" switch (the View popover) shows its tab;
+// The Files panel: hidden by default; the "Show advanced features" switch (the Settings panel's Advanced section) shows its tab;
 // its list is the Export .zip's files (names and sizes, read from the downloaded zip) for the intro (its figures) and the tests' biblatex document (its .bbl); a click
 // on a figure reveals its first use; the switch off takes the tab away again. Waits on DOM state and the app's idle.
 //
@@ -57,12 +57,14 @@ const tab = () => page.$('[data-side] [data-ptab="files"]');
 const rows = () => page.$$eval('#panel-files .fl-row', (els: any[]) => els.map((e) => ({ path: e.dataset.path, kind: e.dataset.kind, uses: +e.dataset.uses,
   name: e.querySelector('.fl-name')?.textContent, kindText: e.querySelector('.fl-kind')?.textContent, size: e.querySelector('.fl-size')?.textContent, where: e.querySelector('.fl-where')?.textContent })));
 const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+/** the switch in the Settings panel (the main menu's Settings…), the panel closed again */
 const setAdvanced = async (on: boolean) => {
-  await page.click('#btn-view');
-  await page.waitForFunction(() => !document.getElementById('rtx-view-pop')!.hidden);
-  const box = page.locator('#rtx-view-pop #rtx-vp-advanced');
+  await page.click('#btn-main-menu');
+  await page.click('.main-menu [data-action="settings"]');
+  const box = page.locator('[data-panel-view="app-settings"] #set-advanced');
   if (on) await box.check(); else await box.uncheck();
-  await page.keyboard.press('Escape');
+  await page.click('[data-ptab="app-settings"] [data-action="close-panel"]');
+  await page.waitForFunction(() => !document.querySelector('[data-panel-view="app-settings"]'));
 };
 
 // ── hidden by default ───────────────────────────────────────────────────────
@@ -88,8 +90,9 @@ async function compare(label: string) {
   await page.waitForTimeout(0);
   await page.waitForFunction(() => !document.querySelector('#panel-files .fl-empty'));
   const r = await rows();
-  await page.click('#btn-doc-menu');
-  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('.doc-menu [data-action="export-zip"]')]);
+  await page.click('#btn-main-menu');
+  await page.click('.main-menu [data-action="export"]');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('.main-menu [data-action="export-zip"]')]);
   const zipPath = join(OUT, `${label}.zip`);
   await dl.saveAs(zipPath);
   const entries = await readZip(new Uint8Array(readFileSync(zipPath)));

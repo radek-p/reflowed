@@ -166,7 +166,6 @@ const SIGNALS_ALLOWED = new Set([
   'app/src/settings/resources.ts resourceServer',  // the page's: its address
   'app/src/design/ui/views.ts registry',           // the page's: registered view types (their hosts and state: slotsOf)
   'app/src/design/showcase.js tab', 'app/src/design/showcase.js strip', 'app/src/design/showcase.js seg', 'app/src/design/showcase.js chip',   // the kit's showcase page
-  'app/src/wb/host.ts docOpen',                   // the page's: the bar's document controls enabled while a document is current (one bar per page)
 ]);
 // module signals that hold one document's data: none (a new one fails here: give it to doc/)
 const DOC_SIGNALS: string[] = [];

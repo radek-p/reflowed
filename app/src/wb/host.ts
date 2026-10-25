@@ -8,11 +8,14 @@
 //
 // View types: 'document' ({ doc, at? }: a pane of document `doc`; `at`, the section in view, restored on reload),
 // 'home' (the editor's Documents view, home/screen.js, in the group's home panel), and one side panel per editor
-// panel (design/ui/views.ts: Outline, Problems, TODOs, References, Files; the Inspector on the dev page, on the right)
-// drawn with the editor's ViewContext, on the side and at the default column width the view gives.
-import { effect, untracked, signal } from '@preact/signals';
+// panel (design/ui/views.ts: Outline, Problems, TODOs, References, Files; on the right, closable, the Inspector on the dev
+// page and Settings) drawn with the editor's ViewContext, on the side and at the default column width the view gives.
+// The window bar: at its left the main menu (the Re button: chrome/main-menu.ts, the current document's commands and
+// the page's actions), at its right the View options' button. Page commands (the key table's rows that act on the page,
+// not on a document): app.settings, Ctrl/⌘ , (the Settings panel shown, or closed when it is).
+import { effect, untracked } from '@preact/signals';
 import { useLayoutEffect, useMemo, useRef } from 'preact/hooks';
-import { createWorkbench, Workbench, html, render, kit, openRowMenu, ownViewport, VIEWPORT_CSS, model as M, sideOverlay, isIconName,
+import { createWorkbench, Workbench, html, render, kit, openRowMenu, ownViewport, VIEWPORT_CSS, model as M, sideOverlay, isIconName, Icon,
   type ViewContext as WbContext, type Tab, type Subtitle, type WorkbenchStore, type SelectRow, type IconName } from '../../../workbench/src/index.ts';
 import { createEditorRoot, editorRoots } from '../app/editor-root.ts';
 import { createPageServices, pageReady } from '../app/services.ts';
@@ -22,7 +25,7 @@ import { createRouter } from '../app/router.js';
 import { createTopBarModel } from '../chrome/top-bar.js';
 import { purgeRetiredSample } from '../app/purge-retired-sample.js';
 import { onResetElsewhere } from '../store/wipe.js';
-import { setAboutReset } from '../app/about.js';
+import { setAboutReset, openAbout } from '../app/about.js';
 import { openResetDialog } from '../home/reset-dialog.js';
 import { connectResources } from '../settings/resources.ts';
 import { buildVersion } from '../app/build-version.js';
@@ -35,7 +38,12 @@ import { LoadStatus, bootShown } from '../boot/load-status.ts';
 import { WB_CSS, lockedLeft } from './css.ts';
 import { installTestSurface, setLastHome } from './test-surface.ts';
 import { createStatusHold } from './status-hold.ts';
-import ICON_SVG from '../chrome/wordmark/icon.svg';   // the app's icon (ReIcon.svg): the bar shows the icon only, no word
+import ICON_SVG from '../chrome/wordmark/icon.svg';   // the app's icon (ReIcon.svg): the main menu's button, no word
+import { openMenu, type MenuHandle } from '../chrome/menu.ts';
+import { mainMenu } from '../chrome/main-menu.ts';
+import { SETTINGS_PANEL, openSettings, closeSettings, settingsOpen } from '../settings/panel.ts';
+import { advanced } from '../settings/advanced.js';
+import { shortcutLabel } from '../../../workbench/src/keys.ts';
 import type { ComponentChildren } from 'preact';
 import type { Router } from '../app/mount.ts';
 import type { OutlineItem } from '../doc/panels.ts';
@@ -49,6 +57,7 @@ const LAYOUT_KEY = 'rtx-editor.workbench';
 export const KEY_ROWS = [
   { key: 'ctrl+b', mac: 'meta+b', command: 'editor.bold', when: 'reflowed.field', hosts: ['standalone', 'vscode'] as ('standalone' | 'vscode')[] },
   { key: 'ctrl+alt+\\', mac: 'meta+alt+\\', command: 'workbench.splitRight', hosts: ['standalone'] as ('standalone' | 'vscode')[] },
+  { key: 'ctrl+,', mac: 'meta+,', command: 'app.settings', hosts: ['standalone'] as ('standalone' | 'vscode')[] },
 ];
 type DocState = { doc?: string; at?: string | null };
 const safeGet = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -138,7 +147,7 @@ export async function startWorkbench({ el, params }: { el: HTMLElement; params: 
   view.append(mountEl);
   // the workbench is drawn before the document part exists: the document tabs mount their panes once it does (below)
   tabsReady = new Promise<DocTabs>((res) => { resolveTabs = res; });
-  render(html`<${Workbench} wb=${wb} label="ReflowEd" bar=${barSpec(wb, topbar)} sideStatus=${() => html`<${SideStatus} root=${root} />`} />`, mountEl);
+  render(html`<${Workbench} wb=${wb} label="ReflowEd" bar=${barSpec((anchor, focus) => openMainMenu(anchor, focus))} sideStatus=${() => html`<${SideStatus} root=${root} />`} />`, mountEl);
   tabs = createDocTabs(root, services, { topbar, router, shell });
   resolveTabs!(tabs);
   tabs.attachView();
@@ -167,7 +176,6 @@ export async function startWorkbench({ el, params }: { el: HTMLElement; params: 
   });
   effect(() => {
     const p = T().current.value.pane;
-    docOpen.value = !!p;              // the bar's document controls: off while no document is current (they keep their place)
     const frame = p ? T().pane(p)?.el.parentElement : null;
     if (frame && findHost.parentElement !== frame) frame.prepend(findHost);
   });
@@ -191,8 +199,11 @@ export async function startWorkbench({ el, params }: { el: HTMLElement; params: 
   // viewer's last widths) to the next frame; then each pane reflows once, the blocks in view a frame's budget at a time
   // (the viewer re-laid out every block of the pane in one frame of its own: 113 ms closing a 30-block article's split,
   // 120 ms opening it)
+  // The same for a side column that comes or goes with no slide of its own (its first panel opened, its last one closed or
+  // moved away: the Settings panel's)
+  const room = (l: M.Layout) => [M.groups(l).length, ...M.SIDEBARS.map((sd) => M.sidePanels(M.sides(l)[sd]).length > 0)].join();
   wb.on('change', ({ layout, prev }) => {
-    if (M.groups(layout).length === M.groups(prev).length) return;
+    if (room(layout) === room(prev)) return;
     T().widths.hold();
     requestAnimationFrame(() => T().widths.release());
   });
@@ -205,7 +216,39 @@ export async function startWorkbench({ el, params }: { el: HTMLElement; params: 
   // a menu: their own keys, the page's behind them untouched)
   root.listen(document, 'keydown', (e) => { const t = e.target; if (t === document.body || t === document.documentElement || t === document) wb.handleKey(e); });
 
+  // the main menu (the Re button): the current document's commands (disabled with none current) and the page's actions
+  let menu: MenuHandle | null = null;
+  function openMainMenu(anchor: HTMLElement, focus: boolean) {
+    if (menu?.open) { menu.close(); return; }
+    const ed = T().currentEditor(), d = ed?.doc;
+    const insp = services.inspector as InspectorToggle | null;
+    const view = services.view as { open?(): void } | null;
+    const S = M.sides(wb.layout.peek());
+    menu = openMenu({ anchor, cls: 'main-menu', label: 'Main menu', focus, items: mainMenu({
+      doc: ed && d ? { commands: ed.commands, preamble: d.preamble?.source ?? '' } : null,
+      documents: { run: () => wb.toggleHome(undefined, true), shortcut: wb.shortcut('home') ?? '' },
+      viewOptions: { run: () => view?.open?.(), shortcut: shortcutLabel('mod+alt+v') },
+      sidebar: { run: () => { wb.toggleSide('left'); }, on: !S.left.collapsed && M.sidePanels(S.left).length > 0, shortcut: wb.shortcut('toggleSide', 'left') ?? '' },
+      settings: { run: showSettings, shortcut: wb.shortcut('app.settings') ?? '' },
+      about: { run: () => openAbout() },
+      inspector: insp?.toggle && advanced.peek() && insp.available?.() ? { run: () => insp.toggle!(), on: !!insp.on?.peek(), shortcut: shortcutLabel('alt+shift+i') } : null,
+      focusMode: root.has('focus-mode'),
+      splitKey: wb.shortcut('splitRight') ?? '',
+    }), onClosed: () => { anchor.setAttribute('aria-expanded', 'false'); } });
+    if (menu.open) anchor.setAttribute('aria-expanded', 'true');
+  }
+  /** the Settings panel opened (registered: docked on its side) and shown, focused */
+  const showSettings = () => { openSettings(); wb.showPanel(SETTINGS_PANEL, { focus: true }); };
+  /** the Settings panel shown in its column now (its column open, its tab the active one) */
+  const settingsShown = () => {
+    const l = wb.layout.peek(), d = M.dockOf(l, SETTINGS_PANEL);
+    return settingsOpen() && !!d && !M.sides(l)[d.side].collapsed && M.sideGroups(M.sides(l)[d.side]).some((g) => g.active === SETTINGS_PANEL);
+  };
+  /** the page's commands: what a key row runs on the page, not on the current document */
+  const pageCommands: Record<string, () => void> = { 'app.settings': () => { if (settingsShown()) closeSettings(); else showSettings(); } };
   function runCommand(command: string, _args: unknown): boolean {
+    const own = pageCommands[command];
+    if (own) { own(); return true; }
     const ed = T().currentEditor();
     if (!ed) return false;
     return ed.run(command, {}, 'key') !== false;
@@ -225,8 +268,6 @@ export async function startWorkbench({ el, params }: { el: HTMLElement; params: 
   document.dispatchEvent(new CustomEvent('editor:ready'));
   return { wb, tabs, root };
 }
-/** a document is current (the bar's split and document menu act on it) */
-const docOpen = signal(false);
 let tabsReady: Promise<DocTabs> | null = null;
 let resolveTabs: ((t: DocTabs) => void) | null = null;
 
@@ -382,18 +423,19 @@ function registerPanels(wb: WorkbenchStore, root: ReturnType<typeof createEditor
   return () => { stop(); stopShow(); for (const m of mine.values()) m.off(); mine.clear(); };
 }
 
-// ── the window bar: the wordmark, and the document's controls (View, the document menu; a split is the tab's context menu or its key: no button) ──
-function barSpec(wb: WorkbenchStore, topbar: ReturnType<typeof createTopBarModel>) {
+// ── the window bar: the main menu (the Re button) at its left, the View options' button at its right (a split is the
+//    tab's context menu, its key or the main menu's View › Split view: no button) ──
+/** the inspector (inspector/index.js), as the main menu toggles it */
+type InspectorToggle = { toggle?(): void; available?(): boolean; on?: { peek(): boolean } };
+function barSpec(onMenu: (anchor: HTMLElement, focus: boolean) => void) {
   return {
     label: 'ReflowEd',
-    mark: {
-      icon: () => html`<span class="rtx-wb-logo" title="ReflowEd" aria-hidden="true" dangerouslySetInnerHTML=${{ __html: ICON_SVG }}></span>`,
-    },
-    right: () => html`<span class="rtx-wb-bar" data-part="topbar" data-ui-chrome>
-      <span class="topbar-slot" data-slot="view"></span>
-      <${kit.IconButton} id="btn-doc-menu" icon="more" label="Document menu" tip="Menu" aria-haspopup="menu" disabled=${!docOpen.value}
-        onClick=${(e: MouseEvent) => { e.stopPropagation(); if (topbar.on.menu) topbar.on.menu(e.currentTarget as Element); }} />
-    </span>`,
+    // (data-ui-chrome: a press on it is not "outside" for a block being edited)
+    left: () => html`<span class="rtx-wb-menu" data-ui-chrome><${kit.Button} id="btn-main-menu" class="rtx-main-menu" tip="Menu" aria-label="Main menu" aria-haspopup="menu" aria-expanded="false"
+        onClick=${(e: MouseEvent) => { e.stopPropagation(); onMenu(e.currentTarget as HTMLElement, e.detail === 0); }}>
+      <span class="rtx-wb-logo" aria-hidden="true" dangerouslySetInnerHTML=${{ __html: ICON_SVG }}></span><span class="rtx-main-menu-chev" aria-hidden="true"><${Icon} name="chevronDown" /></span>
+    <//></span>`,
+    right: () => html`<span class="rtx-wb-bar" data-part="topbar" data-ui-chrome><span class="topbar-slot" data-slot="view"></span></span>`,
   };
 }
 /** the left column's status line: the build (About), the current document's word count, and (multi-file release) the files

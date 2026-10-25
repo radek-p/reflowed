@@ -1,32 +1,30 @@
 // A document editor's menus (out of app.js): the block's menu (its handle), the document's
-// menu, and the slash menu of block kinds. Their entries are commands (commands/editor.js). A feature adds entries
-// through the host's contribution lists (blockItems, docItems, slash): it never edits this file or app.js's lists.
-// One menu is open at a time.
+// menu (the embedded editor's ⋯; the standalone page's is the main menu, chrome/main-menu.ts, with the same Document and
+// Export submenus), and the slash menu of block kinds. Their entries are commands (commands/editor.js). A feature adds
+// entries through the host's contribution lists (blockItems, docItems, slash): it never edits this file or app.js's
+// lists. One menu is open at a time.
 //
 //   const menus = createDocMenus(host)
 //     menus.openBlock(anchor, blockId) · menus.openDoc(anchor) · menus.openSlash(anchor, onPick, onCancel?)
 //     menus.close(cancelled = true) · menus.open (is one open?)
-import { openMenu, openSlash, item as menuEntry, SEP } from '../chrome/menu.js';
+import { openMenu, openSlash, item as menuEntry, submenu, SEP, type MenuEntry, type MenuCommand, type SlashKind } from '../chrome/menu.ts';
+import { documentGroups } from '../chrome/main-menu.ts';
 import { kindsFor } from '../doc/kinds.js';
-import { usesPackage as usesMetaPackage } from '../meta/model.ts';
 
-/** a menu entry as chrome/menu.js draws it, or its separator */
-export type MenuEntry = { label: string; key: string; fn: () => void; disabled: boolean; shortcut: string } | { sep: true };
-/** what a contribution makes entries with (chrome/menu.js item) */
+export type { MenuEntry, SlashKind };
+/** what a contribution makes entries with (chrome/menu-model.ts item) */
 export type Item = (label: string, key: string, fn: () => void, o?: { disabled?: boolean; shortcut?: string }) => MenuEntry;
-/** a kind of the slash menu (app/kinds.js) */
-export type SlashKind = { kind: string; label: string; source?: string; caret?: number };
 export type SlashPick = (k: SlashKind) => void;
 type Handle = { close(cancelled?: boolean): void };
 
 export interface DocMenusHost {
   doc(): { preamble: { source: string }; blocks: unknown[] } | null;
   indexOf(id: string): number;
-  commands: { menuItem(id: string, input?: object, o?: { disabled?: boolean; label?: string }): MenuEntry; enabled(id: string, input?: object): boolean };
+  commands: { menuItem(id: string, input?: object, o?: { disabled?: boolean; label?: string }): MenuCommand; enabled(id: string, input?: object): boolean };
   /** a feature's entries in a block's menu, after the block's own (nesting: split / join; svgfig: duplicate figure;
    *  the inspector) */
   blockItems: ((blockId: string, item: Item, anchor: Element | null) => MenuEntry[])[];
-  /** a feature's entries in the document's menu, after find, focus mode and the shortcuts (notes) */
+  /** a feature's entries in the document's menu, after find, focus mode and the shortcuts */
   docItems: ((item: Item) => MenuEntry[])[];
   /** a feature's kinds in the slash menu and what its pick does (svgfig: + Drawn figure) */
   slash: { kinds(kinds: SlashKind[]): SlashKind[]; pick(onPick: SlashPick): SlashPick }[];
@@ -35,7 +33,7 @@ export interface DocMenusHost {
 export function createDocMenus(host: DocMenusHost) {
   let open: Handle | null = null;
   const onClosed = (m: Handle) => { if (open === m) open = null; };          // a menu that closed itself (a pick, Escape)
-  const item: Item = (label, key, fn, o) => menuEntry(label, key, fn, o) as MenuEntry;
+  const item: Item = (label, key, fn, o) => menuEntry(label, key, fn, o);
   function close(cancelled = true) {
     if (!open) return;
     const m = open;
@@ -54,7 +52,7 @@ export function createDocMenus(host: DocMenusHost) {
       for (const s of host.slash) { kinds = s.kinds(kinds); pick = s.pick(pick); }
       open = openSlash({ anchor, kinds, onPick: pick, onCancel, onClosed });
     },
-    openBlock(anchor: Element | null, id: string) {
+    openBlock(anchor: Element, id: string) {
       close();
       const d = host.doc();
       if (!d) return;
@@ -67,27 +65,24 @@ export function createDocMenus(host: DocMenusHost) {
         C.menuItem('block.moveDown', { id }, { disabled: i === d.blocks.length - 1 }),
         C.menuItem('block.merge', { id }),
         ...host.blockItems.flatMap((f) => f(id, item, anchor)),
-        SEP as MenuEntry,
+        SEP,
         C.menuItem('block.delete', { id }),
       ];
       open = openMenu({ anchor, cls: 'block-menu', items, focus: true, onClosed });
     },
-    openDoc(anchor: Element | null) {
+    openDoc(anchor: Element, { focus = false }: { focus?: boolean } = {}) {
       close();
       const d = host.doc(), C = host.commands;
       if (!d) return;
+      const { document, exports } = documentGroups({ commands: C, preamble: d.preamble.source });
       const items: MenuEntry[] = [
         C.menuItem('find.open'), C.menuItem('view.focusMode'), C.menuItem('view.shortcuts'),
         ...host.docItems.flatMap((f) => f(item)),
-        SEP as MenuEntry,
-        C.menuItem('doc.settings'), C.menuItem('doc.versions'),
-        ...(C.enabled('doc.resetSeed') ? [C.menuItem('doc.resetSeed')] : []),
-        SEP as MenuEntry,
-        C.menuItem('doc.importTex'), C.menuItem('doc.exportTex'), C.menuItem('doc.exportZip'),
-        ...(usesMetaPackage(d.preamble.source) ? [C.menuItem('doc.exportZipPlain')] : []),
-        C.menuItem('doc.exportPdf'),
+        SEP,
+        submenu('Document', 'document', document, { icon: 'file' }),
+        submenu('Export', 'export', exports, { icon: 'download' }),
       ];
-      open = openMenu({ anchor, cls: 'block-menu doc-menu', items, align: 'end', onClosed });
+      open = openMenu({ anchor, cls: 'block-menu doc-menu', items, align: 'end', focus, label: 'Document menu', onClosed });
     },
   };
 }

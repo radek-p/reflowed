@@ -2,7 +2,8 @@
 // (main.js for the standalone page, a test harness for two editors): the modules (`rtx:<name>`: the module's
 // entry or app/stubs.js), the document store, the refs module, the backends (one engine worker per page),
 // notes (the viewer's kind and the compile wrapper), the View options and the inspector (outside a release only:
-// null in a release, its module never imported). Each editor gets them through app/mount.ts's `services`.
+// null in a release, its module never imported). Each editor gets them through app/mount.ts's `services`; the Settings
+// panel the View options and the notes (settings/panel.ts providePreferences).
 //
 //   await pageReady()                                  the viewer is on the page, the companion package loaded
 //   const s = await createPageServices({ params, route?, store? })
@@ -22,6 +23,7 @@ import { featureFailed, isRelease } from './release-mode.js';
 import { devSeedCache } from './dev-seed.js';
 import { installNotes } from '../notes/index.js';
 import { installView } from '../view/index.js';
+import { providePreferences, type Preferences } from '../settings/panel.ts';
 import type { EditorServices, InspectorService, NotesService, ViewService } from './mount.ts';
 
 const MODULES = ['store', 'io', 'home', 'refs', 'backend'] as const;
@@ -85,7 +87,9 @@ export async function createPageServices({ params, route = () => null, store: st
   const backend = backends.find((b) => b.id === want) ?? backends[0];
   backend.warm?.();
   let view: ViewService | null = null;              // view options: width, text size, colours, edit layout (the page's)
-  try { view = await installView({ notes }); } catch (e) { view = featureFailed('view', e); }
+  try { view = await installView(); } catch (e) { view = featureFailed('view', e); }
+  // the Settings panel's preferences: the View options and the notes (their types: settings/panel.ts)
+  providePreferences({ view, notes } as unknown as Preferences);
   // the inspector (a developer tool): imported outside a release only, so a release has none of it (its module
   // installs a setting, a view, a key listener and a style element when it is evaluated)
   let inspector: InspectorService | null = null;

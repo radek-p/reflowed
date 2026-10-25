@@ -123,19 +123,26 @@ const pop = async (page: any) => { await page.evaluate(() => (window as any).ref
     focused: p.contains(document.activeElement) || document.activeElement === p };
 }); };
 const notesApi = (page: any, fn: string, ...args: any[]) => page.evaluate(([f, a]: [string, any[]]) => (window as any).editorAPI.notes()[f](...a), [fn, args]);
-// Hide notes and Comments as notes left the document's ⋯ menu: they are in Document settings (Engine and view);
-// the old menu labels name what to do there
+// Hide notes and Comments as notes: the Settings panel's Notes section (the main menu's Settings…); the old menu labels
+// name what to do there (the panel closed again after)
 async function menu(page: any, label: RegExp) {
-  const which = /Comments as notes/.test(label.source) ? '#ss-comments' : '#ss-show-notes';
+  const which = /Comments as notes/.test(label.source) ? '#set-comments' : '#set-note-chips';
   const on = /Comments as notes: off|Show notes/.test(label.source);
-  await page.evaluate(() => (window as any).editorAPI.settings().open({ tab: 'engine' }));
-  await page.waitForSelector('#settings-sheet[open]');
-  if (on) await page.check(`#settings-sheet ${which}`); else await page.uncheck(`#settings-sheet ${which}`);
-  await page.click('#settings-sheet .ss-done');
-  await page.waitForSelector('#settings-sheet', { state: 'detached' });
+  await page.click('#btn-main-menu');
+  await page.click('.main-menu [data-action="settings"]');
+  const box = page.locator(`[data-panel-view="app-settings"] ${which}`);
+  if (on) await box.check(); else await box.uncheck();
+  await page.click('[data-ptab="app-settings"] [data-action="close-panel"]');
+  await page.waitForFunction(() => !document.querySelector('[data-panel-view="app-settings"]'));
 }
-/** the ⋯ menu's actions (the notes items are no longer there) */
-const menuActions = async (page: any) => { await page.click('#btn-doc-menu'); const a = await page.evaluate(() => [...document.querySelectorAll('.doc-menu [data-action]')].map((x: any) => x.dataset.action)); await page.keyboard.press('Escape'); return a; };
+/** the main menu's actions, its Document submenu's with them (no notes items there) */
+const menuActions = async (page: any) => {
+  await page.click('#btn-main-menu');
+  await page.click('.main-menu [data-action="document"]');
+  const a = await page.evaluate(() => [...document.querySelectorAll('.main-menu [data-action]')].map((x: any) => x.dataset.action));
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  return a;
+};
 
 // ── 2. The sample (LuaLaTeX backend) ────────────────────────────────────────
 const { page } = await newPage('?backend=lua&store=memory&seed=sample#/doc/sample');
@@ -237,11 +244,7 @@ in the text; Alex's notes\todo[author=Alex Author]{first} have one colour.`);
   await shot(page, '07-comment-note');
   // Comments as notes: off, then on
   await page.keyboard.press('Escape');
-  { const acts = await menuActions(page); check('menu: advanced features off (the default): the ⋯ menu has no notes items (in Document settings)', !acts.includes('notes-hidden') && !acts.includes('notes-comments') && acts.includes('settings'), acts);
-    await page.evaluate(() => (window as any).editorAPI.advanced?.(true));
-    const on = await menuActions(page);
-    await page.evaluate(() => (window as any).editorAPI.advanced?.(false));
-    check('menu: advanced features on: Hide notes and Comments as notes are in the ⋯ menu', on.includes('notes-hidden') && on.includes('notes-comments'), on); }
+  { const acts = await menuActions(page); check('menu: no notes items in the main menu (they are the Settings panel\'s Notes section); Settings… and Document settings… there', !acts.includes('notes-hidden') && !acts.includes('notes-comments') && acts.includes('settings') && acts.includes('doc-settings'), acts); }
   await menu(page, /Comments as notes: on/);
   await idle(page);
   const off = await chipsIn(page, mathId);

@@ -5,9 +5,9 @@
 //   node tests/test-inspector.ts [http://localhost:8156/]       (a dev server: tests/integration/serve.ts)
 //
 // Hidden by default (no control, no menu item, no view, the shortcut does nothing and goes on to a text field
-// unprevented, nothing loaded); the advanced switch shows its control; ⌥⇧I opens it as a side panel on the right, its
+// unprevented, nothing loaded); the advanced switch (the Settings panel's) shows its row in the main menu (View ›); ⌥⇧I opens it as a side panel on the right, its
 // column a third of the window wide, the public panel hosted in it; with two panes it inspects the focused one only (its
-// blocks, its outlines); focusing the other moves it, picking a pane in its bar pins it; the shortcut, the View control
+// blocks, its outlines); focusing the other moves it, picking a pane in its bar pins it; the shortcut, the main menu's row
 // and its tab's close button close it (everything goes); moved to the left it is hosted there, comes back there, and a
 // width the user gives its column is kept; the advanced switch off closes it.
 // Results: test-results/inspector/results.json.
@@ -98,14 +98,23 @@ const marksWhere = () => page.evaluate(async () => {
   return out;
 });
 const focusPane = (p: string) => page.evaluate((id: string) => document.querySelector(`[data-pane="${id}"]`)!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })), p);
-async function viewPopover(): Promise<{ advanced: boolean; inspector: boolean; checked: boolean }> {
-  if (!(await page.$('#rtx-view-pop:not([hidden])'))) await page.click('#btn-view');
-  await page.waitForSelector('#rtx-view-pop:not([hidden])');
-  return page.evaluate(() => ({ advanced: (document.getElementById('rtx-vp-advanced') as HTMLInputElement).checked,
-    inspector: !!document.getElementById('rtx-vp-inspector'), checked: !!(document.getElementById('rtx-vp-inspector') as HTMLInputElement | null)?.checked }));
+/** the advanced switch (editorAPI) and the main menu's View › Inspector row: there, checked (the menu closed again) */
+async function viewMenu(): Promise<{ advanced: boolean; inspector: boolean; checked: boolean }> {
+  await page.click('#btn-main-menu');
+  await page.click('.main-menu [data-action="view"]');
+  const v = await page.evaluate(() => { const row = document.querySelector('.main-menu [data-action="inspector"]');
+    return { advanced: (window as any).editorAPI.advanced(), inspector: !!row, checked: row?.getAttribute('aria-checked') === 'true' }; });
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('.main-menu'));
+  return v;
 }
-async function closePopover() {
-  if (await page.$('#rtx-view-pop:not([hidden])')) { await page.keyboard.press('Escape'); await page.waitForSelector('#rtx-view-pop[hidden]', { state: 'attached' }); }
+/** the Settings panel's "Show advanced features" switch clicked (the panel opened from the main menu, closed after) */
+async function toggleAdvanced() {
+  await page.click('#btn-main-menu');
+  await page.click('.main-menu [data-action="settings"]');
+  await page.click('[data-panel-view="app-settings"] #set-advanced');
+  await page.click('[data-ptab="app-settings"] [data-action="close-panel"]');
+  await page.waitForFunction(() => !document.querySelector('[data-panel-view="app-settings"]'));
 }
 async function blockMenuActions(pane: string, k = 2) {
   const blk = page.locator(`[data-pane="${pane}"] .blocks > .blk`).nth(k);
@@ -130,9 +139,8 @@ async function closeMenu() { await page.keyboard.press('Escape'); await page.wai
 
 // ── hidden by default ─────────────────────────────────────────────────────────
 {
-  const v = await viewPopover();
-  check('hidden by default: the advanced switch is off and the View options have no Inspector control', !v.advanced && !v.inspector, v);
-  await closePopover();
+  const v = await viewMenu();
+  check('hidden by default: the advanced switch is off and the main menu has no Inspector row', !v.advanced && !v.inspector, v);
   const acts = await blockMenuActions(P.a);
   check('... the block menu has no Inspect item', !acts.includes('inspect'), acts);
   await closeMenu();
@@ -150,11 +158,9 @@ async function closeMenu() { await page.keyboard.press('Escape'); await page.wai
 
 // ── the switch shows it ───────────────────────────────────────────────────────
 {
-  await viewPopover();
-  await page.click('#rtx-vp-advanced');
-  const v = await viewPopover();
-  check('the advanced switch shows the Inspector control (unchecked)', v.advanced && v.inspector && !v.checked, v);
-  await closePopover();
+  await toggleAdvanced();
+  const v = await viewMenu();
+  check('the advanced switch (the Settings panel\'s) shows the main menu\'s Inspector row (unchecked)', v.advanced && v.inspector && !v.checked, v);
 }
 
 // ── two panes: it inspects the focused one only, in a side panel on the right ──
@@ -236,16 +242,15 @@ let s0 = await state();
   const s = await state();
   check('Alt+Shift+I again closes it: no public panel, no outlines, no bar, its view gone from the column', gone(s), s);
   check('... the right column goes with it (it had no other panel)', !(await page.$('aside[data-side="right"]')));
-  const v = await viewPopover();
-  check('... the View control says off', v.inspector && !v.checked, v);
-  await closePopover();
-  // the View control opens it
-  await viewPopover();
-  await page.click('#rtx-vp-inspector');
+  const v = await viewMenu();
+  check('... the main menu\'s Inspector row says off', v.inspector && !v.checked, v);
+  // the main menu's View › Inspector opens it
+  await page.click('#btn-main-menu');
+  await page.click('.main-menu [data-action="view"]');
+  await page.click('.main-menu [data-action="inspector"]');
   await ready();
-  await closePopover();
   const t = await state();
-  check('the View control opens it again, on the right, a third wide, on the focused pane', t.on && t.open && t.side === 'right' && third(t) && t.target === P.b, t);
+  check('the main menu\'s View › Inspector opens it again, on the right, a third wide, on the focused pane', t.on && t.open && t.side === 'right' && third(t) && t.target === P.b, t);
   // closable: its tab's close button
   await page.click('[data-ptab="inspector"] .wb-ptab-close');
   await settle();
@@ -293,9 +298,8 @@ let s0 = await state();
 
 // ── the advanced switch off while it is open ──────────────────────────────────
 {
-  await viewPopover();
-  await page.evaluate(() => { document.getElementById('rtx-vp-advanced')!.click(); });
-  await closePopover();
+  // (as the Settings panel's switch does; its own UI path: above)
+  await page.evaluate(() => (window as any).editorAPI.advanced(false));
   await settle();
   const w = await state();
   check('the advanced switch off closes it and removes everything', gone(w), w);

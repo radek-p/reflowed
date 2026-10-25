@@ -59,7 +59,7 @@ body.wb-fitted .rtx-editor.rtx-wb { bottom: 0; }
 /* the side panels: the editor's panel content in the workbench's column */
 .rtx-wb .rtx-wb-panel.sb-panel { position: absolute; inset: var(--ui-2, 8px) 0 0; overflow-y: auto; padding: 0 8px 12px; }   /* the old sidebar's inset below its tabs (8 px): the box itself, whatever a panel's own padding */
 
-/* the window bar's controls (the editor's: split, View, the document menu) */
+/* the window bar's controls at its right (the editor's: the View options' button) */
 .rtx-wb-bar { display: inline-flex; align-items: center; gap: var(--wb-gap, 6px); }
 .rtx-wb-bar .topbar-slot { display: contents; }
 /* one control metric in a bar (the workbench's kit): the editor's icon buttons there (the View button) take the bar's
@@ -73,6 +73,14 @@ body.wb-fitted .rtx-editor.rtx-wb { bottom: 0; }
 .rtx-wb-logo .rfed-mark-glyph { fill: var(--rtx-mark-glyph); }
 :root[data-wb-theme="sepia"] .rtx-wb-logo { --rtx-mark-tile: color-mix(in srgb, #A232C1 50%, var(--rfed-accent, #9a5b13)); }
 :root[data-wb-theme="hc"] .rtx-wb-logo { --rtx-mark-tile: #7a1f94; }
+/* the main menu's button (the bar's left): the icon at the button's height, a small chevron after it (none on a phone:
+   the room is the tabs') */
+.rtx-wb-menu { display: contents; }
+.rtx-main-menu.wb-btn { gap: 0; padding: 0 var(--ui-1, 4px) 0 0; }
+.rtx-main-menu .rtx-wb-logo { width: var(--wb-btn-h); height: var(--wb-btn-h); cursor: inherit; }
+.rtx-main-menu-chev { display: inline-grid; place-items: center; color: var(--rfed-ink-3); }
+.rtx-main-menu-chev svg { width: var(--ui-icon-xs, 12px); height: var(--ui-icon-xs, 12px); }
+@media (max-width: 640px) { .rtx-main-menu-chev { display: none; } .rtx-main-menu.wb-btn { padding: 0; } }
 .rtx-wb-version { margin: 0; }
 /* the current document's word count, at the status line's end (its details in its tooltip) */
 .rtx-word-count { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }

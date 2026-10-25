@@ -26,7 +26,7 @@ import { html, render } from '../design/ui/core.js';
 import { IconButton } from '../design/ui/controls.js';
 import { Icon } from '../design/ui/icons.ts';
 import { DocHeader } from '../chrome/doc-header.js';   // the switcher and the rename pencil
-import { openMenu, item } from '../chrome/menu.js';
+import { openMenu, item } from '../chrome/menu.ts';
 import { onChange } from '../app/page-state.ts';
 import { appScroll } from '../perf/anchor.js';
 import { sectionInView } from './in-view.ts';
@@ -94,7 +94,7 @@ export function createPaneBars(host) {
 
   // ── menus ──
   function closeMenu() { if (menu) { const m = menu; menu = null; m.close(); } }
-  // Escape and a press outside: the kit's one overlay layer (chrome/menu.js openMenu); a press on the
+  // Escape and a press outside: the kit's one overlay layer (chrome/menu.ts openMenu); a press on the
   // menu's button is its toggle (toggleMenu below)
   function toggleMenu(anchor, items, cls) {
     if (menu) { const was = menu.anchor; closeMenu(); if (was === anchor) return; }

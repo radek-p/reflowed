@@ -20,7 +20,7 @@ import type { IconNode } from 'lucide';
 export const ICON_SET = {
   // actions
   plus: L.Plus, minus: L.Minus, close: L.X, more: L.Ellipsis, check: L.Check, search: L.Search, pencil: L.Pencil, trash: L.Trash2,
-  copy: L.Copy, undo: L.Undo2, redo: L.Redo2, back: L.ArrowLeft, settings: L.Settings,
+  copy: L.Copy, undo: L.Undo2, redo: L.Redo2, back: L.ArrowLeft, settings: L.Settings, download: L.Download, info: L.Info,
   // grips and chevrons
   handle: L.GripVertical, chevronLeft: L.ChevronLeft, chevronRight: L.ChevronRight, chevronUp: L.ChevronUp, chevronDown: L.ChevronDown,
   // the workbench: panels, groups, tabs

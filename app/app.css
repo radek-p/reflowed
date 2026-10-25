@@ -249,7 +249,8 @@ main[data-pane] .add-end:focus-visible { outline: none; box-shadow: var(--ui-rin
 .menu-list { max-height: 330px; overflow-y: auto; }
 .menu-item { display: flex; gap: 10px; align-items: center; width: calc(100% - 8px); min-height: var(--ui-row); margin: 0 4px; border: 0; background: none; text-align: left;
   padding: var(--ui-1) var(--ui-2); border-radius: var(--ui-r-sm); cursor: pointer; font: inherit; }
-.menu-item.sel, .block-menu .menu-item:hover, .block-menu .menu-item:focus-visible { background: var(--hover); outline: none; }
+.menu:focus { outline: none; }
+.menu-item.sel, .menu[role="menu"] .menu-item:hover, .menu[role="menu"] .menu-item:focus-visible { background: var(--hover); outline: none; }
 .menu-item:disabled { color: #c7c6c3; cursor: default; background: none !important; }
 .mi-icon { flex: 0 0 auto; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--faint); border-radius: var(--ui-r-sm);
   background: #fff; font: 13px/1 Georgia, "Times New Roman", serif; color: #55534e; }
@@ -262,6 +263,14 @@ main[data-pane] .add-end:focus-visible { outline: none; box-shadow: var(--ui-rin
 .block-menu [data-action="delete"] { color: var(--error); }
 .mi-key { margin-left: auto; padding-left: 16px; font-size: var(--ui-text-sm); color: var(--muted); }
 .block-menu .menu-item { justify-content: space-between; }
+/* the leading slot (an icon, a toggle's check: every row keeps it when one has it), a submenu's chevron at the end */
+.mi-lead { flex: 0 0 auto; width: 16px; height: 16px; display: grid; place-items: center; color: var(--muted); }
+.mi-lead svg, .mi-sub svg { width: 16px; height: 16px; }
+.menu-item[aria-checked="true"] .mi-lead { color: inherit; }
+.menu[role="menu"] .mi-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mi-sub { flex: 0 0 auto; display: grid; place-items: center; margin-left: auto; padding-left: 12px; color: var(--muted); }
+.mi-key + .mi-sub { margin-left: 0; padding-left: 4px; }
+.main-menu { min-width: 240px; }
 .slash .menu-title { padding-top: 6px; }
 .slash .menu-title:first-child { padding-top: 2px; }
 

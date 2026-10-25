@@ -1,7 +1,7 @@
 // INSPECTOR: the public Reflow TeX inspector (reflowtex src/inspector: boxes and glue, resources, colours) inside
 // ReflowEd, on ONE pane, as a SIDE PANEL. Behind "Show advanced features" (settings/advanced.js); the dev page only (the
 // single file has no files beside it for the panel to load): app/services.ts imports this module outside a release
-// only, so a release has none of what it installs at import (its setting, its key listener, its style element; its view
+// only, so a release has none of what it installs at import (its key listener, its style element; its view
 // is registered only while it is shown).
 // The shortcut ⌥⇧I / Alt+Shift+I toggles it with the advanced switch on; otherwise the key goes on (inspector/shortcut.ts).
 //
@@ -40,7 +40,6 @@ import { useLayoutEffect, useRef } from 'preact/hooks';
 import { html, Segmented, Frame } from '../design/ui/index.js';
 import { registerView, slotsOf, type ViewContext } from '../design/ui/views.ts';
 import { advanced, registerAdvanced } from '../settings/advanced.js';
-import { registerSetting } from '../settings/registry.ts';
 import { isRelease } from '../app/release-mode.js';
 import { editorRoots, type EditorRoot } from '../app/editor-root.ts';
 import { shortcutAction } from './shortcut.ts';
@@ -193,7 +192,7 @@ function createInspector() {
     if (layout === ll && scope === root) return () => detach(ll);
     stopEffects?.();
     // (here, not at import: a release's boot object may be set after the bundle is evaluated)
-    if (available()) registerAdvanced({ id: VIEW_ID, label: 'The inspector (boxes and glue)', where: 'View, block menu, ⌥⇧I' });
+    if (available()) registerAdvanced({ id: VIEW_ID, label: 'The inspector (boxes and glue)', where: 'Main menu, View; block menu; ⌥⇧I' });
     if (layout && layout !== ll) pinned.value = null;    // another editor: its panes, not the last one's pick
     layout = ll;
     scope = root;
@@ -229,11 +228,6 @@ function createInspector() {
 }
 
 export const inspector = createInspector();
-
-// its switch in the View options, with the advanced ones (settings/registry.ts)
-registerSetting({ id: 'view-inspector', where: 'view-switch', order: 30, advanced: true, shown: () => inspector.available(),
-  Control: () => html`<label title=${'The boxes and glue behind the blocks of one pane (the Reflow TeX inspector; ⌥⇧I)'}>
-    <input type="checkbox" id="rtx-vp-inspector" checked=${inspector.on.peek()} onChange=${(e: Event) => ((e.currentTarget as HTMLInputElement).checked ? inspector.open() : inspector.close())} /><span>Inspector</span></label>` });
 
 /** the panes in their places on the page, left to right (then top to bottom): a pane is named by its place, not its id */
 const byPlace = (ids: string[]) => ids.map((id) => ({ id, r: paneEl(id)?.getBoundingClientRect() })).sort((x, y) => (x.r?.left ?? 0) - (y.r?.left ?? 0) || (x.r?.top ?? 0) - (y.r?.top ?? 0)).map((x) => x.id);

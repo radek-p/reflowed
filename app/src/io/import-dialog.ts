@@ -1,4 +1,4 @@
-// "Import .tex…" in the editor (⋯ menu calls io.openImportTex): pick a
+// "Import .tex…" in the editor (the main menu's Document submenu calls io.openImportTex): pick a
 // file, see what it holds (the editor's block markers or not), then
 // "Replace this document" (after an automatic snapshot, doc id kept) or
 // "Open as new document". The home screen's import is separate (home/screen.js).

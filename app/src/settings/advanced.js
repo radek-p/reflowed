@@ -1,8 +1,8 @@
-// "Show advanced features": one switch, off by default, for options most readers never need. A feature
-// registers itself (registerAdvanced) and reads `advanced` (a signal) to show its control; with the switch off its
-// control is hidden and its value is the default (the stored choice comes back when the switch is turned on).
-// Kept per browser, as the View options are (localStorage). The inspector and the Files panel can join later by
-// registering.
+// "Show advanced features": one switch, off by default, for the developers' and experts' tools (the Files panel, the
+// inspector, the TeX resource server). It is in the Settings panel's Advanced section (settings/panel.ts), which lists
+// what it shows: each feature registers itself (registerAdvanced) and reads `advanced` (a signal) to show its control;
+// with the switch off its control is hidden and its value is the default (the stored choice comes back when the switch
+// is turned on). Kept per browser, as the View options are (localStorage).
 //
 //   advanced (signal: boolean) · setAdvanced(on) · registerAdvanced({ id, label, where }) -> unregister
 //   advancedFeatures (signal: [{ id, label, where }])
