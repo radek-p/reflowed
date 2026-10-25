@@ -7,14 +7,18 @@
 //     ones), and those encodings are in the embedded set;
 //   * a document's own face, declared by a map line naming an outline and an encoding
 //     (\pdfmapline{+face PSName "… ReEncodeFont" <enc.enc <outline.pfb}, doc-fonts.ts): drawn
-//     through that encoding.
+//     through that encoding;
+//   * virtual fonts (newtx's maths, ae's T1 over Computer Modern; fidelity/virtual-fonts.ts): each glyph drawn
+//     from the font its packet names. Their files are not in the embedded set: the document gets them as the
+//     TeX resource server would give them (here as its files: what TeX, the converter and the encoder read).
 //   node tests/classic-fonts.test.ts      (after node scripts/build-worker.ts)
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { spawnWorker } from '../../scripts/node-engine.ts';
 import { texPack } from '../../tests/integration/tex-pack.ts';
 import { publicRepo } from '../../scripts/lib/public-repo.ts';
-import { TC, ENGINE, FORMAT } from './node-host.ts';
+import { TC, ENGINE, FORMAT, EXTRA, engine, fetchSync, used } from './node-host.ts';
+import { buildHost, blockFile, capture } from '../src/compile.ts';
 
 let fail = 0;
 const check = (what: string, ok: boolean, detail = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}${ok ? '' : '  ' + detail}`); if (!ok) fail++; };
@@ -84,6 +88,38 @@ async function glyphs(preamble: string, source: string, assets: { name: string; 
   check('own map line: the block compiles', problems.length === 0, problems.join(' | '));
   const own = drawn.filter(([f]) => f === 'docmi');
   check('own map line: the face is drawn through the encoding the line names (alpha, beta)', JSON.stringify(own) === JSON.stringify([['docmi', 'alpha'], ['docmi', 'beta']]), JSON.stringify(drawn));
+}
+
+// ── virtual fonts, their files given ────────────────────────────────────────
+/** The files a block reads beyond the embedded set: TeX's and the converter's (a run on the whole bundle), and
+ *  the outlines and encodings the font map names for its classic faces. */
+const { parseMapLines } = await import(`${publicRepo()}/src/pipeline/fonts/type1.ts`);
+const fontMap = parseMapLines(new TextDecoder('latin1').decode(fetchSync(0, 'pdftex.map')!).split('\n'));
+const tex = await engine('async');
+tex.setExtraFiles(EXTRA);
+function filesFor(preamble: string, source: string): { name: string; bytes: Uint8Array }[] {
+  used.clear();
+  tex.reset(); tex.addFile('input.tex', buildHost(preamble).main);
+  tex.warm('input.tex');
+  tex.runBlock(blockFile(source).text);
+  const out = capture(tex, (n) => fetchSync(0, n)).output;
+  const names = new Set(used);
+  for (const f of Object.values(out.fonts as Record<string, { name: string; filename: string }>)) {
+    if (f.filename !== 'unknown') continue;
+    for (const n of fontMap.get(f.name) ?? []) if (n && fetchSync(0, n)) names.add(n);
+  }
+  return [...names].map((name) => ({ name, bytes: fetchSync(0, name)! }));
+}
+for (const [what, preamble, source, want] of [
+  ['newtx maths', '\\documentclass{article}\n\\usepackage{newtxtext,newtxmath}', 'Let $\\alpha+\\sum_i x_i \\leq \\infty$.',
+    [['NewTXMI', 'u1D6FC'], ['txsys', 'plus'], ['txexs', 'summationtext.1'], ['NewTXMI7', 'u1D456'], ['NewTXMI', 'u1D465'], ['NewTXMI7', 'u1D456'], ['txsys', 'lessequal'], ['txsys', 'infinity']]],
+  ['ae', '\\documentclass{article}\n\\usepackage[T1]{fontenc}\n\\usepackage{ae}', 'Caf\\\'e.',
+    [['cmr10', 'C'], ['cmr10', 'a'], ['cmr10', 'f'], ['cmr10', 'acute'], ['cmr10', 'e'], ['cmr10', 'period']]],
+] as const) {
+  const { drawn, problems } = await glyphs(preamble, source, filesFor(preamble, source));
+  check(`${what}: the block compiles`, problems.length === 0, problems.join(' | '));
+  const got = drawn.filter(([f]) => !/^TeXGyreTermesX/.test(f));
+  check(`${what}: every glyph is drawn from the font its packet names`, JSON.stringify(got) === JSON.stringify(want), JSON.stringify(got));
 }
 
 await w.terminate();

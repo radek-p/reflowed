@@ -5,6 +5,7 @@
 import { modelDisplays, type DisplayStats, type Resample } from './displays.ts';
 import { splitPrivateLigatures, type LigatureStats } from './fidelity/ligatures.ts';
 import { linkFootnoteMarks, type FootnoteStats } from './fidelity/footnotes.ts';
+import { resolveVirtualGlyphs } from './fidelity/virtual-fonts.ts';
 
 type J = Record<string, any>;
 export interface PostConvertInputs {
@@ -16,7 +17,7 @@ export interface PostConvertInputs {
    *  `resampler`); called only when a display route 1 cannot place is there */
   resample?: Resample;
 }
-export interface PostConvertStats { displays: DisplayStats; ligatures: LigatureStats; footnotes: FootnoteStats }
+export interface PostConvertStats { displays: DisplayStats; ligatures: LigatureStats; footnotes: FootnoteStats; virtualGlyphs: number }
 
 /** Mutates `output`. */
 export function postConvert(output: J, inp: PostConvertInputs): PostConvertStats {
@@ -24,5 +25,7 @@ export function postConvert(output: J, inp: PostConvertInputs): PostConvertStats
   const displays = modelDisplays(output, inp.resample);
   const ligatures = splitPrivateLigatures(output, inp.stream, inp.readFile);
   const footnotes = linkFootnoteMarks(output);
-  return { displays, ligatures, footnotes };
+  // last: what came before reads the tree as TeX set it (the samples are compared with it, ligatures read its fonts)
+  const virtualGlyphs = resolveVirtualGlyphs(output, inp.readFile);
+  return { displays, ligatures, footnotes, virtualGlyphs };
 }
