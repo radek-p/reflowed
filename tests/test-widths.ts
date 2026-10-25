@@ -122,7 +122,8 @@ const RECORDER = () => {
           for (const [p, a] of Object.entries(a0) as [string, { id: string; y: number }][]) { const y = w.__wt.yOf(p, a.id); if (y != null) mo.drift = Math.max(mo.drift, Math.abs(y - a.y)); }
         }
         let inView = 0;
-        for (const el of document.querySelectorAll('.blk-render > .latex-block:not(.rtx-w-ghost)')) { const r = el.getBoundingClientRect(), b = boxOf(paneOf(el)); if (r.height > 0 && r.bottom > b.top && r.top < b.bottom) inView++; }
+        // a block in view: its render's box in the pane's (the governor's rule: panes/widths.js survey)
+        for (const el of document.querySelectorAll('.blk-render > .latex-block:not(.rtx-w-ghost)')) { const r = el.parentElement!.getBoundingClientRect(), b = boxOf(paneOf(el)); if (r.height > 0 && r.bottom > b.top && r.top < b.bottom) inView++; }
         out.push({ layouts: els.length, inView: Math.max(inView, prev === Infinity ? inView : prev) });
         prev = inView;
         over = Math.max(over, document.querySelectorAll('.blk-render.rtx-w-over').length);
