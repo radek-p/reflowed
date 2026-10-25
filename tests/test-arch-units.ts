@@ -312,6 +312,15 @@ const FX_ALLOWED = new Set(['tests/integration/fixture-cache.ts', 'tests/integra
 const fxUses = CODE.map(rel).filter((r) => r !== SELF && !FX_ALLOWED.has(r) && FX_NAME.test(read(join(HERE, r))));
 check('the fixture cache: named only by the dev server, its recorder, test-all and its test (never app/ or scripts/)', fxUses.length === 0, fxUses.slice(0, 8));
 
+// ── 9. nothing global is patched: the page's DOM and font set are the browser's own (the viewer's faces are its
+// own FontFaces, given the worker's files through host.fonts.provide: engine/web/page-fonts.ts) ──
+{
+  const PATCH = /\b(Node|Element|HTMLElement|Document|EventTarget)\.prototype\.\w+\s*=(?!=)|\b(Node|Element|HTMLElement|Document|EventTarget)\.prototype\[[^\]]+\]\s*=(?!=)|\bdefineProperty\(\s*(Node|Element|HTMLElement|Document)\.prototype|\bhead\.(appendChild|append|insertBefore)\s*=(?!=)|\bfonts\.(check|add|delete|clear)\s*=(?!=)|\bfonts\[[^\]]+\]\s*=(?!=)/;
+  const patches: string[] = [];
+  for (const f of [...APP, ...ENGINE]) read(f).split('\n').forEach((line, i) => { if (PATCH.test(line.replace(/\/\/.*$/, ''))) patches.push(`${rel(f)}:${i + 1}`); });
+  check('no prototype, document.head or document.fonts method patched in app/src or the engine', patches.length === 0, patches.slice(0, 8).join(', '));
+}
+
 // ── measures: host-object widths in app.js ──────────────────────────
 /** the members of the object literal that starts at `open` (an index of '{'): commas at depth 1, plus one */
 function members(src: string, open: number): number {

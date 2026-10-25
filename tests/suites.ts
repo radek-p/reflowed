@@ -87,6 +87,7 @@ export const SUITES: Suite[] = [
   S('resources-origin', 'dev', 5, (c) => node('tests/test-resources-origin.ts', '--file', c.file), { needs: 'file', note: 'the single file over http (a static server on a free port), the tree beside it by default; Chromium, Firefox, WebKit probes' }),
   S('resources-setting', 'dev', 5, (c) => node('tests/test-resources-setting.ts', `${c.dev}/`)),   // the server address in Document settings
   S('recovery', 'dev', 15, (c) => node('engine/tests/recovery.test.ts', '--url', c.dev), { cold: true, note: 'the worker failing and restarting' }),
+  S('page-fonts', 'dev', 5, (c) => node('tests/test-page-fonts.ts', `${c.dev}/`)),   // the worker's fonts given to the viewer as bytes; no global patched, no @font-face rule
   S('fonts-dump', 'dev', 3, (c) => node('engine/tests/fonts-dump.test.ts', '--url', c.dev), FAST),   // the worker's dumpFonts has every font served, after later blocks patched others (the seed's fonts)
   S('home', 'dev', 10, (c) => node('tests/test-home.ts', `${c.dev}/`, '--no-shots'), FAST),   // the Documents view (Preact)
   S('reset-dev', 'dev', 5, (c) => node('tests/integration/test-reset.ts', c.dev), FAST),   // the dev server's /reset page (the app's wipe module)
@@ -176,7 +177,7 @@ export const EST_SECONDS: Record<string, number> = {
   typecheck: 1, select: 1, browsers: 1, 'static-server': 1, 'engine-stamp': 1, 'engine-build-id': 1, 'seed-title-form': 1, 'intro-versions': 1, 'site-intro': 1, 'w15-units': 1, 'arch-units': 1, 'doc-units': 1, 'commands-units': 1, kit: 3,
   'pdf-svg': 1, 'file-deps': 1, 'loading-units': 1, resources: 40, 'resources-setting': 25, 'resources-origin': 90, 'workbench-units': 2, workbench: 120, keys: 1, 'motion-units': 1, 'view-units': 1, minify: 1, tex: 1, 'tex-lex': 1, 'tex-calls': 1,
   provenance: 1, brand: 1, 'w4-units': 1, 'cite-units': 1, 'cite-engine': 38, 'bundle-cache': 3, 'engine-node': 90,
-  'app-bundle': 1, 'dev-seed': 12, 'webkit-open': 11, 'fmt-early': 60, 'fewer-requests': 30, 'fewer-requests-release': 40, 'fmt-early-release': 180, 'fixture-cache': 20, recovery: 18, 'fonts-dump': 2, home: 2, 'reset-dev': 1, 'home-samples-dev': 29, w10: 37, w3: 27, 'e2e-dev': 140,
+  'app-bundle': 1, 'dev-seed': 12, 'webkit-open': 11, 'fmt-early': 60, 'fewer-requests': 30, 'fewer-requests-release': 40, 'fmt-early-release': 180, 'fixture-cache': 20, recovery: 18, 'fonts-dump': 2, 'page-fonts': 25, home: 2, 'reset-dev': 1, 'home-samples-dev': 29, w10: 37, w3: 27, 'e2e-dev': 140,
   panes: 82, 'two-editors': 60, 'kept-docs': 1, motion: 142, widths: 240, notes: 19, settings: 18, view: 7, files: 10, chrome: 60,
   sidebar: 11, inspector: 10, 'refs-panel': 30, 'selection-dev': 21, 'cref-dev': 3, 'popover-hold': 45, 'ios-zoom': 30, 'mobile-fit': 60, 'far-dev': 100, 'cite-card-dev': 226,
   'cite-dev': 76, sheets: 4, 'caret-bounds': 1289, boot: 54,
@@ -237,7 +238,7 @@ export const RULES: Rule[] = [
   { why: 'perf probes', paths: ['app/src/perf/**'], suites: ['anchor', 'anchor-motion', 'widths'] },
   { why: 'dev-only parts', paths: ['app/src/lua-dev/**'], suites: ['typecheck'] },
   { why: 'the TeX resource server', paths: ['app/src/settings/resources.ts', 'app/src/settings/resource-choice.ts', 'tests/test-resources*.ts'], suites: ['resources', 'resources-origin', 'resources-setting'] },
-  { why: 'the engine in the page', paths: ['engine/web/**'], suites: ['dev-seed', 'keys', 'file-deps', 'recovery', 'cache', 'fonts-flicker', 'e2e-dev', 'app-bundle', 'build-chromium', 'panes', 'multifile'] },
+  { why: 'the engine in the page', paths: ['engine/web/**'], suites: ['dev-seed', 'keys', 'file-deps', 'recovery', 'cache', 'fonts-flicker', 'page-fonts', 'e2e-dev', 'app-bundle', 'build-chromium', 'panes', 'multifile'] }, 
   { why: 'the engine', paths: ['engine/{src,api,server,encode,tex,slots,pictures,licences,scripts}/**', 'engine/reflow-tectonic.json', 'scripts/fetch-engine.ts', 'engine/package.json', 'engine/package-lock.json', 'engine/*.txt', 'engine/working-set-tiers.json'], suites: ENGINE_CORE },
   { why: 'engine tests', paths: ['engine/tests/**'], suites: ['pdf-svg', 'file-deps', 'recovery', 'fonts-dump'] },
   { why: "the editor's TeX files", paths: ['tex/**'], suites: [...ENGINE_CORE, 'meta-dev'] },

@@ -1,11 +1,13 @@
 // Fonts in the single file: finished blocks do not flicker while others typeset. The cause was font swaps: a
 // font patched again for a later block's glyphs took effect as a new @font-face rule before its file
-// had loaded, so every block drawn with that family went blank (the block period) or to a stand-in.
+// had loaded, so every block drawn with that family went blank (the block period) or to a stand-in. Now a font is
+// patched whole, once, and the viewer replaces a face only once its new file has loaded.
 // The single file on the intro with its seed cache dropped (every block compiles, fonts are
 // patched block by block):
 //   1. no face of a family already on screen is in the document's font set before it has loaded (its
 //      text would be blank or a stand-in until it loads), sampled every frame and at every load event;
-//   2. the case is exercised: fonts were patched again and swapped in (backend stats), none failed;
+//   2. no font failed, and a font's face was replaced at most once (a font is patched whole, once: one that needed
+//      no patch at first may gain its private-use entries later; backend stats);
 //   3. at the end every font face is loaded and the page's text is drawn by its own fonts;
 //   4. (the reported case) the abstract, once drawn in its final form, is never redrawn, hidden or swapped for
 //      another drawing while the later blocks typeset (sampled every frame: its drawing's element, opacity,
@@ -92,7 +94,7 @@ const r: any = await page.evaluate(() => {
     notLoaded: faces.filter((f) => f.status !== 'loaded' && f.status !== 'unloaded').map((f) => `${f.family}:${f.status}`), errors: faces.filter((f) => f.status === 'error').length };
 });
 check('no family already on screen goes blank while later blocks typeset (a face of it starting to load)', r.blankings.length === 0, r.blankings.length ? `${r.blankings.length}: ${[...new Set(r.blankings)].slice(0, 8).join(', ')}` : `${r.loads} face loads, ${r.families} families`);
-check('the case is exercised: fonts patched again and swapped in, none failed', (r.stats?.fontSwaps ?? 0) > 0 && (r.stats?.fontFailures ?? 0) === 0, r.stats);
+check('no font failed; a font\'s face replaced at most once (patched whole, once)', (r.stats?.fontFailures ?? 0) === 0 && (r.stats?.fontSwapsPerFont ?? 0) <= 1, r.stats);
 check('at the end no face is loading or failed', r.notLoaded.length === 0 && r.errors === 0, r);
 // from the first frame in its final form on, the abstract's drawing does not change
 {

@@ -204,18 +204,14 @@ export function createDocEditor(ctx) {
   });
 
   // ── Fonts (server backends: /fonts/<served>) ───────────────────────────────
+  // a font served under a new name (patched again): its face replaced by the viewer once the file has loaded
   const fontServed = new Map();
-  const fontStyle = h('style', '', { id: 'doc-fonts' });
-  const family = (file) => file.replace(/\.otf$/i, '').replace(/[^a-zA-Z0-9]/g, '_');
   function applyFonts(map) {
-    let css = '';
     for (const [orig, served] of Object.entries(map ?? {})) {
       const prev = fontServed.get(orig);
-      if (prev !== undefined && prev !== served) css += `@font-face { font-family: '${family(orig)}'; src: url('/fonts/${served}'); }\n`;
+      if (prev !== undefined && prev !== served) window.reflowtex?.host?.fonts?.provide(orig, `/fonts/${served}`);
       fontServed.set(orig, served);
     }
-    if (css) fontStyle.textContent += css;
-    if (fontStyle.textContent && document.head.lastElementChild !== fontStyle) document.head.appendChild(fontStyle);
   }
 
   // ── Blocks in the panes (../panes/) ─────────────────────────────

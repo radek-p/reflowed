@@ -8,13 +8,6 @@
 //   await perf.yield()                    give the event loop a turn (scheduler.yield, else a MessageChannel task)
 //   perf.count(name, n?) / perf.time(name, ms)   counters for window.__rtxPerf.stats() (tests)
 //
-// And, once per page, a memo on document.fonts.check (installFontCheckMemo):
-// the viewer asks it for every \webtext slot of every block each time a slot
-// text changes (host/slots.js slotNodes), ~2.4 ms a call in Chromium, which
-// made a slot refresh of the paper a 100–500 ms task. The answer only changes
-// when a face is added, removed or loads, so it is remembered until then (a
-// generation bumped by those, synchronously).
-//
 const QUIET_MS = 300, BUDGET_MS = 8;
 
 const off = () => { try { return new URLSearchParams(location.search).get('perf') === 'off'; } catch { return false; } };
@@ -71,49 +64,8 @@ export function createPerf(o = {}) {
     slice: () => !disabled && performance.now() - sliceStart > budgetMs,
     yield: yieldNow,
     count(name, n = 1) { stats[name] = (stats[name] ?? 0) + n; },
-    stats: () => ({ ...stats, fontChecks: fontMemo.calls, fontCheckHits: fontMemo.hits }),
+    stats: () => ({ ...stats }),
   };
-  if (!disabled) installFontCheckMemo();
   globalThis.__rtxPerf = perf;
   return perf;
-}
-
-// ── document.fonts.check, remembered ─────────────────────────────────────────
-const fontMemo = { calls: 0, hits: 0, installed: false };
-export function installFontCheckMemo() {
-  const fonts = globalThis.document?.fonts;
-  if (fontMemo.installed || !fonts || typeof fonts.check !== 'function') return;
-  fontMemo.installed = true;
-  const orig = fonts.check.bind(fonts);
-  let gen = 0, memoGen = -1, memo = new Map();
-  const bump = () => { gen++; };
-  // a face added, removed or loaded; a style sheet (with @font-face rules) added or changed
-  for (const ev of ['loading', 'loadingdone', 'loadingerror']) fonts.addEventListener?.(ev, bump);
-  for (const m of ['add', 'delete', 'clear']) {
-    const f = fonts[m];
-    if (typeof f === 'function') fonts[m] = function (...a) { bump(); return f.apply(this, a); };
-  }
-  const head = document.head, proto = Node.prototype;
-  for (const m of ['appendChild', 'insertBefore', 'replaceChild', 'removeChild']) {
-    const f = proto[m];
-    proto[m] = function (...a) { if (this === head || this.nodeName === 'STYLE') bump(); return f.apply(this, a); };
-  }
-  for (const m of ['append', 'prepend', 'replaceChildren']) {
-    const f = Element.prototype[m];
-    Element.prototype[m] = function (...a) { if (this === head || this.nodeName === 'STYLE') bump(); return f.apply(this, a); };
-  }
-  const tc = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent');
-  if (tc?.set) Object.defineProperty(Node.prototype, 'textContent', { ...tc, set(v) { if (this.nodeName === 'STYLE') bump(); tc.set.call(this, v); } });
-  fonts.check = function (font, text) {
-    fontMemo.calls++;
-    // a face that finished loading answers false here until its loadingdone event (a task later):
-    // the viewer then only asks fonts.load() once more, which resolves at once
-    if (memoGen !== gen) { memo = new Map(); memoGen = gen; }
-    const k = text === undefined ? font : `${font}\u0000${text}`;
-    const v = memo.get(k);
-    if (v !== undefined) { fontMemo.hits++; return v; }
-    const r = orig(font, text);
-    memo.set(k, r);
-    return r;
-  };
 }

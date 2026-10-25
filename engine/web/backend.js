@@ -48,103 +48,14 @@ import { opened, PICTURE, TEXT_ASSET, fileSig, docName } from './opened.js';
 import { createKeys, VersionedMap } from './keys.js';
 import { createKept } from './kept-docs.js';               // released documents' states, the last 2
 import { evictCache } from './cache-evict.ts';               // (the engine's own, its keys are the engine's)
+import { applyFonts, fontSwaps } from './page-fonts.ts';     // the worker's font files, given to the viewer
 import { createResourceStore } from '../../loading/cache.ts';  // the TeX resource server's files, kept (disposable)
 import { filesStatus } from '../../loading/status.ts';         // the page's one loading status: the worker's requests to the tree go there
 
 const EMPTY = { errors: [], warnings: [] };
 // the calls that act for a document (forDoc)
 const DOC_METHODS = ['warm', 'isWarm', 'keyPrefix', 'setVisible', 'setAssets', 'setPreamble', 'knownPreamble', 'setBib', 'compile', 'compileSnippet', 'renderTikz', 'pdf', 'keyFor'];
-const family = (file) => file.replace(/\.otf$/i, '').replace(/[^a-zA-Z0-9]/g, '_');
 
-// ── Fonts in the page ────────────────────────────────────────────────────────
-// The viewer writes `@font-face { font-family: '<family>'; src: url(fontBase +
-// served) }` for each original font; fonts made in the worker have no URL, so
-// they become blob: URLs. The viewer's rules are taken out of its
-// style element as it is appended (a hook on document.head.appendChild) and each
-// becomes a FontFace added by script: Chromium makes every CSS @font-face face
-// anew, unloaded, whenever a style sheet is added, so each new block's fonts (and
-// any other style element) made every family on screen load again: finished
-// blocks blank or in a stand-in for a moment, twice or more while others typeset.
-// Faces added by script are kept as they are. A font patched again later replaces
-// its face once the new file has loaded (swapFace).
-const blobUrl = new Map(), current = new Map();
-/** family → the url of the face in effect (loaded); current holds the newest patch */
-const shown = new Map();
-const hooked = new WeakSet();              // heads whose appendChild is hooked (once per document)
-function installFontHook() {
-  const head = document.head;
-  if (hooked.has(head)) return;
-  hooked.add(head);
-  const RULE = /(@font-face \{ font-family: '([^']+)'; src: url\(')([^']*)('\); \})/g;
-  const orig = head.appendChild;
-  const scripted = typeof FontFace !== 'undefined' && !!document.fonts?.add;
-  head.appendChild = function (node) {
-    if (node instanceof HTMLStyleElement && node.textContent.includes('@font-face')) {
-      node.textContent = node.textContent.replace(RULE, (all, a, fam, u, b) => {
-        // the face on screen (loaded), not a newer patch still loading (that would take effect unloaded)
-        const url = shown.get(fam) ?? current.get(fam);
-        if (!scripted) return url ? `${a}${url}${b}` : all;
-        addFace(fam, url ?? new URL(u, document.baseURI).href);
-        return '';
-      });
-    }
-    return orig.call(this, node);
-  };
-}
-function applyFonts(map, fontFiles) {
-  for (const [served, bytes] of Object.entries(fontFiles ?? {}))
-    if (!blobUrl.has(served)) blobUrl.set(served, URL.createObjectURL(new Blob([bytes], { type: 'font/otf' })));
-  for (const [orig, served] of Object.entries(map ?? {})) {
-    const url = blobUrl.get(served);
-    if (!url) continue;
-    const fam = family(orig), prev = current.get(fam);
-    if (prev === url) continue;
-    current.set(fam, url);
-    if (prev) swapFace(fam, url); else shown.set(fam, url);
-  }
-}
-// A font patched again (a later block brought glyphs it lacked) replaces the one on
-// screen only once it has loaded: a new @font-face rule took effect at once and the browser drew the
-// family's text with nothing (its block period) or a stand-in until the new file loaded, so finished
-// blocks flickered while others typeset. Now the new face is loaded first (FontFace API, not in the
-// document's set meanwhile), then added and the old face deleted. A face that fails to load leaves the old one in place, with a warning (glyphs only
-// the new one has then show as missing; nothing else changes). The newest patch wins a race.
-const latestFace = new Map(), liveFace = new Map();
-/** a family's first face, added by script (the viewer then loads it and waits for it) */
-function addFace(fam, url) {
-  if (liveFace.has(fam)) return;
-  const face = new FontFace(fam, `url('${url}')`);
-  document.fonts.add(face);
-  liveFace.set(fam, face);
-  shown.set(fam, url);
-}
-function swapFace(fam, url) {
-  if (typeof FontFace === 'undefined' || !document.fonts?.add) {        // no FontFace API: a rule, as before
-    const st = document.createElement('style');
-    st.dataset.rtxEditorFonts = '';
-    st.textContent = `@font-face { font-family: '${fam}'; src: url('${url}'); }\n`;
-    document.head.append(st);
-    shown.set(fam, url);
-    return;
-  }
-  const face = new FontFace(fam, `url('${url}')`);
-  latestFace.set(fam, face);
-  pendingFaces.add(face);
-  face.load().then(() => {
-    if (latestFace.get(fam) !== face) return;
-    document.fonts.add(face);
-    shown.set(fam, url);
-    const old = liveFace.get(fam);
-    if (old) document.fonts.delete(old);
-    liveFace.set(fam, face);
-    swapsDone++;
-  }, (e) => { console.warn(`font ${fam}: the patched font could not be loaded (${e?.message ?? e}); the previous one stays`); fontFailures++; })
-    .finally(() => pendingFaces.delete(face));
-}
-/** faces still loading (tests wait for none; the viewer's idle() knows nothing of them) */
-const pendingFaces = new Set();
-let fontFailures = 0, swapsDone = 0;
-export const fontSwaps = () => ({ pending: pendingFaces.size, live: liveFace.size, swaps: swapsDone, failures: fontFailures, settled: Promise.allSettled([...pendingFaces].map((f) => f.loaded)) });
 
 /**
  * @typedef {object} BackendOptions
@@ -420,8 +331,8 @@ export function createBackend(opts = {}) {
   /** The seed's fonts as bytes, decoded once, and installed in the page (no worker needed: the seed's results are drawn
    *  with them). seed fonts that cannot be read (a damaged page) are dropped, not fatal: the worker then
    *  makes every font from the cached results' requirements, slower. the page needs them even once the worker
-   *  has them: a cached block's 'fonts' request returns no bytes for fonts the worker has, and without a blob: URL the
-   *  viewer's @font-face points at fonts/<served> (nothing there from file://). */
+   *  has them: a cached block's 'fonts' request returns no bytes for fonts the worker has, and without them the
+   *  viewer's face would be fetched from fonts/<served> (nothing there from file://). */
   let seedFiles;
   function seedFontsInPage() {
     if (seedFiles !== undefined || !seedFonts) return seedFiles ?? null;
@@ -434,7 +345,6 @@ export function createBackend(opts = {}) {
       seedFonts = null; seedFiles = null;
       return null;
     }
-    installFontHook();
     applyFonts(seedFonts.served, seedFiles);
     return seedFiles;
   }
@@ -785,8 +695,8 @@ export function createBackend(opts = {}) {
     /** true once TeX is warm for the current preamble */
     isWarm: () => { const d = here(); return warmedFor != null && d.preamble != null && warmedFor === preambleKey(d.preamble, d.bbl); },
     info: () => info,
-    stats: () => ({ ...counters, fontSwaps: fontSwaps().swaps, fontFailures: fontSwaps().failures }),
-    /** resolves when every patched font being loaded has been swapped in (or failed) */
+    stats: () => ({ ...counters, fontSwaps: fontSwaps().swaps, fontFailures: fontSwaps().failures, fontSwapsPerFont: fontSwaps().maxPerFont }),
+    /** resolves when every font file given to the viewer is in effect (or failed) */
     fontsSettled: () => fontSwaps().settled,
     keyPrefix: () => inDoc(here(), () => `e${buildId()}.${pkey()}`),
     setCache(c) { cache = c; },
@@ -822,7 +732,6 @@ export function createBackend(opts = {}) {
     // request is compiling, it goes in between that request's blocks (after the block
     // in the engine now) instead of after the whole request
     async compile(req) {
-      installFontHook();
       counters.requests++;
       const st = here();
       if (req.priority === 'user' && running) { counters.urgent = (counters.urgent ?? 0) + 1; return new Promise((resolve, reject) => urgent.push({ req, st, resolve, reject })); }
@@ -835,7 +744,6 @@ export function createBackend(opts = {}) {
     /** A label or minipage for a figure: calls made in one tick go to the
      * */
     compileSnippet(source, o = {}) {
-      installFontHook();
       return new Promise((resolve, reject) => {
         snippets.push({ source, o, resolve, reject, st: here() });
         if (snippets.length === 1) queueMicrotask(flushSnippets);
