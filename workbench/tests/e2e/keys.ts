@@ -299,7 +299,9 @@ group('dropdowns from the keyboard: the ring on the focused row and button (pain
   const id = (await tabsOf(page, 0))[0], T = tabSel(id);
   await page.focus(stopSel(id)); await page.keyboard.press('Enter');
   const mark = () => page.evaluate(() => { document.querySelector('[data-probe]')?.removeAttribute('data-probe'); document.activeElement!.setAttribute('data-probe', ''); return document.activeElement!.closest('[role="row"]')?.getAttribute('data-row') ?? document.activeElement!.getAttribute('data-item') ?? document.activeElement!.className; });
-  const ring = async () => { await mark(); return (await ringPainted(page, '[data-probe]')).ok; };
+  // read once the row's button has faded in (Home onto another row starts its opacity transition; WebKit, slower,
+  // was still mid-fade at the screenshot when → came right after it)
+  const ring = async () => { await mark(); await settle(page); return (await ringPainted(page, '[data-probe]')).ok; };
   const openers: [string, string, () => Promise<void>][] = [
     ['the document switcher', `${T} [data-name]`, async () => { await page.focus(`${T} [data-name]`); await page.keyboard.press('Enter'); }],
     ['the section menu', `${T} [data-sub]`, async () => { await page.focus(`${T} [data-sub]`); await page.keyboard.press('Enter'); }],
@@ -383,13 +385,20 @@ const describeFocus = (page: any) => page.evaluate(async () => {
   return `${where} › ${what}${shown ? '' : '  !! NOT SHOWN'}`;
 });
 /** Tab (or Shift+Tab) from the page's start round to it again: the stops in order (at most `max`); `within`: stop when
- *  the focus leaves that selector's element. */
+ *  the focus leaves that selector's element. The page's order ends where the browser takes the focus: Chromium and
+ *  WebKit leave it on no element (the body), headless Firefox on the last stop (the key moves it nowhere): both end
+ *  the list, as does a wrap round to the first stop. */
 async function tabStops(page: any, { back = false, within = null as string | null, max = 120 } = {}) {
   if (!within) await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   const out: string[] = [];
+  await page.evaluate(() => { (window as any).__stops = new Set(); });
   for (let i = 0; i < max; i++) {
+    await page.evaluate(() => { (window as any).__prev = document.activeElement; });
     await page.keyboard.press(back ? 'Shift+Tab' : 'Tab');
     if (within && !(await page.evaluate((s: string) => !!document.activeElement?.closest(s), within))) break;
+    // the focus did not move (the end, in Firefox) or came back to a stop already listed (a wrap): the end
+    if (await page.evaluate(() => { const w = window as any, a = document.activeElement; if (!a || a === document.body) return false;
+      const end = a === w.__prev || w.__stops.has(a); w.__stops.add(a); return end; })) break;
     const d = await describeFocus(page);
     if (d == null) { if (out.length) break; continue; }
     out.push(d);

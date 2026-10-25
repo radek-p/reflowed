@@ -1,5 +1,5 @@
 // The workbench's browser suite, area "bar": the window bar: the tabs in it, the side status bar, the wordmark, the glass top bar, the fit. Run by tests/e2e.ts (--area bar).
-import { req, pw, argv, ONLY, HTML, JS, fails, check, BROWSER, browser, fresh, oneLine, idle, groups, group, layout, tabsOf, labels, groupEl, center, drag, tabSel, stopSel, chord, activeId, events, evs, WB, REPO, decodePng, luma, KEYMAP, readFileSync, writeFileSync, existsSync, join, settled, narrowLook, narrowBad } from './harness.ts';
+import { req, pw, argv, ONLY, HTML, JS, fails, check, skip, BROWSER, browser, fresh, oneLine, idle, groups, group, layout, tabsOf, labels, groupEl, center, drag, tabSel, stopSel, chord, activeId, events, evs, WB, REPO, decodePng, luma, KEYMAP, readFileSync, writeFileSync, existsSync, join, settled, narrowLook, narrowBad } from './harness.ts';
 
 // ── the window bar (the editor's top bar): home, one group's tabs in it while they fit, the host's controls ──
 // The reference: the editor's top bar (scripts/app-ref.ts on the dev app): 44 px; the right-hand controls
@@ -231,10 +231,17 @@ group('wordmark: the placeholders (demo/wordmark/*.svg); the icon\'s 20 px frame
     Element.prototype.animate = function (this: Element, k: any, o: any) { if (this.classList?.contains('wb-mark-part')) w.__markAnims.push(JSON.stringify(k)); return a.call(this, k, o); }; });
   const frames = [await single.evaluate(() => document.querySelector('.wb-bar [data-tab]')!.getBoundingClientRect().left)];
   await single.setViewportSize({ width: (at('BI-', 0) ?? 1100) - 10, height: 500 });
-  const fr = await single.evaluate(async () => { const out: number[] = []; for (let i = 0; i < 30; i++) { await new Promise((r) => requestAnimationFrame(r)); out.push(+document.querySelector('.wb-bar [data-tab]')!.getBoundingClientRect().left.toFixed(1)); } return out; });
+  const { fr, ts } = await single.evaluate(async () => { const fr: number[] = [], ts: number[] = []; for (let i = 0; i < 30; i++) { ts.push(await new Promise<number>((r) => requestAnimationFrame(r))); fr.push(+document.querySelector('.wb-bar [data-tab]')!.getBoundingClientRect().left.toFixed(1)); } return { fr, ts }; });
   const anims = await single.evaluate(() => (window as any).__markAnims ?? []);
-  const steps = fr.slice(1).map((x: number, i: number) => Math.abs(x - fr[i]));
-  check('the text leaving: its width animates to 0 and the tabs follow continuously (no step over 40 % of the move)', anims.length >= 1 && /"width"/.test(anims[0] ?? '') && Math.max(...steps) <= (BROWSER === 'webkit' ? 0.7 : 0.4) * Math.abs(fr.at(-1) - frames[0]) + 0.5, { fr, anims, frames });
+  // no step over what the motion's curve covers in that frame's time: its ease (bar.ts: 220 ms, cubic-bezier(0.16, 1,
+  // 0.3, 1)) is steepest at the start, 40 % in its first 16.7 ms, so a fixed 40 % bound failed on any frame a little
+  // late; a jump (no animation) is the whole move in one frame
+  const ease = (t: number) => { let lo = 0, hi = 1; const bx = (m: number) => 3 * (1 - m) ** 2 * m * 0.16 + 3 * (1 - m) * m * m * 0.3 + m ** 3;
+    for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (bx(m) < t) lo = m; else hi = m; } const m = (lo + hi) / 2; return 3 * (1 - m) ** 2 * m + 3 * (1 - m) * m * m + m ** 3; };
+  const move = Math.abs(fr.at(-1)! - frames[0]);
+  const late = fr.slice(1).map((x: number, i: number) => ({ step: +Math.abs(x - fr[i]).toFixed(1), dt: +(ts[i + 1] - ts[i]).toFixed(1) }))
+    .filter((s: { step: number; dt: number }) => s.step > ease(Math.min(1, s.dt / 220)) * move + 0.5);
+  check('the text leaving: its width animates to 0 and the tabs follow continuously (no step over the curve\'s share of the move in its frame\'s time)', anims.length >= 1 && /"width"/.test(anims[0] ?? '') && move > 10 && late.length === 0, { late, fr, anims, frames });
   await single.close();
   // themes: legible over the glass's worst ground
   for (const theme of ['light', 'dark', 'sepia', 'hc']) {
@@ -504,8 +511,10 @@ group('glass top bar: 4.5:1 over any content, content under it (first line clear
         if (row) { await page.evaluate(() => { const w = (window as any).demo.wb; for (let i = 0; i < 7; i++) w.open({ view: 'document', state: { doc: 'konig', section: '2 Definitions' } }, { focus: false }); }); await settled(page); }
         const sc = await page.evaluate(() => { const v = document.querySelector('.wb-panel:not(.wb-panel--hidden) [data-wb-scroll]') as HTMLElement; v.scrollTop = 0;
           const r = v.getBoundingClientRect(), strip = document.querySelector('.wb-groups .wb-strip:not([hidden])'), sb = strip && strip.getBoundingClientRect().height > 0 ? strip.getBoundingClientRect().bottom : 0;
-          return { right: r.right, top: r.top, sb: v.offsetWidth - v.clientWidth, line: Math.max(document.querySelector('.wb-bar')!.getBoundingClientRect().bottom, sb), inbar: (window as any).demo.wb.inbar.peek(), webkit: CSS.supports('selector(::-webkit-scrollbar)') }; });
-        if (sc.webkit) {
+          return { right: r.right, top: r.top, sb: v.offsetWidth - v.clientWidth, line: Math.max(document.querySelector('.wb-bar')!.getBoundingClientRect().bottom, sb), inbar: (window as any).demo.wb.inbar.peek(), webkit: CSS.supports('selector(::-webkit-scrollbar)'), mode: document.documentElement.dataset.wbScrollbars }; });
+        // overlay bars (macOS, iOS, headless WebKit on Linux) stay the platform's own (scrollbars.ts): no styled track to inset
+        if (sc.webkit && sc.mode === 'overlay') skip(`the scrollbar thumb starts at or below the ${row ? 'bar and the tab row' : 'top bar'}`, 'overlay scrollbars here: the platform\'s own, not styled');
+        else if (sc.webkit) {
           await page.evaluate(() => { for (const e of document.querySelectorAll('.wb-bar, .wb-strip')) (e as HTMLElement).style.visibility = 'hidden'; });
           const png = decodePng(await page.screenshot({ clip: { x: Math.floor(sc.right - sc.sb + 3), y: 0, width: Math.max(2, sc.sb - 6), height: 300 } }));
           await page.evaluate(() => { for (const e of document.querySelectorAll('.wb-bar, .wb-strip')) (e as HTMLElement).style.visibility = ''; });

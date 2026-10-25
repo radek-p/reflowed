@@ -48,11 +48,14 @@ group('drag from the section text drags the tab (both forms); a click there stil
     await page.waitForFunction((id: string) => (window as any).demo.M.groups((window as any).demo.wb.layout.peek())[0].tabs.at(-1).id === id, ids[0]);
     check(`${c}: a drag from the section reorders the tab`, true);
     {
-      await page.click(`${tabSel(ids[0])} :is(${part})`);
+      // a plain mouse click where the section rests (center() waits for the glide): Playwright's page.click hung in
+      // WebKit here after the drag, its actionability step never returning though the menu had opened
+      const click = async (sel: string) => { const p = await center(page, sel); await page.mouse.click(p.x, p.y); };
+      await click(`${tabSel(ids[0])} :is(${part})`);
       await page.waitForSelector('[role="grid"]');
       check(`${c}: a click on the section of the active tab opens its menu`, true);
       await page.keyboard.press('Escape');
-      await page.click(`${tabSel(ids[1])} :is(${part})`);
+      await click(`${tabSel(ids[1])} :is(${part})`);
       await page.waitForFunction((id: string) => (window as any).demo.wb.current.peek().tab.id === id, ids[1]);
       check(`${c}: a click on the section of an inactive tab activates it (no menu)`, await page.locator('[role="menu"], [role="grid"]').count() === 0);
     }
@@ -199,11 +202,14 @@ group('long texts reach the ×: the text grows into the chip\'s right padding un
         return { limit: +limit.toFixed(2), xShown, pad, out };
       }, [part, which, host]);
       const firstCut = r.out.find((o: any) => o.cut), lastWhole = [...r.out].reverse().find((o: any) => !o.cut);
-      const okOrder = r.out.every((o: any) => o.cut === (o.end > r.limit + 0.5));     // truncated exactly when the whole text would pass the limit
+      // truncated exactly when the whole text would pass the limit; within 0.5 px of it either is right (cut reads the
+      // whole-pixel scrollWidth: a text 0.49 px over the limit, as 23 characters in Liberation Sans are, is cut, rightly)
+      const amb = (o: any) => Math.abs(o.end - r.limit) <= 0.5;
+      const okOrder = r.out.every((o: any) => amb(o) || o.cut === (o.end > r.limit));
       const flush = !!firstCut && Math.abs(firstCut.right - r.limit) <= 0.5;          // truncated: the text box (and its "…") ends at the limit
       const short = r.out[0];
       check(`${form} line${form === 'two' ? 's' : ''}, ${host}, ${part.slice(1)}, ${which} (${r.xShown ? 'the × shown' : 'the × hidden'}): no "…" while the text fits up to the ${r.xShown ? '×\'s edge' : 'text box\'s end'}; past it the "…", the text box flush with it (±0.5 px); the last whole text ends ${lastWhole ? +(r.limit - lastWhole.end).toFixed(2) : '?'} px before it`,
-      okOrder && flush && !!lastWhole && lastWhole.end <= r.limit + 0.5, { limit: r.limit, firstCut, lastWhole, bad: r.out.filter((o: any) => o.cut !== (o.end > r.limit + 0.5)).slice(0, 3) });
+      okOrder && flush && !!lastWhole && lastWhole.end <= r.limit + 0.5, { limit: r.limit, firstCut, lastWhole, bad: r.out.filter((o: any) => !amb(o) && o.cut !== (o.end > r.limit)).slice(0, 3) });
       if (which === 'active') check(`… a short text keeps its chip\'s right padding (the spacer ${short.pad} px = --wb-cpl); a truncated one has used it up (${firstCut?.pad} px)`, short.pad === 9 && (firstCut?.pad ?? 9) <= (form === 'one' ? 6 : 0) + 0.01, { short, firstCut });
     }
     await page.close();
@@ -333,6 +339,8 @@ group('chips as painted: in the top bar exactly as in the one-line row (the inse
 group('the hidden × takes no room: the text reaches the pill side padding; hover or focus shows it at once (no transition); the pill and its neighbours keep their boxes; two lines, one line, the top bar', async () => {
   for (const [c, host] of [['two', 'strip'], ['one', 'strip'], ['one', 'bar']] as const) {
     const page = await fresh({ query: `fresh${host === 'bar' ? '&single&bar=1' : '&scenario=paper'}` });
+    // the browser has a mouse (hover: hover): without one every × shows (the touch form; headless Firefox needs telling, harness.ts)
+    if (c === 'two') check('the browser reports a pointer that hovers (the × hides only with one)', await page.evaluate(() => matchMedia('(hover: hover) and (pointer: fine)').matches));
     if (c === 'one' && host === 'strip') await oneLine(page);
     if (host === 'bar') { await page.evaluate(() => (window as any).demo.wb.open({ view: 'document', state: { doc: 'graphs' } }, { focus: false })); await page.waitForSelector('.wb-strip--inbar .wb-tab:not(.wb-tab--on) .wb-tab-sec'); }
     await page.evaluate(() => document.fonts.ready);
@@ -552,6 +560,9 @@ group('glass: 40 px stripes under the strip and the top bar show through (luma s
 // ── the popover's painted edge (its shadow's ring included) on the pill's left edge, to the device pixel ──
 group('dropdowns: the popover\'s painted left edge (the ring) = the pill\'s, to the device pixel; DPR 1, 2, 3; two lines, one line, the bar; every theme', async () => {
   const runs: [number, string][] = [[1, 'light'], [3, 'light'], [2, 'light'], [2, 'dark'], [2, 'sepia'], [2, 'hc']];
+  // the engine's layout unit: Chromium and WebKit lay out in 1/64 px, Firefox in app units of 1/60 px (a pill at
+  // 151.4333 = 151 + 26/60 px; the row one unit off reads 0.0167)
+  const LU = BROWSER === 'firefox' ? 1 / 60 : 1 / 64;
   for (const [dpr, theme] of runs) for (const [c, host] of [['two', 'strip'], ['one', 'strip'], ['one', 'bar']] as const) {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 700 }, deviceScaleFactor: dpr });
     const page = await ctx.newPage();
@@ -569,7 +580,7 @@ group('dropdowns: the popover\'s painted left edge (the ring) = the pill\'s, to 
       return { pop: pop.getBoundingClientRect().left - ring, pill: document.querySelector(t)!.getBoundingClientRect().left, ring, dpr: devicePixelRatio, rowOff: +(row.getBoundingClientRect().left - anchor.getBoundingClientRect().left).toFixed(4) }; }, TAB);
     check(`DPR ${dpr}, ${theme}, ${c} ${host}: the popover's painted left edge on the pill's (the same device pixel)`, Math.round(g.pop * g.dpr) === Math.round(g.pill * g.dpr), g);
     // (the row's inset was measured mid-opening, under wb-float-in's scale: 0.04 px off, a device pixel when the pill sat near a half pixel)
-    check(`DPR ${dpr}, ${theme}, ${c} ${host}: the first row on the anchor to a layout unit (1/64 px; the opening scale taken out)`, Math.abs(g.rowOff) <= 1 / 64, g);
+    check(`DPR ${dpr}, ${theme}, ${c} ${host}: the first row on the anchor to a layout unit (${LU === 1 / 60 ? "Firefox's 1/60" : "1/64"} px; the opening scale taken out)`, Math.abs(g.rowOff) <= LU + 1e-4, g);
     await ctx.close();
   }
 });
@@ -769,7 +780,7 @@ group('switcher rows: the new-tab button only on the hovered or keyboard-focused
       return [...document.querySelectorAll('[role="grid"] [role="row"]')].map((r) => ({ id: r.getAttribute('data-row'), on: r.classList.contains('is-active'),
         vis: +getComputedStyle(r.querySelector('.wb-row-btn')!).opacity > 0.5, w: r.querySelector('.wb-row-btn')!.getBoundingClientRect().width })); });
     const rest = await shown();
-    if (await page.evaluate(() => matchMedia('(hover: none)').matches)) {     // no hover (touch; headless Firefox says so): every button shows
+    if (await page.evaluate(() => matchMedia('(hover: none)').matches)) {     // no hover (touch; headless Firefox unless told of a mouse, harness.ts): every button shows
       check(`${theme}: no hover in this browser: every row shows its button`, rest.every((r: any) => r.vis), rest);
       await page.close(); continue;
     }
@@ -911,8 +922,9 @@ group('switcher rows: one hover target, nested as a tab and its chips (the row g
       // the tokens, resolved in the row (the same currentColor): the tab's hover ground, and the chip's on top of it
       const probe = (bg: string) => { const d = document.createElement('div'); d.style.background = bg; r.append(d); const c = getComputedStyle(d).backgroundColor; d.remove(); return c; };
       const btn = r.querySelector('.wb-row-btn')!, main = r.querySelector('.wb-menu-item')!, rr = r.getBoundingClientRect(), br = btn.getBoundingClientRect();
+      const u = 0.02;     // a layout unit (Firefox's is 1/60 px: its button ends one past the row, 409.433 against 409.417)
       return { row: getComputedStyle(r).backgroundColor, main: getComputedStyle(main).backgroundColor, btn: getComputedStyle(btn).backgroundColor,
-        tabHover: probe('var(--rfed-tab-hover-bg)'), chipHover: probe('var(--rfed-hover)'), covers: br.left >= rr.left && br.right <= rr.right && br.top >= rr.top && br.bottom <= rr.bottom,
+        tabHover: probe('var(--rfed-tab-hover-bg)'), chipHover: probe('var(--rfed-hover)'), covers: br.left >= rr.left - u && br.right <= rr.right + u && br.top >= rr.top - u && br.bottom <= rr.bottom + u,
         inset: +(rr.right - br.right).toFixed(2), radius: [getComputedStyle(r).borderTopLeftRadius, getComputedStyle(btn).borderTopLeftRadius] };
     });
     const clear = 'rgba(0, 0, 0, 0)';
@@ -923,7 +935,7 @@ group('switcher rows: one hover target, nested as a tab and its chips (the row g
     const bb = await row.locator('.wb-row-btn').boundingBox();
     await page.mouse.move(bb!.x + bb!.width / 2, bb!.y + bb!.height / 2);
     const b = await read();
-    check(`${theme}: hovering the button: the row ground kept, the button's own (the chip hover token) added; flush with the row's end, its radius (the row's ground: the same height)`, b.row === b.tabHover && b.btn === b.chipHover && b.inset === 0 && b.radius[0] === b.radius[1], b);
+    check(`${theme}: hovering the button: the row ground kept, the button's own (the chip hover token) added; flush with the row's end, its radius (the row's ground: the same height)`, b.row === b.tabHover && b.btn === b.chipHover && Math.abs(b.inset) <= 0.02 && b.radius[0] === b.radius[1], b);
     await page.mouse.move(2, 790);
     await page.keyboard.press('ArrowDown');
     const k = await page.evaluate(async () => { await (window as any).demo.wb.idle(); const r = document.activeElement!.closest('[role="row"]')!; return { row: getComputedStyle(r).backgroundColor, btn: getComputedStyle(r.querySelector('.wb-row-btn')!).backgroundColor }; });

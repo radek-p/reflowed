@@ -25,10 +25,23 @@ export function check(name: string, ok: boolean, detail: unknown = '') {
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${d ? ` — ${String(d).slice(0, Number(process.env.DETAIL ?? 300))}` : ''}`);
 }
 let cur = '';
+const skips: string[] = [];
+/** A check this browser cannot make (headless, or a platform form the check is not about): named, with the reason, and
+ *  listed at the end; never a pass. */
+export function skip(name: string, why: string) {
+  skips.push(`${cur}: ${name} (${why})`);
+  console.log(`skip ${name} — ${why}`);
+}
 
 export const BROWSER = argv.includes('--browser') ? argv[argv.indexOf('--browser') + 1] : 'chromium';
-// Chromium's headless shell hides scrollbars by default: show them (the scrollbar checks need them)
-export const browser = await pw[BROWSER].launch({ headless: !argv.includes('--headed'), ...(BROWSER === 'chromium' ? { ignoreDefaultArgs: ['--hide-scrollbars'] } : {}) });
+// Chromium's headless shell hides scrollbars by default: show them (the scrollbar checks need them).
+// Headless Firefox finds no pointing device and so matches (hover: none) and (pointer: none): a touch screen to the
+// CSS, where every × and row button shows. The suite drives a mouse, so it tells Firefox it has one (a fine pointer
+// that hovers: its pointer-capability prefs, bits 2 and 4), as Playwright already does for Chromium (blink-settings
+// primaryHoverType). The (hover: none) forms keep their own checks (they ask matchMedia).
+const FIREFOX_MOUSE = { 'ui.primaryPointerCapabilities': 6, 'ui.allPointerCapabilities': 6 };
+export const browser = await pw[BROWSER].launch({ headless: !argv.includes('--headed'),
+  ...(BROWSER === 'chromium' ? { ignoreDefaultArgs: ['--hide-scrollbars'] } : BROWSER === 'firefox' ? { firefoxUserPrefs: FIREFOX_MOUSE } : {}) });
 export async function fresh({ theme = 'light', w = 1280, h = 800, query = 'fresh', sides = false } = {}) {
   if (!sides) query += '&sides=0';
   if (!/bar=/.test(query)) query += '&bar=0';   // the window bar (the app's top bar) is tested by its own groups
@@ -126,7 +139,8 @@ for (const [name, f] of groups) {
   try { await f(); } catch (e) { check(`${name} ran`, false, (e as Error).stack ?? String(e)); }
 }
 await browser.close();
-console.log(`\n${n - failed}/${n} passed`);
+console.log(`\n${n - failed}/${n} passed${skips.length ? `, ${skips.length} skipped` : ''}`);
+if (skips.length) console.log(skips.map((s) => `skipped: ${s}`).join('\n'));
 if (failed) { console.log(fails.join('\n')); process.exit(1); }
 
 }

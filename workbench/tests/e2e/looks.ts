@@ -1,5 +1,5 @@
 // The workbench's browser suite, area "looks": looks: glass, the viewport, the kit gallery, light and dark, overflow. Run by tests/e2e.ts (--area looks).
-import { req, pw, argv, ONLY, HTML, JS, fails, check, BROWSER, browser, fresh, oneLine, idle, groups, group, layout, tabsOf, labels, groupEl, center, drag, tabSel, stopSel, chord, activeId, events, evs, WB, REPO, decodePng, luma, KEYMAP, readFileSync, writeFileSync, existsSync, join, settled, narrowLook, narrowBad } from './harness.ts';
+import { req, pw, argv, ONLY, HTML, JS, fails, check, skip, BROWSER, browser, fresh, oneLine, idle, groups, group, layout, tabsOf, labels, groupEl, center, drag, tabSel, stopSel, chord, activeId, events, evs, WB, REPO, decodePng, luma, KEYMAP, readFileSync, writeFileSync, existsSync, join, settled, narrowLook, narrowBad } from './harness.ts';
 
 // ── the glass strip: text contrast over any content; the name above the section; the solid fallback ──
 group('glass strip: contrast over content, name above section, fallback', async () => {
@@ -39,9 +39,12 @@ group('glass strip: contrast over content, name above section, fallback', async 
     await page.close();
   }
   const page = await fresh();
-  const g = await page.evaluate(() => { const s = getComputedStyle(document.querySelector('.wb-strip')!, '::before'); return { bf: (s as any).backdropFilter || (s as any).webkitBackdropFilter, bg: s.backgroundColor, under: document.querySelector('.wb-panel:not(.wb-panel--hidden) .wb-view')!.getBoundingClientRect().top - document.querySelector('.wb-group')!.getBoundingClientRect().top }; });
+  const g = await page.evaluate(() => { const s = getComputedStyle(document.querySelector('.wb-strip')!, '::before'); return { bf: (s as any).backdropFilter || (s as any).webkitBackdropFilter, bg: s.backgroundColor,
+    under: document.querySelector('.wb-panel:not(.wb-panel--hidden) .wb-view')!.getBoundingClientRect().top - document.querySelector('.wb-group')!.getBoundingClientRect().top,
+    strip: document.querySelector('.wb-group .wb-strip')!.getBoundingClientRect().height }; });
   const ff = !(await page.evaluate(() => CSS.supports('selector(::-webkit-scrollbar)')));
-  check('the strip blurs what is under it (its own masked layer); the view runs under the strip' + (ff ? ' (Firefox: below it)' : ''), /blur/.test(g.bf) && g.under === (ff ? 56 : 0), g);
+  // (no ::-webkit-scrollbar, no track margin: the view starts below the strip, by the strip's height, whatever the pills')
+  check('the strip blurs what is under it (its own masked layer); the view runs under the strip' + (ff ? ' (Firefox: below it)' : ''), /blur/.test(g.bf) && g.strip > 0 && Math.abs(g.under - (ff ? g.strip : 0)) <= 0.01, g);
   const pad = await page.evaluate(() => { const v = document.querySelector('.wb-panel:not(.wb-panel--hidden) .demo-doc, .wb-panel:not(.wb-panel--hidden) .demo-list')!; const first = v.firstElementChild!.getBoundingClientRect(); return first.top - document.querySelector('.wb-group')!.getBoundingClientRect().top - document.querySelector('.wb-strip')!.getBoundingClientRect().height; });
   check('at rest the first line is below the strip (padded)', pad >= 0, pad);
   const mask = await page.evaluate(() => { const s = getComputedStyle(document.querySelector('.wb-strip')!, '::before') as any; const r = document.querySelector('.wb-strip')!.getBoundingClientRect(); return { top: s.top, bottom: s.bottom, mask: s.maskImage || s.webkitMaskImage, tr: s.transform }; });
@@ -55,8 +58,11 @@ group('glass strip: contrast over content, name above section, fallback', async 
   // the scrollbar starts below the strip: Chromium and WebKit inset its track; Firefox starts the view below it
   const sc = await page.evaluate(() => { const v = document.querySelector('.wb-panel:not(.wb-panel--hidden) [data-wb-scroll]') as HTMLElement; v.scrollTop = 0;
     const r = v.getBoundingClientRect(), s = document.querySelector('.wb-group .wb-strip')!.getBoundingClientRect();
-    return { right: r.right, top: r.top, bottom: r.bottom, sb: v.offsetWidth - v.clientWidth, strip: s.bottom, webkit: CSS.supports('selector(::-webkit-scrollbar)') }; });
-  if (sc.webkit) {
+    return { right: r.right, top: r.top, bottom: r.bottom, sb: v.offsetWidth - v.clientWidth, strip: s.bottom, webkit: CSS.supports('selector(::-webkit-scrollbar)'), mode: document.documentElement.dataset.wbScrollbars }; });
+  // overlay bars (macOS, iOS; headless WebKit on Linux has them too) stay the platform's own (scrollbars.ts): no styled
+  // track to inset, nothing to measure
+  if (sc.webkit && sc.mode === 'overlay') skip('the scrollbar thumb starts at or below the strip', 'overlay scrollbars here: the platform\'s own, not styled');
+  else if (sc.webkit) {
     await page.evaluate(() => { for (const e of document.querySelectorAll('.wb-strip, .wb-crumbs')) (e as HTMLElement).style.visibility = 'hidden'; });
     const png = decodePng(await page.screenshot({ clip: { x: Math.floor(sc.right - sc.sb + 3), y: Math.floor(sc.top), width: Math.max(2, sc.sb - 6), height: 240 } }));
     await page.evaluate(() => { for (const e of document.querySelectorAll('.wb-strip, .wb-crumbs')) (e as HTMLElement).style.visibility = ''; });

@@ -1,5 +1,5 @@
 // The workbench's browser suite, area "tabs": tabs: the header forms, menus, rename, rows, narrowing, motion. Run by tests/e2e.ts (--area tabs).
-import { req, pw, argv, ONLY, HTML, JS, fails, check, BROWSER, browser, fresh, oneLine, idle, groups, group, layout, tabsOf, labels, groupEl, center, drag, tabSel, stopSel, chord, activeId, events, evs, WB, REPO, decodePng, luma, KEYMAP, readFileSync, writeFileSync, existsSync, join, settled, narrowLook, narrowBad } from './harness.ts';
+import { req, pw, argv, ONLY, HTML, JS, fails, check, skip, BROWSER, browser, fresh, oneLine, idle, groups, group, layout, tabsOf, labels, groupEl, center, drag, tabSel, stopSel, chord, activeId, events, evs, WB, REPO, decodePng, luma, KEYMAP, readFileSync, writeFileSync, existsSync, join, settled, narrowLook, narrowBad } from './harness.ts';
 
 // ── the header: the document named once, one home entry, the section reachable ──
 group('header: the document named once, one home, the section reachable, no row beside tabs', async () => {
@@ -557,14 +557,20 @@ for (const host of ['bar', 'row']) group(`host=${host}: opening, closing and reo
   const page = await fresh({ w: 1500, query: host === 'bar' ? 'fresh&single&bar=1' : 'fresh&single&bar=0' });
   await page.evaluate(() => { const w = (window as any).demo.wb; w.open({ view: 'text', state: { text: 'x' } }, { focus: false }); });
   await settled(page);
-  const sample = (act: string) => page.evaluate(async (act: string) => {
-    const w = window as any, frames: any[] = [];
+  // the frames, and the time between the first ones (the motion's): a browser that paints a frame every 50–70 ms while
+  // the tabs move (headless WebKit, software painting on a busy machine: 4 frames for the whole motion, 17 ms apart at
+  // rest) shows it in jumps whatever the motion; a jump is a failure only at ≤ 25 ms a frame (40 fps), else a skip
+  const paced: Record<string, number[]> = {};
+  const sample = async (act: string) => { const { frames, dt } = await page.evaluate(async (act: string) => {
+    const w = window as any, frames: any[] = [], ts: number[] = [];
     const rects = () => Object.fromEntries([...document.querySelectorAll('[data-tab]')].filter((t) => t.getBoundingClientRect().width > 0).map((t) => { const r = t.getBoundingClientRect(); return [t.getAttribute('data-tab'), [r.left, r.width]]; }));
     frames.push(rects());
     new Function('w', act)(w);
-    for (let i = 0; i < 24; i++) { await new Promise((r) => requestAnimationFrame(r)); frames.push(rects()); }
-    return frames;
-  }, act);
+    for (let i = 0; i < 24; i++) { ts.push(await new Promise<number>((r) => requestAnimationFrame(r))); frames.push(rects()); }
+    return { frames, dt: ts.slice(1, 7).map((t, i) => +(t - ts[i]).toFixed(1)) };
+  }, act); paced[act] = dt; return frames; };
+  const slow = (act: string) => { const d = [...paced[act]].sort((a, b) => a - b), med = d[d.length >> 1]; return med > 25 ? `frames ${paced[act].join(', ')} ms apart while the tabs move: too few to judge` : ''; };
+  const judged = (name: string, act: string, bad: any[]) => { const why = bad.length ? slow(act) : ''; if (why) skip(name, why); else check(name, bad.length === 0, bad); };
   // continuity: a tab that is in two consecutive frames moves by at most what the curve allows: no frame jumps more
   // than the largest of its neighbours' steps + 2 px, and the first step is no jump (≤ 40 % of the whole move)
   const judge = (frames: any[], ids: string[]) => {
@@ -581,18 +587,22 @@ for (const host of ['bar', 'row']) group(`host=${host}: opening, closing and reo
     return bad;
   };
   const before = Object.keys((await sample(''))[0]);
-  const fo = await sample("w.demo.wb.open({ view: 'document', state: { doc: 'graphs' } }, { focus: false })");
+  const OPEN = "w.demo.wb.open({ view: 'document', state: { doc: 'graphs' } }, { focus: false })";
+  const fo = await sample(OPEN);
   await settled(page);
-  check(`${host}: opening a tab: the others move and resize continuously`, judge(fo, before).length === 0 && Object.keys(fo.at(-1)).length === 3, judge(fo, before));
+  check(`${host}: opening a tab: three tabs at the end`, Object.keys(fo.at(-1)).length === 3, Object.keys(fo.at(-1)));
+  judged(`${host}: opening a tab: the others move and resize continuously`, OPEN, judge(fo, before));
   const ids = Object.keys(fo.at(-1));
-  const fc = await sample(`w.demo.wb.close('${ids[0]}')`);
+  const CLOSE = `w.demo.wb.close('${ids[0]}')`;
+  const fc = await sample(CLOSE);
   await settled(page);
-  check(`${host}: closing a tab: its neighbours slide and stretch into the room continuously`, judge(fc, ids.slice(1)).length === 0, judge(fc, ids.slice(1)));
+  judged(`${host}: closing a tab: its neighbours slide and stretch into the room continuously`, CLOSE, judge(fc, ids.slice(1)));
   const left = Object.keys(fc.at(-1));
   const g = await page.evaluate(() => (window as any).demo.M.groups((window as any).demo.wb.layout.peek())[0].id);
-  const fr = await sample(`w.demo.wb.move('${left[0]}', '${g}', 1)`);
+  const MOVE = `w.demo.wb.move('${left[0]}', '${g}', 1)`;
+  const fr = await sample(MOVE);
   await settled(page);
-  check(`${host}: a reorder moves both tabs continuously`, judge(fr, left).length === 0, judge(fr, left));
+  judged(`${host}: a reorder moves both tabs continuously`, MOVE, judge(fr, left));
   // the end state equals a static layout of the same tabs
   const geo = (p: any) => p.evaluate(() => [...document.querySelectorAll('[data-tab]')].filter((t) => t.getBoundingClientRect().width > 0).map((t) => { const r = t.getBoundingClientRect(); return [r.x, r.y, r.width, r.height].map(Math.round).join(); }).join('|'));
   const json = await page.evaluate(() => (window as any).demo.wb.serialize()), end = await geo(page);
