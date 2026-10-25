@@ -233,10 +233,11 @@ export function vscodeKeybindings(rows: readonly KeyRow[], editorWhen = "activeC
     ...(r.args !== undefined ? { args: r.args } : {}), when: r.when ? `${editorWhen} && (${r.when})` : editorWhen }));
 }
 
-/** How a key reads to people: ⌥⌘W on macOS, Ctrl+Alt+W elsewhere; a modifier alone by its name (⌘, Ctrl). */
+/** How a key reads to people: ⌥⌘W on macOS (Apple's order ⌃⌥⇧⌘, Enter as ↵), Ctrl+Alt+W elsewhere; a modifier alone
+ *  by its name (⌘, Ctrl). */
 export function label(text: string, platform: Platform): string {
   const mac = platform === 'mac';
-  const names: Record<string, string> = { arrowleft: '←', arrowright: '→', arrowup: '↑', arrowdown: '↓', pagedown: 'PageDown', pageup: 'PageUp', enter: 'Enter', '\\': '\\', f6: 'F6',
+  const names: Record<string, string> = { arrowleft: '←', arrowright: '→', arrowup: '↑', arrowdown: '↓', pagedown: 'PageDown', pageup: 'PageUp', enter: mac ? '↵' : 'Enter', '\\': '\\', f6: 'F6',
     ...(mac ? { ctrl: '⌃', alt: '⌥', shift: '⇧', meta: '⌘' } : { ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift', meta: 'Meta' }) };
   return text.split(' ').map((k) => {
     const p = parseKey(k);

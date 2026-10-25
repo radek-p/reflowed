@@ -34,11 +34,13 @@ const check = (name: string, ok: boolean, detail: unknown = '') => { n++; if (!o
 
 // ── the shortcuts dialog: its rows, as the old hand-kept table listed them ──
 // (keys with a modifier as the workbench writes its own: ⇧⌘Z on macOS, Ctrl+Shift+Z on Windows and Linux, never "CtrlZ")
-for (const [platform, mod, sh, alt, enter] of [['mac', '⌘', '⇧⌘', '⌥', '⌘Enter'], ['other', 'Ctrl+', 'Ctrl+Shift+', 'Alt+', 'Ctrl+Enter']]) {
+// (Enter as ↵ on macOS, spelled out elsewhere)
+for (const [platform, mod, sh, alt, ret] of [['mac', '⌘', '⇧⌘', '⌥', '↵'], ['other', 'Ctrl+', 'Ctrl+Shift+', 'Alt+', 'Enter']]) {
+  const enter = `${mod}${ret}`;
   const old = [
-    ['↑ ↓ or j k', 'Select the block above / below'], ['Enter', 'Edit the selected block'], ['Esc', 'Leave the editor (the block stays selected)'],
+    ['↑ ↓ or j k', 'Select the block above / below'], [ret, 'Edit the selected block'], ['Esc', 'Leave the editor (the block stays selected)'],
     [`${alt}↑ ${alt}↓`, 'Move the block'], [enter, 'Split the block at the caret'], ['⌫ at the start', 'Merge with the block above'],
-    [platform === 'mac' ? '⇧Enter' : 'Shift+Enter', 'New block below'], ['/', 'Block types (in an empty block, or with a block selected)'], [`${mod}D`, 'Duplicate'], ['⌫ / Del', 'Delete the selected block'],
+    [platform === 'mac' ? '⇧↵' : 'Shift+Enter', 'New block below'], ['/', 'Block types (in an empty block, or with a block selected)'], [`${mod}D`, 'Duplicate'], ['⌫ / Del', 'Delete the selected block'],
     [`${mod}Z  ${sh}Z`, 'Undo / redo block changes'], [`${mod}F`, 'Find and replace'], [`${sh}F`, 'Focus mode'], [`${mod}\\`, 'Sidebar'], [`${mod}B`, 'Bold, in a block\'s source (elsewhere: the sidebar)'],
     [`F12 or ${platform === 'mac' ? '⌘' : 'Ctrl'}-click`, 'Go to the label or bibliography entry'],
   ];

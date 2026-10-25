@@ -88,8 +88,8 @@ browser keeps a key, a replacement:
 | Switch document (the document menu of the focused tab) | ⌘K D | Ctrl+K D | no such command; Ctrl+K D is its Compare with Saved | on the focused active tab; was Alt+Shift+↓, which macOS keeps |
 | Keyboard shortcuts | ⌘K ⌘S | Ctrl+K Ctrl+S | workbench.action.openGlobalKeybindings: Ctrl+K Ctrl+S | same |
 | Maximise / restore group | ⌘K ⌘M | Ctrl+K Ctrl+M | workbench.action.toggleMaximizeEditorGroup: Ctrl+K Ctrl+M | same |
-| Pin / unpin tab | ⌘K ⇧Enter | Ctrl+K Shift+Enter | workbench.action.pinEditor / unpinEditor: Ctrl+K Shift+Enter | same |
-| Keep a preview tab | ⌘K Enter | Ctrl+K Enter | workbench.action.keepEditor: Ctrl+K Enter | same |
+| Pin / unpin tab | ⌘K ⇧↵ | Ctrl+K Shift+Enter | workbench.action.pinEditor / unpinEditor: Ctrl+K Shift+Enter | same |
+| Keep a preview tab | ⌘K ↵ | Ctrl+K Enter | workbench.action.keepEditor: Ctrl+K Enter | same |
 | Show / hide the left / right sidebar: left | ⌘B or ⌘\ | Ctrl+B or Ctrl+\ | workbench.action.toggleSidebarVisibility: Ctrl+B / ⌘B | VS Code's key first (the one shown); ReflowEd's own Ctrl/⌘ \ too (the app's top bar). In a LaTeX field the host's bold wins: its row { key: 'ctrl+b', mac: 'meta+b', when: 'reflowed.field' } |
 | Show / hide the left / right sidebar: right | ⌥⌘B or ⇧⌘\ | Ctrl+Alt+B or Ctrl+Shift+\ | workbench.action.toggleAuxiliaryBar: Ctrl+Alt+B / ⌥⌘B | VS Code's key first; the app's key with Shift for the right too |
 | Next / previous part (sidebars, groups): 1 | F6 | F6 | workbench.action.focusNextPart: F6 | same |

@@ -74,6 +74,9 @@ test('labels', () => {
   assert.equal(K.label('ctrl+k ctrl+arrowleft', 'win'), 'Ctrl+K Ctrl+←');
   assert.equal(K.label('meta', 'mac'), '⌘', 'a modifier alone: its sign');
   assert.equal(K.label('ctrl', 'other'), 'Ctrl');
+  assert.equal(K.label('meta+k shift+enter', 'mac'), '⌘K ⇧↵', 'Enter as ↵ on macOS');
+  assert.equal(K.label('ctrl+k shift+enter', 'linux'), 'Ctrl+K Shift+Enter', 'and spelled out elsewhere');
+  assert.equal(K.label('ctrl+meta+alt+shift+arrowup', 'mac'), '⌃⌥⇧⌘↑', 'Apple\'s modifier order');
 });
 
 // a host's keys written once ('mod': ⌘ on macOS, Ctrl elsewhere), the same way as the workbench's own
@@ -81,11 +84,13 @@ test('shortcutLabel: mod is ⌘ on macOS and Ctrl+ elsewhere, never a bare "Ctrl
   const cases: [string, string, string][] = [
     ['mod+d', '⌘D', 'Ctrl+D'],
     ['mod+shift+z', '⇧⌘Z', 'Ctrl+Shift+Z'],
-    ['mod+enter', '⌘Enter', 'Ctrl+Enter'],
+    ['mod+enter', '⌘↵', 'Ctrl+Enter'],
+    ['enter', '↵', 'Enter'],
+    ['mod+alt+enter', '⌥⌘↵', 'Ctrl+Alt+Enter'],
     ['mod+alt+v', '⌥⌘V', 'Ctrl+Alt+V'],
     ['mod+\\', '⌘\\', 'Ctrl+\\'],
     ['alt+arrowup', '⌥↑', 'Alt+↑'],
-    ['shift+enter', '⇧Enter', 'Shift+Enter'],
+    ['shift+enter', '⇧↵', 'Shift+Enter'],
     ['mod', '⌘', 'Ctrl'],
     ['mod+k mod+s', '⌘K ⌘S', 'Ctrl+K Ctrl+S'],
   ];

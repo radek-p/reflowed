@@ -485,7 +485,7 @@ const loadMs = Date.now() - t0;
 // ── 14. Shortcut labels: each platform's, as the workbench writes its own (Ctrl+D on Windows, never "CtrlD") ──
 for (const [platform, want] of [
   ['Win32', { find: 'Ctrl+F', focus: 'Ctrl+Shift+F', dup: 'Ctrl+D', undo: 'Ctrl+Z  Ctrl+Shift+Z', split: 'Ctrl+Enter', move: 'Alt+↑' }],
-  ['MacIntel', { find: '⌘F', focus: '⇧⌘F', dup: '⌘D', undo: '⌘Z  ⇧⌘Z', split: '⌘Enter', move: '⌥↑' }],
+  ['MacIntel', { find: '⌘F', focus: '⇧⌘F', dup: '⌘D', undo: '⌘Z  ⇧⌘Z', split: '⌘↵', move: '⌥↑' }],
 ] as const) {
   const { ctx, page: p } = await newPage('?seed=sample&backend=none#/doc/sample', { platform });
   await p.click('#btn-main-menu');

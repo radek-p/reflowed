@@ -209,7 +209,7 @@ function TextSource({ ed, o }) {
   useEffect(() => { if (editing && ref.current) { ref.current.focus(); const n = ref.current.value.length; ref.current.setSelectionRange(n, n); } }, [editing]);
   const box = o.box != null;
   return html`<div class="svf-sec">
-    <div class="svf-sec-head">LaTeX <span class="svf-hint">${box ? shortcutLabel('mod+enter') : 'Enter'} to finish</span></div>
+    <div class="svf-sec-head">LaTeX <span class="svf-hint">${shortcutLabel(box ? 'mod+enter' : 'enter')} to finish</span></div>
     <textarea ref=${ref} class="svf-src" rows=${box ? 3 : 1} spellcheck="false" placeholder=${box ? 'A paragraph of LaTeX…' : 'LaTeX, e.g. $G_n$'} value=${o.src}
       onFocus=${() => { if (ed.S.editing.value !== o.id) ed.beginTextEdit(o.id); }}
       onInput=${(e) => ed.setTextSource(o.id, e.currentTarget.value)}

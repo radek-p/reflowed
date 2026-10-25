@@ -61,7 +61,7 @@ function LabelField({ o, at, onInput, onDone, state }) {
       onBlur=${() => onDone(true)}></textarea>
     <div class="svf-label-foot">
       ${s.error ? html`<span class="svf-label-err">${s.error.split('\n')[0]}</span>` : html`<span>${s.busy ? 'Typesetting…' : ''}</span>`}
-      <span>${box ? shortcutLabel('mod+enter') : 'Enter'} to save · Esc to cancel</span>
+      <span>${shortcutLabel(box ? 'mod+enter' : 'enter')} to save · Esc to cancel</span>
     </div>
   </div>`;
 }
