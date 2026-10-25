@@ -17,6 +17,8 @@
 // host.draw false: no bar drawn, the section in view of each pane followed (panes/pane-state.js section)
 //   bars.layout(split)   the top bar's bar (one pane) or a bar per pane (split)
 //   bars.update()        the section in view again (after a jump, an outline change)
+//   bars.jumped(p, id, arrived?)  a jump to block id's heading in pane p: its section stands as the one in view until
+//                        the reader scrolls (docview/in-view.ts: the rule, for the crumbs and the Outline alike)
 //   bars.current(p)      the outline item shown for pane p (tests)
 //   neighbours(items, k) (pure; test-w15-units): the menu's entries around item k
 import { signal } from '@preact/signals';
@@ -27,6 +29,7 @@ import { DocHeader } from '../chrome/doc-header.js';   // the switcher and the r
 import { openMenu, item } from '../chrome/menu.js';
 import { onChange } from '../app/page-state.ts';
 import { appScroll } from '../perf/anchor.js';
+import { sectionInView } from './in-view.ts';
 
 const nameOf = (it) => `${it.number ? `${it.number} ` : ''}${it.title || 'Untitled section'}`;
 
@@ -50,30 +53,35 @@ export function createPaneBars(host) {
   if (host.draw !== false) stateOf('a');
   let split = false, raf = 0, menu = null;
 
-  function makeState(p) { return { p, el: null, current: signal(null), focused: signal(null), unscroll: null }; }
+  function makeState(p) { return { p, el: null, current: signal(null), focused: signal(null), unscroll: null, target: null }; }
 
-  // ── the section in view ──
-  function inView(p) {
-    const items = host.outline();
+  // ── the section in view ── (the rule: docview/in-view.ts; measured here)
+  function inView(s) {
+    const p = s.p, items = host.outline();
     // a heading in the top band of the pane is the section you read; at the end of the scroll, the last one shown
     const sc = host.scroller(p) ?? document.scrollingElement;
     const atEnd = !!sc && sc.scrollTop > 0 && sc.scrollTop >= sc.scrollHeight - sc.clientHeight - 2;
-    const y = atEnd ? (host.scroller(p)?.getBoundingClientRect().bottom ?? innerHeight) - 48 : host.paneTop(p) + 64;
-    let cur = null;
-    for (const it of items) {
-      const el = host.elementIn(p, it.id);
-      if (!el || el.offsetParent === null) continue;
-      if (el.getBoundingClientRect().top <= y) cur = it; else break;
-    }
-    // before the first heading: the first one shown
-    if (!cur) cur = items.find((it) => { const el = host.elementIn(p, it.id); return el && el.offsetParent !== null; }) ?? null;
-    return cur;
+    const end = (host.scroller(p)?.getBoundingClientRect().bottom ?? innerHeight) - 48;
+    const tops = items.map((it) => { const el = host.elementIn(p, it.id); return el && el.offsetParent !== null ? el.getBoundingClientRect().top : null; });
+    const t = s.target, k = t ? items.findIndex((it) => it.id === t.id) : -1;
+    const at = sectionInView({ tops, line: host.paneTop(p) + 64, atEnd, end, target: k >= 0 ? { k, top: t.top } : null });
+    if (t && t.top != null && at !== k) s.target = null;          // the reader scrolled: the jump's target is over
+    return items[at] ?? null;
+  }
+  /** pane p jumped to the heading of block `id` (the Outline, a section menu): that section is the one in view until
+   *  the reader scrolls; `arrived` settles when the jump has */
+  function jumped(p, id, arrived = Promise.resolve()) {
+    const s = stateOf(p), t = { id, top: null };
+    s.target = t;
+    soon();
+    const land = () => { if (s.target !== t) return; const el = host.elementIn(p, id); if (el) t.top = el.getBoundingClientRect().top; else s.target = null; soon(); };
+    arrived.then(land, land);
   }
   function update() {
     raf = 0;
     for (const s of Object.values(panes)) {
       if (!s.el && !s.tracked) continue;
-      const cur = inView(s.p);
+      const cur = inView(s);
       if (cur?.id !== s.current.peek()?.id || cur?.number !== s.current.peek()?.number || cur?.title !== s.current.peek()?.title) s.current.value = cur;
       // the section in view is the pane's state too (panes/pane-state.js section): crumbs' data
       const sec = host.sectionOf?.(s.p);
@@ -199,7 +207,7 @@ export function createPaneBars(host) {
     cancelAnimationFrame(raf); raf = 0;
   }
 
-  return { layout, update: soon, current: (p) => panes[p]?.current.peek() ?? null, closeMenu, dispose };
+  return { layout, update: soon, jumped, current: (p) => panes[p]?.current.peek() ?? null, closeMenu, dispose };
 }
 
 /** The app's side of the bars, in one place (app.js keeps a two-line hook): the panes (panes/index.js), section
@@ -223,6 +231,7 @@ export function wirePaneBars({ sectionOf = null, root, panes, layout, sectionFoc
       const el = panes.viewOf(p, id)?.root;
       if (!el) return;
       appScroll(P(p), { by: el.getBoundingClientRect().top - paneTop(p) - 8 });   // the keeper told
+      bars.jumped(p, id);                                     // (scrollToBlock tells the bars itself: nav/reveal.js jumped)
     },
     docs: async () => ((await store?.listDocs?.({ limit: 20 })) ?? []).map((d) => ({ id: d.id, title: d.title })),
     docId, openDoc: (id, p) => router.openDoc(id, { pane: p }), home: () => router.home(),

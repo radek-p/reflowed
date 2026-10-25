@@ -2,13 +2,16 @@
 // focused one) through nav/navigate.js's one rule (out of a section focus first, Back comes back, a far
 // way jumps, the last stretch animates). Out of app.js; one per document editor.
 //
-//   const r = createReveal({ pane(id | null) -> Pane, has(blockId), nav, session(paneId), enterEdit, select })
+//   const r = createReveal({ pane(id | null) -> Pane, has(blockId), nav, session(paneId), enterEdit, select, jumped? })
+//     jumped(paneId, blockId, arrived: Promise): told of each outline jump (the pane bars: that section is the one in
+//     view until the reader scrolls, docview/pane-bar.js)
 //   r.revealBlock(id, range, { edit, pane })   scrolled to and opened (a range selected), flashed: a find, a go-to-definition
 //   r.scrollToBlock(id, pane)                   its heading to the top, selected, that pane's editor closed: the outline's jump
 //   r.flashBlock(id)                            flashed in the focused pane, brought into view when it is out of it
 /** @param {{ pane: (id?: string | null) => any, has: (id: string) => boolean, nav: any, session: (pane: string) => any,
- *   enterEdit: (...a: any[]) => any, select: (id: string, o: any) => void }} o */
-export function createReveal({ pane: paneFor, has, nav, session, enterEdit, select }) {
+ *   enterEdit: (...a: any[]) => any, select: (id: string, o: any) => void,
+ *   jumped?: (pane: string, id: string, arrived: Promise<unknown>) => void }} o */
+export function createReveal({ pane: paneFor, has, nav, session, enterEdit, select, jumped = () => {} }) {
   const flash = (el) => { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); };
   /** Scroll to a block and open it (optionally selecting a range); flash it. In the focused pane (a find, a
    *  go-to-definition from pane B's editor stays in pane B), or `pane`. */
@@ -32,12 +35,12 @@ export function createReveal({ pane: paneFor, has, nav, session, enterEdit, sele
   function scrollToBlock(id, pane = null, { quiet = false } = {}) {
     if (!has(id)) return;
     const P = paneFor(pane);
-    if (quiet) { const v = P.viewOf(id)?.root; if (v) nav.reveal(P.id, v, { align: 'top' }); return; }
+    if (quiet) { const v = P.viewOf(id)?.root; if (v) jumped(P.id, id, nav.reveal(P.id, v, { align: 'top' })); return; }
     nav.leaveFocusFor(P.id, id, { history: true });
     { const s = session(P.id); if (s.id && s.id !== id) s.leave({ animate: false }); }
     const el = P.viewOf(id)?.root;
     if (!el) return;
-    nav.reveal(P.id, el, { align: 'top' });              // the keeper's reveal, after a far jump
+    jumped(P.id, id, nav.reveal(P.id, el, { align: 'top' }));   // the keeper's reveal, after a far jump
     select(id, { scroll: false, pane: P.id });         // a smooth scrollIntoView to "nearest" raced the reveal's glide (motion)
   }
   function flashBlock(id) {

@@ -4,7 +4,9 @@
 //
 // A registered view's content: <OutlinePanel ctx> draws the CURRENT document's outline
 // (ctx.current: app/panel-host.ts) in whichever container hosts it, and acts through the document's commands:
-//   a click          nav.scrollTo { id } (the app scrolls to the block, the anchor keeper holds it); that row active
+//   a click          nav.scrollTo { id } (the app scrolls to the block, the anchor keeper holds it); the row active is
+//                    the focused pane's section in view (host.lists.active, the crumbs' own): the jump's target until
+//                    the reader scrolls
 //   a drag (5 px)    block.moveSection { ids, to }: the section (its heading's block to the next heading of the same
 //                    or a higher level), with a drop line between rows; special rows (Abstract, References) do not drag
 //   the preamble     doc.settings (its entry above the sections, with its problems' count)
@@ -17,7 +19,7 @@
 // app.css and the tests know. The list is the workbench kit's tab-stop list (workbench/src/kit/tabstops.ts; the section
 // menu's too): one tab per level, the number right-aligned before it (a bullet, .wb-ts-bul, where none), the name after.
 import { useRef } from 'preact/hooks';
-import type { ReadonlySignal, Signal } from '@preact/signals';
+import type { ReadonlySignal } from '@preact/signals';
 import { html } from '../design/ui/core.js';
 import { sectionBlocks, type OutlineItem } from '../doc/panels.ts';
 import type { ViewContext } from '../design/ui/views.ts';
@@ -69,7 +71,7 @@ function PreambleRow({ problems, open }: { problems: ReadonlySignal<number>; ope
 }
 
 function Outline({ items, active, pinned, onJump, acts, onDrag, pre }: {
-  items: ReadonlySignal<OutlineItem[]>; active: Signal<string | null>; pinned: () => string | null; onJump: (it: OutlineItem, e: MouseEvent) => void; acts: Acts;
+  items: ReadonlySignal<OutlineItem[]>; active: ReadonlySignal<string | null>; pinned: () => string | null; onJump: (it: OutlineItem, e: MouseEvent) => void; acts: Acts;
   onDrag: (e: PointerEvent, it: OutlineItem, list: HTMLOListElement | null) => void; pre: { problems: ReadonlySignal<number>; open: () => void } | null;
 }) {
   const list = items.value, act = active.value, pin = pinned(), ref = useRef<HTMLOListElement>(null);
@@ -135,7 +137,7 @@ export function OutlinePanel({ ctx }: { ctx: ViewContext<PanelHost, EditorRoot> 
   const onNew = openAt ? (it: OutlineItem) => { if (host.docId) openAt(host.docId, it.id); } : null;
   const jump = (it: OutlineItem, e: MouseEvent) => {
     if ((e.ctrlKey || e.metaKey) && onNew) { onNew(it); return; }
-    host.commands.call('nav.scrollTo', { id: it.id }); host.lists.active.value = it.id;
+    host.commands.call('nav.scrollTo', { id: it.id });
   };
   // the pin: section focus on the focused pane (view.sectionFocus); the row of the focused section leaves it. Its state
   // read when drawn, again on each change (root.state.sectionFocus)

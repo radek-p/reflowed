@@ -15,7 +15,7 @@
 //   panels.host · panels.refresh() · panels.setTab(name) · panels.outline() · panels.diagnostics() · panels.todos()
 //   panels.problems() (the last list) · panels.activeId() · panels.locator(id) · panels.labelOptions(cmd)
 //   panels.citeOptions() · panels.hoverCard(k) · panels.marksFor(blockId, text) · panels.dispose()
-import { signal, type ReadonlySignal, type Signal } from '@preact/signals';
+import { computed, signal, type ReadonlySignal, type Signal } from '@preact/signals';
 import { scanRefs, scanCites, texToText } from '../tex/texscan.js';
 import { view, slotsOf } from '../design/ui/views.ts';   // the sidebar's tabs as views (the container's)
 import { showWordCount } from '../chrome/sidebar-chrome.ts';             // the word count footer
@@ -27,11 +27,8 @@ import type { Commands, PanelHost } from './panel-host.ts';
 import type { WordCount } from './page-state.ts';
 
 const AUTHOR_COLOURS = ['#2383e2', '#0f9d58', '#b35c00', '#8a3ea3', '#d44c47', '#3558a8', '#1d7a55'];
-const READ_LINE = 56;                     // a window-scrolled pane's reading line (panes/pane.ts: the top bar + 12 px)
-const TOP = 90;                           // under the top bar (scroll-margin-top 64px): the heading "at the top"
 
 interface Doc { id: string; blocks: Block[]; preamble: { source: string } }
-interface Rect { top: number; bottom: number }
 /** what a document editor gives its panels (app/app.js) */
 export interface PanelsContext {
   root: EditorRoot;
@@ -42,8 +39,8 @@ export interface PanelsContext {
   ck(b: Block): string;
   active?(): boolean;
   commands: Commands;
-  focusedView(id: string): { root: HTMLElement } | null | undefined;
-  focusedBox(): Rect;
+  /** the section in view in the focused pane (a signal read: the crumbs' own, docview/pane-bar.js keeps it) */
+  inView?(): OutlineItem | null;
   /** the focused pane's section focus (its heading's id, null: none) */
   focusedSection?(): string | null;
   preambleProblems(): Problem[];
@@ -108,25 +105,10 @@ export function createPanels(c: PanelsContext) {
   }
 
   // ── the lists (the panels' data) and the host the panels follow ──────────────
-  const lists = { outline: signal<OutlineItem[]>([]), problems: signal<Diagnostic[]>([]), todos: signal<Todo[]>([]), active: signal<string | null>(null) };
-  /** the focused pane's place: its heading's top as if the pane started below the top bar (the row "at the top") */
-  function rectOf(id: string): Rect | null {
-    const el = c.focusedView(id)?.root;
-    if (!el || el.offsetParent === null) return null;
-    const r = el.getBoundingClientRect(), off = c.focusedBox().top - READ_LINE;
-    return { top: r.top - off, bottom: r.bottom - off };
-  }
-  /** the heading at the top of the focused pane: the last item whose block starts above the line, else the first */
-  function markActive() {
-    const items = lists.outline.peek();
-    let best: string | null = null;
-    for (const it of items) { const r = rectOf(it.id); if (r && r.top < TOP) best = it.id; }
-    lists.active.value = best ?? items[0]?.id ?? null;
-  }
-  // any pane's scroll (a split pane scrolls itself, not the window): the active row follows the focused pane
-  let scrollRaf = 0;
-  const onScroll = () => { if (!scrollRaf) scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; if (isActive()) markActive(); }); };
-  const offScroll = root.onScroll(onScroll);
+  // the active row: the focused pane's section in view, the one the crumbs show (one rule for both: docview/in-view.ts;
+  // a jump's target stands until the reader scrolls)
+  const lists = { outline: signal<OutlineItem[]>([]), problems: signal<Diagnostic[]>([]), todos: signal<Todo[]>([]),
+    active: computed<string | null>(() => c.inView?.()?.id ?? null) };
 
   const report = c.problemReport ? (p: Diagnostic) => reportOf(p) : null;
   const host: PanelHost = {
@@ -172,7 +154,7 @@ export function createPanels(c: PanelsContext) {
     // the tabs' counts: the views' badges (chrome/sidebar-chrome.ts draws them)
     slots.badge('problems').value = nProb ? { n: nProb, tone: probs.some((x) => x.kind === 'error') ? 'danger' : undefined } : null;
     slots.badge('todos').value = td.length ? { n: td.length } : null;
-    lists.outline.value = outline(); markActive();
+    lists.outline.value = outline();
     lists.problems.value = probs;
     lists.todos.value = td;
     drawCount();
@@ -254,7 +236,6 @@ export function createPanels(c: PanelsContext) {
 
   /** the listeners this module added; the container stops showing its host */
   function dispose() {
-    offScroll(); cancelAnimationFrame(scrollRaf);
     if (root.state.panels.peek() === host) root.state.panels.value = null;
   }
   return { host, refresh, outline, outlineRuns: () => outlineRuns, diagnostics, todos, labelOptions, citeOptions, hoverCard: card, marksFor, setTab, locator: (id: string) => locator(id),   // the Files panel's "where"

@@ -109,11 +109,36 @@ const loadMs = Date.now() - t0;
   check('outline: sections numbered, appendix lettered, abstract and references', JSON.stringify(titles) === JSON.stringify(['Abstract', '1 Introduction', '2 Preliminaries', '3 Functors and natural transformations', 'A Omitted proofs', 'References']), titles.join(' | '));
   const n = await page.locator('#panel-outline .ol-item').count();
   check('outline: drawn in the sidebar', n === ol.length, `${n} items`);
+  // one of the last sections cannot come to the top (the page ends first): then the page is at its end and the
+  // section is the active row (the jump's target stands as the section in view until the reader scrolls)
+  const placed = () => page.evaluate(() => {
+    const id = (window as any).editorAPI.outline().find((o: any) => o.title === 'Omitted proofs').id;
+    const top = document.querySelector(`.blk[data-id="${id}"]`)!.getBoundingClientRect().top;
+    const p = document.querySelector('[data-part="page"]') as HTMLElement, max = p.scrollHeight - p.clientHeight;
+    const active = document.querySelector('#panel-outline .ol-item.active')?.textContent ?? '';
+    return { top, atEnd: p.scrollTop > 0 && p.scrollTop >= max - 2, active, scrollTop: p.scrollTop, max, h: p.clientHeight };
+  });
   await page.locator('#panel-outline .ol-item', { hasText: 'Omitted proofs' }).locator('button.ol-link').click();
-  await page.waitForFunction(() => { const id = (window as any).editorAPI.outline().find((o: any) => o.title === 'Omitted proofs').id; const r = document.querySelector(`.blk[data-id="${id}"]`)!.getBoundingClientRect(); return r.top >= 0 && r.top < 160; }, null, { timeout: 5000 }).catch(() => {});
-  const top = await page.evaluate(() => { const id = (window as any).editorAPI.outline().find((o: any) => o.title === 'Omitted proofs').id; return document.querySelector(`.blk[data-id="${id}"]`)!.getBoundingClientRect().top; });
-  const active = await page.locator('#panel-outline .ol-item.active').textContent();
-  check('outline: click scrolls to the section and marks it active', top >= 0 && top < 160 && /Omitted proofs/.test(active ?? ''), `top ${top.toFixed(0)}; active ${active}; ${JSON.stringify(await page.evaluate(() => { const p = document.querySelector('[data-part="page"]') as HTMLElement; return { scrollTop: p.scrollTop, max: p.scrollHeight - p.clientHeight, h: p.clientHeight }; }))}`);
+  await page.waitForFunction(() => { const id = (window as any).editorAPI.outline().find((o: any) => o.title === 'Omitted proofs').id; const r = document.querySelector(`.blk[data-id="${id}"]`)!.getBoundingClientRect(); const p = document.querySelector('[data-part="page"]') as HTMLElement; return r.top >= 0 && (r.top < 160 || p.scrollTop >= p.scrollHeight - p.clientHeight - 2); }, null, { timeout: 5000 }).catch(() => {});
+  const at = await placed();
+  check('outline: click scrolls to the section and marks it active', at.top >= 0 && (at.top < 160 || (at.atEnd && at.top < at.h)) && /Omitted proofs/.test(at.active), JSON.stringify(at));
+  // the Outline's active row, the tab's crumb and the jump's target (the selected heading) name one section, also for
+  // the last one: they were three answers (the Outline "3 Functors…", the crumb "References", the target)
+  const agree = (title: string) => page.evaluate((t: string) => {
+    const id = (window as any).editorAPI.outline().find((o: any) => o.title === t).id;
+    const active = document.querySelector('#panel-outline .ol-item.active');
+    return { want: id, active: (active as HTMLElement | null)?.dataset.id ?? null, activeText: active?.textContent ?? '',
+      crumb: document.querySelector('.wb-tab--on .wb-tab-sec')?.textContent ?? '', target: (document.querySelector('.blk.selected') as HTMLElement | null)?.dataset.id ?? null };
+  }, title);
+  const agreeing = (r: { want: string; active: string | null; crumb: string; target: string | null }, title: string) => r.active === r.want && r.target === r.want && r.crumb.includes(title);
+  for (const title of ['Omitted proofs', 'References']) {
+    if (title !== 'Omitted proofs') await page.locator('#panel-outline .ol-item', { hasText: title }).locator('button.ol-link').click();
+    await page.waitForFunction((t: string) => { const id = (window as any).editorAPI.outline().find((o: any) => o.title === t).id; return (document.querySelector('#panel-outline .ol-item.active') as HTMLElement | null)?.dataset.id === id && (document.querySelector('.wb-tab--on .wb-tab-sec')?.textContent ?? '').includes(t); }, title, { timeout: 5000 }).catch(() => {});
+    const r = await agree(title);
+    check(`outline: after a click on "${title}" the active row, the crumb and the target agree`, agreeing(r, title), JSON.stringify(r));
+  }
+  await page.locator('#panel-outline .ol-item', { hasText: 'Omitted proofs' }).locator('button.ol-link').click();
+  await page.waitForFunction(() => /Omitted proofs/.test(document.querySelector('#panel-outline .ol-item.active')?.textContent ?? ''), null, { timeout: 5000 }).catch(() => {});
   await shot(page, '03-outline-scrolled');
   // drag section 3 above section 2 (through the outline), then undo
   const before = (await blocks(page)).map((b: any) => b.id);

@@ -630,7 +630,8 @@ export function createDocEditor(ctx) {
   });
   // a block shown in a pane: a find's, a go-to's, the outline's jump, a flash (../nav/reveal.js)
   const { revealBlock, scrollToBlock, flashBlock } = createReveal({ pane: (p) => paneFor(p), has: (id) => !!ui.get(id), nav,
-    session: (p) => edits.session(p), enterEdit: (...a) => enterEdit(...a), select: (id, o) => select(id, o) });
+    session: (p) => edits.session(p), enterEdit: (...a) => enterEdit(...a), select: (id, o) => select(id, o),
+    jumped: (p, id, arrived) => paneBars.jumped(p, id, arrived) });            // the section in view: the jump's, until the reader scrolls
   const undoUi = createUndo({ S, edits, panes, revealBlock, toast, saveBlock, sourcesChanged: (id) => sourcesChanged((x) => x.id === id || blocks.stale(x)), compileSoon: () => compileSoon() });
   // a key in a pane of another document is that document's; one outside the panes, the current document's
   const NONE = '\u0000none';
@@ -659,7 +660,8 @@ export function createDocEditor(ctx) {
 
   const panels = createPanels({
     root, get doc() { return S.doc; }, refs, ui, cache, ck: (b) => ck(b), active,   // drawn in the sidebar while current
-    focusedView: (id) => panes.focused().viewOf(id), focusedBox: () => panes.focused().box(), focusedSection: () => sectionFocus.get(panes.focused().id),   // the outline follows the focused pane
+    inView: () => { void layout.focused.value; return paneStates.of(panes.focused().id).section.value; },   // the outline follows the focused pane: the crumbs' section
+    focusedSection: () => sectionFocus.get(panes.focused().id),
     preambleProblems: () => results.preamble.peek().errors ?? [], words: results.words,
     thmSet: () => derived.thmSet,
     indexOf, commands: { call: (id, input) => command(id, input), enabled: (id, input) => commands.enabled(id, input) },   // the panels act through commands
