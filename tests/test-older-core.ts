@@ -32,6 +32,13 @@ const id: string = await page.evaluate(async (core: number) => {
   await s.backend.run(['docs'], 'readwrite', async (tx: any) => { const d = await tx.get('docs', id); await tx.put('docs', { ...d, schema: core }); });
   return id;
 }, CORE_VERSION - 1);
+/** a one-paragraph document stored at core version `core` */
+const older = (title: string, core: number): Promise<string> => page.evaluate(async ([title, core]: [string, number]) => {
+  const s = (window as any).editorAPI.store();
+  const id = await s.createDoc({ title, blocks: [{ source: 'A paragraph.' }] });
+  await s.backend.run(['docs'], 'readwrite', async (tx: any) => { const d = await tx.get('docs', id); await tx.put('docs', { ...d, schema: core }); });
+  return id;
+}, [title, core] as [string, number]);
 const rawOf = (i: string) => page.evaluate(async (i: string) => {
   const s = (window as any).editorAPI.store();
   return JSON.stringify(await s.backend.run(['docs', 'blocks', 'assets'], 'readonly', async (tx: any) => ({ d: await tx.get('docs', i), b: await tx.all('blocks', 'byDoc', { only: i }), a: (await tx.all('assets', 'byDoc', { only: i })).length })));
@@ -73,21 +80,20 @@ const again = await page.evaluate(async (text: string) => {
 }, tex);
 t.check('the downloaded .tex re-imports to the same bytes (ids aside)', sameUpToIds(tex, again));
 t.check('the older document was not written (record, blocks, assets as stored; no openedAt)', (await rawOf(id)) === before);
-await t.openDoc(page, id);
+
+// Close: another older document (the first one's tab is still open, so opening it again only shows that tab)
+const id2 = await older('Another from an older ReflowEd', CORE_VERSION - 1);
+await t.openDoc(page, id2);
 await page.waitForSelector('#rtx-older-core[open]');
 await page.click('#rtx-older-core [data-act="close"]');
 await page.waitForSelector('#rtx-older-core', { state: 'detached' });
-await page.click('.blk[data-state="ok"] .blk-render');
-await t.idle(page);
-t.check('after Close: read-only, a click does not open the editor', (await page.evaluate(() => document.querySelectorAll('.blk.editing').length)) === 0);
+// its block by id: the other documents' tabs have blocks too, out of sight
+const okId: string | null = await page.evaluate(() => (window as any).editorAPI.blocks().find((b: any) => b.state === 'ok')?.id ?? null);
+if (okId) { await page.click(`.blk[data-id="${okId}"] .blk-render`); await t.idle(page); }
+t.check('after Close: read-only, a click does not open the editor', !!okId && (await page.evaluate(() => document.querySelectorAll('.blk.editing').length)) === 0, okId ?? 'no typeset block');
 
 // a newer core: the toast only, no prompt
-const nid: string = await page.evaluate(async (core: number) => {
-  const s = (window as any).editorAPI.store();
-  const id = await s.createDoc({ title: 'From a newer ReflowEd', blocks: [{ source: 'Later.' }] });
-  await s.backend.run(['docs'], 'readwrite', async (tx: any) => { const d = await tx.get('docs', id); await tx.put('docs', { ...d, schema: core }); });
-  return id;
-}, CORE_VERSION + 1);
+const nid = await older('From a newer ReflowEd', CORE_VERSION + 1);
 await t.openDoc(page, nid);
 const nw = await page.evaluate(() => ({ prompt: !!document.querySelector('#rtx-older-core'), toast: document.querySelector('#toast-text')?.textContent ?? '' }));
 t.check('a newer core: no prompt, the read-only toast', !nw.prompt && /newer version of ReflowEd/.test(nw.toast), nw);

@@ -35,7 +35,7 @@ copyFileSync(FILE, second);
 const ctx = await pw[BROWSER].launchPersistentContext(join(dir, 'profile'), { viewport: { width: 1280, height: 900 } });
 await ctx.route('**/*', (r: any) => (/^(file|blob|data):/.test(r.request().url()) ? r.continue() : r.abort()));
 const page = ctx.pages()[0] ?? await ctx.newPage();
-page.setDefaultTimeout(1800000);
+page.setDefaultTimeout(300000);   // a wait (not an evaluate): the suite's own limit (tests/suites.ts) covers the rest
 const errors: string[] = [];
 page.on('pageerror', (e: Error) => errors.push(e.message));
 
@@ -44,10 +44,11 @@ const compiled = () => page.evaluate(() => ((globalThis as any).__rtxEditor?.bac
 /** the counters summed over the backends */
 const sums = () => page.evaluate(() => { const o: Record<string, number> = {}; for (const b of (globalThis as any).__rtxEditor?.backends ?? []) for (const [k, v] of Object.entries(b.stats?.() ?? {})) if (typeof v === 'number') o[k] = (o[k] ?? 0) + v; return o; });
 const stats = () => page.evaluate(() => ((globalThis as any).__rtxEditor?.backends ?? []).map((b: any) => b.stats?.()));
-/** a real page load (a goto that changes only the hash would keep the page and its memory) */
+/** a real page load (a goto that changes only the hash would keep the page and its memory), on the home view:
+ *  ?fresh, the default layout (a reload otherwise restores the last layout, its document's tab open and shown) */
 async function load(file: string) {
   await page.goto('about:blank');
-  await page.goto(`file://${file}#/`);
+  await page.goto(`file://${file}?fresh#/`);
   await page.waitForFunction(() => (window as any).editorAPI?.route?.().name === 'home');
   await page.evaluate(() => (window as any).editorAPI.homeIdle?.());
 }

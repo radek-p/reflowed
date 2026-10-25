@@ -30,8 +30,9 @@
 //   --known           list the known failures with their reason, note and age, and run nothing
 //
 // The dev servers are started here on free ports (tests/integration/serve.ts: the app with the engine, cold and
-// seeded), one set per lane, and stopped at the end. Suites run
-// one after another (or --lanes N at a time, then the timing-sensitive ones alone) with a time limit each.
+// seeded), one set per lane, and stopped at the end; a dev suite's server is probed before it starts and started
+// again when it died. Suites run one after another (or --lanes N at a time, then the timing-sensitive ones alone)
+// with a time limit each: at the limit the suite and every process it started are killed.
 // Each run has its own directory, test-results/all/runs/<date>-<pid>/ (test-results/all/latest points at the last
 // one): each suite's output goes to <name>.log there, and the suite writes its results under <name>/ (RTX_RESULTS,
 // tests/qa/lib/results.ts), so that two suites (w15 and w15-file) or two lanes never write the same files. The 10
@@ -143,19 +144,51 @@ for (const old of readdirSync(join(OUT, 'runs')).sort().slice(0, -10)) rmSync(jo
 console.log(`results: ${RUN}`);
 
 // ── servers (one set per lane) ───────────────────────────────────────────────
-const servers: ChildProcess[] = [];
-async function up(script: string, port: number, probe: string, ...more: string[]): Promise<string> {
-  const p = spawn(process.execPath, [join(HERE, script), String(port), ...more], { cwd: HERE, stdio: ['ignore', 'ignore', 'inherit'] });
-  servers.push(p);
-  const base = `http://localhost:${port}`;
+// Each suite's server is probed before the suite starts: one that died (the OOM killer takes a ~1 GB server on a
+// crowded machine) or stopped answering is started again on its port, so one dead server does not fail every later
+// suite; one that cannot be started again is reported once, and the suites that need it fail with that line.
+interface Server { script: string; port: number; probe: string; more: string[]; p: ChildProcess | null; down?: string }
+const servers: Server[] = [];
+const byBase = new Map<string, Server>();
+const answers = async (url: string, ms: number) => {
+  try { const r = await fetch(url, { signal: AbortSignal.timeout(ms) }); await r.arrayBuffer(); return r.ok; } catch { return false; }
+};
+const gone = (p: ChildProcess | null) => !p || p.exitCode != null || p.signalCode != null;
+async function start(s: Server): Promise<void> {
+  const p = spawn(process.execPath, [join(HERE, s.script), String(s.port), ...s.more], { cwd: HERE, stdio: ['ignore', 'ignore', 'inherit'] });
+  s.p = p;
   for (let i = 0; ; i++) {
-    try { const r = await fetch(base + probe); await r.arrayBuffer(); if (r.ok) return base; } catch { /* not yet */ }
-    if (p.exitCode != null) throw new Error(`${script} exited (${p.exitCode})`);
-    if (i > 1200) throw new Error(`${script} did not answer on ${port}`);
+    if (await answers(`http://localhost:${s.port}${s.probe}`, 5000)) return;
+    if (gone(p)) throw new Error(`${s.script} exited (${p.signalCode ?? p.exitCode})`);
+    if (i > 1200) throw new Error(`${s.script} did not answer on ${s.port}`);
     await new Promise((r) => setTimeout(r, 100));
   }
 }
-const stop = () => { for (const p of servers) p.kill(); };
+async function up(script: string, port: number, probe: string, ...more: string[]): Promise<string> {
+  const s: Server = { script, port, probe, more, p: null };
+  servers.push(s);
+  await start(s);
+  const base = `http://localhost:${port}`;
+  byBase.set(base, s);
+  return base;
+}
+/** the server at `base` answers, or is started again: null, else why it is down (printed once) */
+async function serverUp(base: string): Promise<{ down: string | null; restarted?: string }> {
+  const s = byBase.get(base);
+  if (!s) return { down: null };
+  if (s.down) return { down: s.down };
+  if (!gone(s.p) && await answers(base + s.probe, 15000)) return { down: null };
+  const why = gone(s.p) ? `exited (${s.p?.signalCode ?? s.p?.exitCode})` : 'did not answer';
+  console.log(`\n     the dev server ${base} ${why}: starting it again …`);
+  if (s.p && !gone(s.p)) { const p = s.p; await new Promise((r) => { p.once('exit', r); p.kill('SIGKILL'); }); }
+  try { await start(s); return { down: null, restarted: `the dev server ${base} ${why}: started again before this suite` }; }
+  catch (e) {
+    s.down = `the dev server ${base} is down (${why}; starting it again failed: ${(e as Error).message})`;
+    console.log(`     ${s.down}: the suites that need it fail with this line`);
+    return { down: s.down };
+  }
+}
+const stop = () => { for (const s of servers) s.p?.kill(); };
 process.on('exit', stop);
 process.on('SIGINT', () => { stop(); process.exit(130); });
 
@@ -210,13 +243,23 @@ if (needDev) {
 // ── run ──────────────────────────────────────────────────────────────────────
 interface Row { name: string; group: string; status: 'pass' | 'fail' | 'known' | 'skipped' | 'timeout' | 'flaky' | 'unsure'; load?: number[]; first?: string[]; counts: string; seconds: number; fails: string[]; known: string[]; note?: string; wallOver?: number; factors?: [number, number]; tooLoaded?: number; sampled?: boolean; seeded?: boolean; lane?: number; phase?: 'lanes' | 'quiet' }
 const rows: Row[] = [];
-function run(s: Suite, sampled: boolean, L: Lane): Promise<Row> {
+/** pid and its descendants, read before any is killed (a killed parent's children go to init and out of reach) */
+function tree(pid: number): number[] {
+  let ps: number[][] = [];
+  try { ps = execFileSync('ps', ['-A', '-o', 'pid=,ppid='], { encoding: 'utf8' }).split('\n').map((l) => l.trim().split(/\s+/).map(Number)).filter((r) => r.length === 2 && r[0] > 0); } catch { /* no ps: the pid alone */ }
+  const out = [pid];
+  for (let i = 0; i < out.length; i++) for (const [c, pp] of ps) if (pp === out[i] && !out.includes(c)) out.push(c);
+  return out;
+}
+async function run(s: Suite, sampled: boolean, L: Lane): Promise<Row> {
+  // every row's script is in the repository (test-select checks it): a missing one fails, it is not skipped
+  if (!existsSync(join(HERE, scriptOf(s)))) return { name: s.name, group: s.group, status: 'fail', counts: '', seconds: 0, fails: [`${scriptOf(s)} is not in the repository`], known: [] };
+  const miss = s.needs === 'file' && !existsSync(FILE) ? `${FILE} not built (node scripts/build.ts)` : s.needs === 'intro' && !introBuilt() ? 'the intro is not built (node scripts/seed.ts)' : s.seedOnly && !seedOk ? 'no dev seed cache (--cold, or it does not fit the worker)' : null;
+  if (miss) return { name: s.name, group: s.group, status: 'skipped', counts: '', seconds: 0, fails: [], known: [], note: miss };
+  const useSeed = !!L.seeded && seedOk && seeded(s);
+  const srv = s.group === 'dev' ? await serverUp(useSeed ? L.seeded : L.ctx.dev) : { down: null };
+  if (srv.down) return { name: s.name, group: s.group, status: 'fail', counts: '', seconds: 0, fails: [srv.down], known: [] };
   return new Promise((resolve) => {
-    // every row's script is in the repository (test-select checks it): a missing one fails, it is not skipped
-    if (!existsSync(join(HERE, scriptOf(s)))) { resolve({ name: s.name, group: s.group, status: 'fail', counts: '', seconds: 0, fails: [`${scriptOf(s)} is not in the repository`], known: [] }); return; }
-    const miss = s.needs === 'file' && !existsSync(FILE) ? `${FILE} not built (node scripts/build.ts)` : s.needs === 'intro' && !introBuilt() ? 'the intro is not built (node scripts/seed.ts)' : s.seedOnly && !seedOk ? 'no dev seed cache (--cold, or it does not fit the worker)' : null;
-    if (miss) { resolve({ name: s.name, group: s.group, status: 'skipped', counts: '', seconds: 0, fails: [], known: [], note: miss }); return; }
-    const useSeed = !!L.seeded && seedOk && seeded(s);
     const [cmd, ...args] = (sampled && s.sample ? s.sample : s.cmd)(useSeed ? { ...L.ctx, dev: L.seeded } : L.ctx);
     const log = createWriteStream(join(RUN, `${s.name}.log`));
     const t0 = Date.now();
@@ -224,10 +267,19 @@ function run(s: Suite, sampled: boolean, L: Lane): Promise<Row> {
     let text = '';
     const take = (d: Buffer) => { text += d.toString(); log.write(d); };
     p.stdout.on('data', take); p.stderr.on('data', take);
-    let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; p.kill('SIGKILL'); }, s.minutes * 60000);
-    p.on('close', (code) => {
-      clearTimeout(timer);
+    // the time limit: the suite and everything it started (its browsers) killed; its output ends with them, or
+    // 10 s later at the latest (a process out of reach holding the pipes does not keep the run waiting)
+    let timedOut = false, ended = false, grace: ReturnType<typeof setTimeout> | null = null;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      for (const pid of p.pid ? tree(p.pid) : []) { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } }
+      grace = setTimeout(() => { p.stdout.destroy(); p.stderr.destroy(); end(null); }, 10000);
+    }, s.minutes * 60000);
+    p.on('close', (code) => end(code));
+    function end(code: number | null) {
+      if (ended) return;
+      ended = true;
+      clearTimeout(timer); if (grace) clearTimeout(grace);
       log.end();
       const lines = text.split('\n');
       const failLines = lines.filter((l) => /^\s*FAIL\b/.test(l) || /^FAIL /.test(l));
@@ -243,8 +295,8 @@ function run(s: Suite, sampled: boolean, L: Lane): Promise<Row> {
       const status: Row['status'] = timedOut ? 'timeout' : bad ? 'fail' : loadedOnly ? 'unsure' : known.length ? 'known' : 'pass';
       if (code !== 0 && !fails.length && !known.length && !timedOut && !loadedOnly) fails.push(`exit ${code}: ${lines.filter(Boolean).slice(-3).join(' | ').slice(0, 300)}`);
       const wallOver = lines.filter((l) => /^wall OVER/.test(l)).length;      // wall-clock misses the work measures did not share
-      resolve({ name: s.name, group: s.group, status, counts, seconds: Math.round((Date.now() - t0) / 1000), fails, known, ...(wallOver ? { wallOver } : {}), ...(factors ? { factors } : {}), ...(tooLoaded ? { tooLoaded } : {}), ...(sampled ? { sampled: true } : {}), ...(useSeed ? { seeded: true } : {}) });
-    });
+      resolve({ name: s.name, group: s.group, status, counts, seconds: Math.round((Date.now() - t0) / 1000), fails, known, ...(srv.restarted ? { note: srv.restarted } : {}), ...(wallOver ? { wallOver } : {}), ...(factors ? { factors } : {}), ...(tooLoaded ? { tooLoaded } : {}), ...(sampled ? { sampled: true } : {}), ...(useSeed ? { seeded: true } : {}) });
+    }
   });
 }
 /** a timing suite that failed runs once more (the flaky ledger); load is read before each run */
