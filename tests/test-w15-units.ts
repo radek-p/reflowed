@@ -230,8 +230,8 @@ check('300 random reorders land in order', okAll, worst);
   const b = { id: 'p', source: 'Text.' }, cached = new Set(['Text.']);
   let due = 0;
   const live = createLive({ ui: new Map([['p', { render: {}, mounted: null }]]), blockById: () => b, cache: new Map(), viewKey: () => 'k', viewResult: (x: any) => (cached.has(x.source) ? { status: 'ok' } : null),
-    mount: () => Promise.resolve(), display() {}, compileSoon() {}, needsCompile: () => false, blocks: () => [b], delay: () => 300,
-    queue: { markDue() { due++; }, clearDue() {} }, isLive: () => true, noteShown: () => false, caretSoon() {} });
+    mount: () => Promise.resolve(), display() {}, compileSoon() {}, delay: () => 300,
+    queue: { markDue() { due++; }, clearDue() {}, waiting: () => false }, isLive: () => true, noteShown: () => false, caretSoon() {} });
   live.begin('p');
   // seven backspaces 20 ms apart back to the cached source: the first one sends, the rest wait for the pause
   const steps = ['Text. Zyxwv', 'Text. Zyxw', 'Text. Zyx', 'Text. Zy', 'Text. Z', 'Text. ', 'Text.'];

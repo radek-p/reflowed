@@ -432,7 +432,7 @@ export function createDocEditor(ctx) {
       ui, cache, get queue() { return queue; },
       blockById: (id) => blockById(id), viewKey: (b) => viewKey(b), viewResult: (b) => viewResult(b),
       mount: (id, r, key) => mount(id, r, key), display: (id) => display(id), compileSoon: () => compileSoon(),
-      needsCompile: (b) => needsCompile(b), blocks: () => S.doc?.blocks ?? [], delay: () => ctx.view?.previewDelay,
+      delay: () => ctx.view?.previewDelay,
     },
   });
 
@@ -487,7 +487,6 @@ export function createDocEditor(ctx) {
   }
   function compileSoon() { queue.soon(); }
   function settle() { queue.settle(); }
-  function needsCompile(b) { return queue.needsCompile(b); }
   function userBlock(id) { return queue.userBlock(id); }
 
   /** Blocks TeX typesets nothing for: shown as a marker or their source, never compiled. */

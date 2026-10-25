@@ -1,4 +1,4 @@
-// The compile queue's two requests land the same way (app/compile-queue.js land()): the urgent one (the
+// The compile queue (app/compile-queue.js). Its two requests land the same way (app/compile-queue.js land()): the urgent one (the
 // edited block, ahead of a background request in flight) brings its fonts too. It kept the block's result only, so a
 // font first used by the block being edited was served with the next background request.
 //   node app/src/app/compile-queue.test.ts      (Node; exit 1 on a failure)
@@ -42,5 +42,47 @@ check('… and the urgent request does not set the preamble\'s result (the backg
 background!({ blocks: { A: ok('A') }, preamble: { errors: [] }, fonts: {} });
 await q.whenSettled();
 check('the background request lands its blocks, its preamble result and its fonts', cache.has('A:a') && preambles.length === 1 && fonts.length === 2);
+
+// A long document typed in: each look over the document is one pass (every block's key once, inside the host's pass),
+// and results landing while the user types are shown again once, when input is quiet (it was once per landing, all in
+// one task when typing stopped).
+{
+  const blocks: Block[] = Array.from({ length: 6 }, (_, i) => ({ id: `b${i}`, source: `text ${i}`, kind: 'paragraph' }));
+  const doc2 = { preamble: { source: '' }, blocks };
+  const keyCalls = new Map<string, number>();
+  const perPass: number[] = [];                          // the most keys of one block computed in each pass
+  let inPass = 0, outside = 0, redisplays = 0, atRequest: number[] = [];
+  let quiet: (() => void) | null = null;
+  const quietNow = new Promise<void>((r) => { quiet = r; });
+  const perf2 = { ...perf, inputActive: () => !!quiet, untilQuiet: () => quietNow };
+  const backend2 = { id: 'fake', compile(req: Req) {
+    atRequest = blocks.map((b) => keyCalls.get(b.id) ?? 0);
+    return Promise.resolve({ blocks: Object.fromEntries(req.blocks.map((b) => [b.id, ok(b.id)])), fonts: {} });
+  } };
+  const q2 = createCompileQueue({
+    doc: () => doc2, backend: () => backend2,
+    cache: new Map(), keyOf: (b: Block) => { if (!inPass) outside++; keyCalls.set(b.id, (keyCalls.get(b.id) ?? 0) + 1); return `${b.id}:${b.source}`; },
+    pass: (fn: () => unknown) => {
+      inPass++; keyCalls.clear();
+      try { return fn(); } finally { inPass--; perPass.push(Math.max(0, ...keyCalls.values())); }
+    },
+    compileSource: (b: Block) => b.source, contextOf: () => '', skip: () => false, isEditing: () => false, visible: new Set(), indexOf: (id: string) => blocks.findIndex((b) => b.id === id),
+    perf: perf2, counters: { requests: 0, partsSent: 0, compiledIds: [] }, display() {}, redisplay() { redisplays++; }, stale: () => true, token: () => 0, compiling() {},
+    liveSending() {}, liveLanded() {}, persist() {}, setStatus() {}, preHash: () => 'p', preambleLanded() {}, applyFonts() {}, changed() {}, changedLater() {},
+  });
+  for (let k = 0; k < 3; k++) {                         // three keystrokes, each compiled and landed while input is active
+    blocks[2]!.source = `text 2, typed ${k}`;
+    q2.soon();
+    await q2.whenSettled();
+  }
+  check('typing: three results landed while typing, none shown again yet', redisplays === 0 && q2.draining());
+  check('typing: each pass computes every block\'s key once (want, keys, keep before the request; the count and the status after it)',
+    perPass.length > 0 && perPass.every((m) => m === 1) && outside === 0, JSON.stringify({ perPass, outside }));
+  check('typing: … the request carries keys computed once per block', atRequest.length === blocks.length && atRequest.every((c) => c === 1), JSON.stringify(atRequest));
+  quiet!(); quiet = null;
+  await quietNow; await Promise.resolve();
+  check('typing: input quiet: the landed results shown again once (one redisplay for three landings)', redisplays === 1 && !q2.draining(), `redisplays ${redisplays}`);
+  check('typing: waiting() is one pass and false when everything is typeset', !q2.waiting() && perPass.at(-1) === 1);
+}
 console.log(`${n - bad}/${n} passed`);
 process.exit(bad ? 1 : 0);

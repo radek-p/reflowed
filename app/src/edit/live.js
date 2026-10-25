@@ -11,7 +11,7 @@
 //
 //   const live = createLive(core)
 //   core: { ui, blockById(id), cache, viewKey(b), viewResult(b), mount(id, r, key) -> Promise, display(id), compileSoon(),
-//           needsCompile(b), blocks(), queue, delay(), isLive(id) }
+//           queue (markDue, clearDue, waiting(except)), delay(), isLive(id) }
 //   live.begin(id) · live.end(id) · live.sending(keys) · live.landed(id, key) · live.soon(id) · live.pending()
 //   live.display(id, b, u) -> null (not live) | { kind: 'none' | 'ok' | 'wait' | 'error', errors }   (mounts into every view: panes/blocks.js)
 export const SLOW_MS = 250, PREVIEW_DELAY = 300, ERROR_AFTER = 1500;
@@ -106,7 +106,7 @@ export function createLive(core) {
     const now = performance.now();
     const inBurst = now - (s.lastChange ?? -Infinity) < BURST_MS && now - (s.lastSent ?? -Infinity) < MAX_WAIT;
     s.lastChange = now;
-    const waiting = slow || inBurst || core.blocks().some((x) => x.id !== id && core.needsCompile(x));
+    const waiting = slow || inBurst || core.queue.waiting(id);                 // other blocks wait to be typeset
     if (!waiting) { s.lastSent = now; core.queue.markDue(id); core.compileSoon(); return; }
     s.timer = setTimeout(() => {
       s.timer = 0;
