@@ -34,12 +34,12 @@ function fake(over: Partial<DocFilesHost> = {}, io: Partial<FilesIo> = {}) {
   const { files, log } = fake();
   await files.exportTex();
   check('exportTex: the editors leave, every write lands, then the stored document (figures\' trash out) is exported', log.join('|') === 'leave|settled|getDoc d1|exportTex {"id":"d1","stored":true,"trash":false}', log);
-  check('… downloaded as <title>.tex', downloads.at(-1)?.name === 'my-paper-draft-2.tex' && downloads.at(-1)?.type === 'text/x-tex', downloads.at(-1));
+  check('… downloaded as <title>.tex (io/download.ts fileName: case kept, the colon out)', downloads.at(-1)?.name === 'My-Paper-Draft-2.tex' && downloads.at(-1)?.type === 'text/x-tex', downloads.at(-1));
 }
 {
   const { files } = fake();
   await files.exportZip();
-  check('exportZip: downloaded as <title>.zip', downloads.at(-1)?.name === 'my-paper-draft-2.zip');
+  check('exportZip: downloaded as <title>.zip', downloads.at(-1)?.name === 'My-Paper-Draft-2.zip');
 }
 {
   const { files, log } = fake();

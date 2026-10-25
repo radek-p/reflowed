@@ -33,6 +33,7 @@ import { html, render, ensureStyles, openLayer, Popover, Menu, MenuItem } from '
 import { registerView, slotsOf } from '../design/ui/views.ts';   // its sidebar tab as a view (the container's)
 import { Pane } from './view.ts';
 import { page, onChange } from '../app/page-state.ts';
+import { download } from '../io/download.ts';
 
 const PRINTS_BIB = /\\(printbibliography|bibliography\s*\{|printbibheading)/;
 
@@ -309,10 +310,7 @@ export function createBibPane({ h }) {
   }
   function exportBib() {
     const text = exportBibtex(lib());
-    const blob = new Blob([text], { type: 'text/x-bibtex' });
-    const a = h('a', '', { href: URL.createObjectURL(blob), download: 'references.bib' });
-    document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    download('references.bib', text, 'text/x-bibtex');
     host.toast(`references.bib: ${lib().entries.length} entries`);
     return text;
   }

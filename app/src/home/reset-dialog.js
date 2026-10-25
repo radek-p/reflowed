@@ -9,7 +9,7 @@
 import { signal } from '@preact/signals';
 import { html, Button, Dialog, openLayer } from '../design/ui/index.js';
 import { exportAllZip } from '../io/export-all.ts';
-import { download } from '../io/export.ts';
+import { download } from '../io/download.ts';
 import { announceReset, wipeOrigin } from '../store/wipe.js';
 
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;

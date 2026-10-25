@@ -7,7 +7,8 @@
 // The older document stays as it is (the older build keeps working on it). `prepare` is the app's export view of
 // the document (svgfig's forExport: the trash left out), the same as Export .tex uses.
 import type { DocStore, OpenDoc } from '../store/types.ts';
-import { exportSingle, slug } from './export.ts';
+import { exportSingle } from './export.ts';
+import { fileName } from './download.ts';
 import { importUpload, freshIds } from './import.ts';
 
 type Prepare = (d: OpenDoc) => OpenDoc;
@@ -17,7 +18,7 @@ export async function exportOlder(store: DocStore, docId: string, prepare: Prepa
   if (!raw) throw new Error(`no document ${docId}`);
   const d = prepare(raw);
   const { text, missing } = exportSingle(d, d.blocks, d.assets ?? []);
-  return { name: `${slug(d.title)}.tex`, text, missing };
+  return { name: `${fileName(d.title)}.tex`, text, missing };
 }
 
 export async function startAnew(store: DocStore, docId: string, prepare?: Prepare): Promise<{ docId: string; text: string; copied: string[] }> {

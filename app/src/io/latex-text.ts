@@ -79,10 +79,17 @@ export function texToPlain(src: string): string {
   return s.replace(/\s+/g, ' ').trim();
 }
 
-const FOLD: Record<string, string> = { ł: 'l', Ł: 'l', ø: 'o', Ø: 'o', đ: 'd', Đ: 'd', ß: 'ss', æ: 'ae', Æ: 'ae', œ: 'oe', Œ: 'oe', ı: 'i', þ: 'th', ð: 'd' };
+const FOLD: Record<string, string> = {
+  ł: 'l', Ł: 'L', ø: 'o', Ø: 'O', đ: 'd', Đ: 'D', ð: 'd', Ð: 'D', ß: 'ss', æ: 'ae', Æ: 'AE', œ: 'oe', Œ: 'OE', ı: 'i', þ: 'th', Þ: 'TH',
+};
+const UNDECOMPOSED = new RegExp(`[${Object.keys(FOLD).join('')}]`, 'g');
+/** Letters without a decomposition spelled plainly (ł -> l, Ł -> L, ß -> ss), case kept; everything else as it is. */
+export function foldLetters(s: string): string {
+  return s.replace(UNDECOMPOSED, (c) => FOLD[c] ?? c);
+}
 /** Unicode text folded for search: marks dropped, letters without a decomposition spelled plainly (ł -> l, ß -> ss), lower case. */
 export function foldText(s: string): string {
-  return s.normalize('NFD').replace(/\p{M}/gu, '').replace(/[łŁøØđĐßæÆœŒıþð]/g, (c) => FOLD[c] ?? c).toLowerCase();
+  return foldLetters(s.normalize('NFD').replace(/\p{M}/gu, '')).toLowerCase();
 }
 
 /** For search: TeX accents resolved, then foldText. */

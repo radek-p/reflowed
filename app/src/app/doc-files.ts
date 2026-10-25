@@ -9,6 +9,7 @@
 //     files.exportTex() · files.exportZip({ plain? }) · files.exportPdf()
 //     files.exportDoc() -> what an export writes (the stored document, SVG figures' trash left out) · files.assetOf(docId)
 import { openVersionsDialog } from '../chrome/versions.js';
+import { download, fileName } from '../io/download.ts';
 
 /** The open document, as the files need it. */
 export interface FilesDoc { id: string; title?: string }
@@ -49,12 +50,7 @@ export function createDocFiles(host: DocFilesHost) {
   let versions: Closeable | null = null;
   let banner: Destroyable | null = null;
   const doc = () => host.doc()!;
-  const fileBase = () => (doc().title || 'document').replace(/[^\w-]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'document';
-  function download(blob: Blob, name: string) {
-    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: name });
-    document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  }
+  const base = () => fileName(doc().title);
   /** what an export writes: the stored document, the SVG figures' trash left out (exports and the Files panel) */
   const exportDoc = async () => host.forExport(await host.store.getDoc(doc().id));
   const assetOf = (docId: string) => (assetId: string) => host.store.getAsset(docId, assetId);
@@ -98,14 +94,14 @@ export function createDocFiles(host: DocFilesHost) {
       try {
         await host.settled();
         const text = host.io()!.exportTex(await exportDoc());
-        download(new Blob([text], { type: 'text/x-tex' }), `${fileBase()}.tex`);
+        download(`${base()}.tex`, text, 'text/x-tex');
       } catch (e) { host.toast(`Export failed: ${(e as Error).message}`); }
     },
     async exportZip(o: object = {}) {
       host.leaveEditors();
       try {
         await host.settled();
-        download(await host.io()!.exportZip(await exportDoc(), assetOf(doc().id), o), `${fileBase()}.zip`);
+        download(`${base()}.zip`, await host.io()!.exportZip(await exportDoc(), assetOf(doc().id), o));
       } catch (e) { host.toast(`Export failed: ${(e as Error).message}`); }
     },
     async exportPdf() {

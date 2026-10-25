@@ -16,6 +16,7 @@ import { byPos } from '../store/fracindex.ts';
 import { type Entry, writeZip } from './archive.ts';
 import { ADDED_END, ADDED_START, editedFigures, preambleAdditions, rewriteSource, withAdditions, type EditedFigure } from './figures-export.ts';
 import { writeMarked, type MarkedBlock } from './markers.ts';
+import { fileName } from './download.ts';
 import { flattenForExport, treeOrder } from '../nesting/model.ts';
 import { packageOptions } from '../tex/calls.ts';
 import { plainPreamble } from '../meta/plain.ts';
@@ -183,8 +184,6 @@ export function exportSingle(doc: Doc, blocks: Block[], assets: AssetMeta[], o: 
   return { text, missing: assets.filter((a) => !figs.has(a.name.replace(/\.[A-Za-z0-9]+$/, ''))).map((a) => a.name), warnings };
 }
 
-export const slug = (s: string) => (s || 'document').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'document';
-
 /** An OpenDoc (contracts.d.ts) as a zip; asset bytes through getAsset. */
 /** An OpenDoc's assets with their bytes, as the export takes them (zipOpenDoc; files.ts's list) */
 export async function loadAssets(doc: OpenDoc, getAsset: (id: string) => Promise<Asset | null>): Promise<Asset[]> {
@@ -195,7 +194,7 @@ export async function loadAssets(doc: OpenDoc, getAsset: (id: string) => Promise
 
 export async function zipOpenDoc(doc: OpenDoc, getAsset: (id: string) => Promise<Asset | null>, o: ExportOptions = {}): Promise<{ name: string; data: Uint8Array; warnings: string[] }> {
   const { entries, warnings } = exportFiles(doc, doc.blocks, await loadAssets(doc, getAsset), o);
-  return { name: `${slug(doc.title)}.zip`, data: await writeZip(entries), warnings };
+  return { name: `${fileName(doc.title)}.zip`, data: await writeZip(entries), warnings };
 }
 
 export async function exportZipFromStore(store: DocStore, docId: string) {
@@ -207,15 +206,5 @@ export async function exportZipFromStore(store: DocStore, docId: string) {
 export async function exportTexFromStore(store: DocStore, docId: string): Promise<{ name: string; text: string; missing: string[]; warnings: string[] }> {
   const doc = await store.getDoc(docId);
   if (!doc) throw new Error(`no document ${docId}`);
-  return { name: `${slug(doc.title)}.tex`, ...exportSingle(doc, doc.blocks, doc.assets) };
-}
-
-/** Save bytes as a download (browser). */
-export function download(name: string, data: Uint8Array | string | Blob, mime = 'application/octet-stream') {
-  const blob = data instanceof Blob ? data : new Blob([data as BlobPart], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = name;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return { name: `${fileName(doc.title)}.tex`, ...exportSingle(doc, doc.blocks, doc.assets) };
 }

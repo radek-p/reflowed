@@ -10,14 +10,7 @@ import { html } from '../design/ui/core.js';
 import { Dialog, openLayer } from '../design/ui/overlays.js';
 import { Button } from '../design/ui/controls.js';
 import { OLDER_NOTE, readOnlyNote } from './read-only.js';
-
-const slug = (s) => (s || 'document').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'document';
-function download(blob, name) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = name;
-  document.body.append(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-}
+import { download, fileName } from '../io/download.ts';
 
 let layer = null;
 export function closeOlderCorePrompt() { layer?.close(); layer = null; }
@@ -43,10 +36,10 @@ export function openOlderCorePrompt(doc, { store, io, prepare = (d) => d, toast 
   };
   const exportTex = run(async () => {
     const { name, text } = await io.exportOlder(store, doc.id, prepare);
-    download(new Blob([text], { type: 'text/x-tex' }), name);
+    download(name, text, 'text/x-tex');
   });
   const exportZip = run(async () => {
-    download(await io.exportZip(prepare(await store.getDoc(doc.id)), (aid) => store.getAsset(doc.id, aid)), `${slug(doc.title)}.zip`);
+    download(`${fileName(doc.title)}.zip`, await io.exportZip(prepare(await store.getDoc(doc.id)), (aid) => store.getAsset(doc.id, aid)));
   });
   const startAnew = run(async () => {
     const r = await io.startAnew(store, doc.id, prepare);
