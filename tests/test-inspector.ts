@@ -7,7 +7,8 @@
 // Hidden by default (no control, no menu item, the shortcut does nothing and goes on to a text field unprevented,
 // nothing loaded); the advanced switch shows its control; with two panes it inspects pane A only (its blocks, its
 // outlines; pane B has no marks); focusing pane B moves it, picking a pane in its bar pins it; its own close and the
-// advanced switch turn it off and remove everything (the key then still goes on to a text field unprevented); no block is re-broken by any of it (the viewer's paint counter and the blocks' widths stay).
+// advanced switch turn it off and remove everything (the key then still goes on to a text field unprevented); no
+// block is re-broken by any of it (the viewer's paint counter and the blocks' widths stay).
 // Results: test-results/inspector/results.json.
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
