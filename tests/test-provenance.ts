@@ -10,6 +10,11 @@ import { EDITOR } from '../scripts/lib/app-bundle.ts';
 let n = 0, bad = 0;
 const check = (name: string, ok: boolean, d: unknown = '') => { n++; if (!ok) bad++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${!ok ? ` — ${JSON.stringify(d)}` : ''}`); };
 
+// the reflowtex checkout the website workflow places at the repository's root is ignored, not a change to the source
+let ignored = false;
+try { execFileSync('git', ['-C', EDITOR, 'check-ignore', '-q', 'reflowtex/package.json']); ignored = true; } catch { /* not ignored */ }
+check('a reflowtex checkout inside the tree (the website workflow\'s) is not a change to the source', ignored);
+
 // a throwaway public repo: on main and clean, on a branch, dirty
 const g = (dir: string, ...a: string[]) => execFileSync('git', ['-c', 'gc.auto=0', '-c', 'maintenance.auto=false', '-c', 'core.fsmonitor=false', '-C', dir, ...a], { stdio: 'ignore', timeout: 20000 });
 const pub = mkdtempSync(join(tmpdir(), 'rtx-pub-'));

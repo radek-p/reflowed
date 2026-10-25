@@ -7,3 +7,5 @@ test-results/
 # seed files are built (scripts/seed.ts writes build/seed/)
 *seed*.json
 .DS_Store
+# The reflowtex checkout the website workflow places here (.github/workflows/website.yml)
+/reflowtex/
