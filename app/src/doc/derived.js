@@ -8,6 +8,8 @@
 //     derived.preHash · derived.thmSet · derived.contexts · derived.recalls · derived.assetHash   (read; the maps live)
 //     derived.enginePreamble() · derived.compileSource(b) · derived.contextOf(b)
 //     derived.ck(b) · derived.viewKey(b) · derived.viewResult(b) · derived.kindOf(source)
+//     derived.pass(fn)   fn reads many blocks' keys (and changes no block): what they depend on that is the whole list's
+//                        (the nesting tree, nest.pass) read once for all of them, not once per block
 //     derived.computeContexts()   every block's context and the recalls, again (a structure or source change)
 //     derived.preambleChanged()   the preamble's hash (with the bibliography's part) and theorem kinds, again
 //     derived.loadAssets(assets)  the asset hashes of an opened document
@@ -46,6 +48,7 @@ export function createDerived({ doc, blockById, nest, refs, backend, salt = () =
   /** assets: name -> hash (a figure edited in place changes its blocks' keys) @type {Map<string, string>} */
   const assetHash = new Map();
 
+  const pass = (fn) => (nest.pass ? nest.pass(fn) : fn());
   const contextOf = (b) => { if (nest.treeSig && nest.treeSig() !== contextsSig) computeContexts(); return contexts.get(b.id); };
   // the engine's preamble without the \ReflowedMeta data, which goes in front of the title block: a title edit re-keys that block only
   const enginePreamble = () => splitMeta(doc().preamble.source).preamble;
@@ -76,7 +79,8 @@ export function createDerived({ doc, blockById, nest, refs, backend, salt = () =
     try { sig = bibpane.contextFor(b, doc()) ?? ''; } catch (e) { console.error('bibpane.contextFor:', e); }
     return sig ? (c ? `${sig}\n${c}` : sig) : c;
   }
-  function computeContexts() {
+  function computeContexts() { pass(contextsNow); }
+  function contextsNow() {
     const d = doc();
     // containers are left out (a paragraph follows the block before its container); a paragraph's
     // context ends with its environment's head and its role flags (nest.extraContext)
@@ -107,6 +111,6 @@ export function createDerived({ doc, blockById, nest, refs, backend, salt = () =
   return {
     get preHash() { return preHash; }, get thmSet() { return thmSet; }, get contexts() { return contexts; }, get recalls() { return recalls; },
     assetHash, assetOf, assetSig, figureNames, enginePreamble, compileSource, contextOf, ck, viewKey, viewResult, kindOf,
-    computeContexts, preambleChanged, loadAssets, bibKeyPart,
+    computeContexts, preambleChanged, loadAssets, bibKeyPart, pass,
   };
 }

@@ -37,6 +37,8 @@ export interface PanelsContext {
   ui: Map<string, { cls(name: string, on: boolean): void }>;
   cache: Map<string, { status?: string; errors?: Problem[] }>;
   ck(b: Block): string;
+  /** fn reads every block's key: what the keys depend on read once (doc/derived.js pass) */
+  pass?<T>(fn: () => T): T;
   active?(): boolean;
   commands: Commands;
   /** the section in view in the focused pane (a signal read: the crumbs' own, docview/pane-bar.js keeps it) */
@@ -89,7 +91,12 @@ export function createPanels(c: PanelsContext) {
     outlineMemo = { rows: bl.map((b) => ({ b, kind: b.kind, src: b.source })), refs: st, thm, items };
     return items;
   };
-  const diagnostics = (): Diagnostic[] => (doc() ? diagnosticsOf(source()) : []);
+  // every block's result: one pass over their keys
+  const diagnostics = (): Diagnostic[] => {
+    if (!doc()) return [];
+    const all = () => diagnosticsOf(source());
+    return c.pass ? c.pass(all) : all();
+  };
   const todos = (): Todo[] => { const d = doc(); return d ? todosOf({ blocks: d.blocks, preamble: d.preamble.source }) : []; };
 
   /** Where a block is, in words: "§2.1 · Lemma" / its first words. */

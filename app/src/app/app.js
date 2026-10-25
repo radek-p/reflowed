@@ -249,7 +249,7 @@ export function createDocEditor(ctx) {
   const blocks = createBlocks({
     blocks: () => S.doc?.blocks ?? [], state: root.state, ui, get panes() { return panes; }, get edits() { return edits; }, nest, viewState: (p, id, el) => paneStates.applyTo(p, id, el), view: () => ctx.view, perf, counters, cache,
     blockById: (id) => blockById(id), kindOf: (src) => kindOf(src), viewKey: (b) => viewKey(b), viewResult: (b) => viewResult(b),
-    ck: (b) => ck(b), recalled: (id) => derived.recalls.has(id), markerOf: (b) => markerOf(b), blockAction: (b) => feats.blockAction(b),
+    ck: (b) => ck(b), pass: (fn) => derived.pass(fn), recalled: (id) => derived.recalls.has(id), markerOf: (b) => markerOf(b), blockAction: (b) => feats.blockAction(b),
     changed: () => changed(), changedLater: () => changedLater(), userBlock: (id) => userBlock(id), compileSoon: () => compileSoon(),
     showErrors: (box, problems, id) => showErrors(box, problems, id), on: viewOn,
   });
@@ -477,7 +477,7 @@ export function createDocEditor(ctx) {
     liveSending: (keys) => edits.live.sending(keys), liveLanded: (id, key) => edits.live.landed(id, key), persist: (key, r) => store.cache.put(key, r).catch(() => {}),
     setStatus: (t, k) => setStatus(t, k), progress: (left, nErr) => results.status.typesetting(left, nErr), preHash: () => derived.preHash, preambleLanded: (r) => { results.preamble.value = r; showPreambleState(); },
     applyFonts: (f) => applyFonts(f), changed: () => changed(), changedLater: () => changedLater(), batch: BATCH,
-    shownStale: (b) => shownStale(b),
+    shownStale: (b) => shownStale(b), pass: (fn) => derived.pass(fn),
   });
   /** a block not being edited whose cached result is not what it shows (whenIdle waits for that display) */
   function shownStale(b) {
@@ -658,7 +658,7 @@ export function createDocEditor(ctx) {
   }
 
   const panels = createPanels({
-    root, get doc() { return S.doc; }, refs, ui, cache, ck: (b) => ck(b), active,   // drawn in the sidebar while current
+    root, get doc() { return S.doc; }, refs, ui, cache, ck: (b) => ck(b), pass: (fn) => derived.pass(fn), active,   // drawn in the sidebar while current
     inView: () => { void layout.focused.value; return paneStates.of(panes.focused().id).section.value; },   // the outline follows the focused pane: the crumbs' section
     focusedSection: () => sectionFocus.get(panes.focused().id),
     preambleProblems: () => results.preamble.peek().errors ?? [], words: results.words,

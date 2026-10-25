@@ -6,7 +6,7 @@
 // column is not narrowed: a child's lines break as they do in the paper.
 //
 // createNesting(host) -> {
-//   order(blocks), isContainer(b), compileSource(b), contextView(blocks), extraContext(b),
+//   order(blocks), isContainer(b), compileSource(b), contextView(blocks), extraContext(b), treeSig(), pass(fn),
 //   display(b, u), decorate(), refreshHeads(), split(id, offset, o), merge(id, o), remove(id), duplicate(id),
 //   moveBy(id, dir), moveTo(id, index, parentId), dragTargets(id), drop(id, target), menuItems(id, menuItem),
 //   visibleStep(i, dir), reveal(id), flatten(blocks), spacingPrev(k), nestBlock(id), join(id), collapse(id, on), state()
@@ -39,10 +39,18 @@ export function createNesting(host) {
   };
   const blocks = () => host.doc()?.blocks ?? [];
   /** children, roles and parents of the current block list (recomputed when the list or an order changes) */
-  // the tree memoised (nesting/tree.ts): every block key asks for it, a call compares the
-  // list with the last one without building anything
+  // the tree memoised (nesting/tree.ts): every block key asks for it, a call compares the whole list with the last one
+  // (no build); in a pass it is read once, at its start (asked once per block, a pass was O(n²))
   const trees = createTree();
-  const tree = () => trees.of(blocks());
+  let pinned = null;
+  const tree = () => pinned ?? trees.of(blocks());
+  /** fn reads the blocks (their keys, sources as compiled, contexts) and changes none: the tree read once for all of
+   *  them. A pass inside a pass is the same pass; outside one, each ask reads the blocks as they are */
+  function pass(fn) {
+    if (pinned) return fn();
+    pinned = trees.of(blocks());
+    try { return fn(); } finally { pinned = null; }
+  }
   /** the tree's signature: a child gets its role (its environment's head and end) once it typesets something */
   const treeSig = () => tree().rev;
   const parentOf = (id) => tree().parent.get(id) ?? null;
@@ -566,7 +574,7 @@ export function createNesting(host) {
   }
 
   return {
-    order: (list) => treeOrder(list).order, repair: (list) => repairTree(list), isContainer, compileSource, contextView, extraContext, treeSig,
+    order: (list) => treeOrder(list).order, repair: (list) => repairTree(list), isContainer, compileSource, contextView, extraContext, treeSig, pass,
     display, attachView, unwatch, decorate, refreshHeads, layoutHeads, selected, split, merge, remove, duplicate, moveBy, moveTo, dragTargets, pickTarget, drop,
     menuItems, visibleStep, reveal, flatten: (list) => flattenForExport(list), spacingPrev, spacingTarget, parentAt,
     nestBlock, join, collapse, isCollapsed, state, parentOf, moveOut, moveIndex, unit: unitOf,

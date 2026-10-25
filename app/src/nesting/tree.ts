@@ -1,9 +1,8 @@
 // The nesting tree of a block list, memoised: containers' children, the children's roles and
 // their parents, and a revision that changes when any of them can. Every block's compile key asks for it (app.js ck →
-// derived contextOf → nest.treeSig, and compileSource), so it is asked for once or twice per block in every pass over
-// the document. It used to build a signature string of every block on every call (O(n) allocations per call, O(n²) per
-// pass: 26 ms at 300 blocks, 91 ms at 600). Now a call compares the list with the last one element by element (the
-// same block objects, parent ids and typeset flags), with no allocation, and builds again only when one differs.
+// derived contextOf → nest.treeSig, and compileSource). A call compares the list with the last one element by element
+// (the same block objects, parent ids and typeset flags), with no allocation, and builds again only when one differs:
+// O(n) a call, so a pass over the document asks once (nesting/app.js pass), not once or twice per block (O(n²)).
 //
 //   const tree = createTree()
 //   tree.of(list) -> { list, rev, kids: Map(container id -> children), roles: Map(child id -> Role), parent: Map(child id -> container id) }

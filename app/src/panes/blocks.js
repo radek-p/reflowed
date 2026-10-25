@@ -9,12 +9,13 @@
 //
 //   const blocks = createBlocks(host)
 //   host: { blocks() (the document's, in order), ui, panes, edits, nest, view() (ctx.view), perf, counters, cache, blockById, kindOf, viewKey, viewResult,
-//           ck, recalled(id), markerOf(b), blockAction(b) (app/feature.ts), changed(), changedLater(), userBlock(id), compileSoon(),
+//           ck, pass?(fn) (fn reads every block's key: doc/derived.js pass), recalled(id), markerOf(b), blockAction(b) (app/feature.ts),
+//           changed(), changedLater(), userBlock(id), compileSoon(),
 //           showErrors(box, problems, id), on: BlockView handlers (panes/block-view.js) }
 //   blocks.state(b) -> the block's state (made once) · blocks.makeView(paneId, id) -> BlockView · blocks.dispose(u)
 //   blocks.redisplay(which?) every block of the document, in order, or those which(b) is true for (the one
-//   traversal; it was seven loops, each with its own skip) · blocks.stale(b) it shows another key than it
-//   would show now (a context moved: a definition or a reference elsewhere changed), or a result came for its key since
+//   traversal; it was seven loops, each with its own skip; one pass over the keys) · blocks.stale(b) it shows another
+//   key than it would show now (a context moved: a definition or a reference elsewhere changed), or a result came for its key since
 //   (a block still waiting for its result is not stale: displaying it again changes nothing)
 //   blocks.display(id) · blocks.mount(id, r, key) -> Promise · blocks.ensureViews(id) · blocks.applySpacing(id)
 //   blocks.visible (Set of block ids near the viewport in any pane) · blocks.unmountAll(u)
@@ -364,7 +365,10 @@ export function createBlocks(host) {
 
   const lazy = createLazyViews({ ensure: (id) => ensureViews(id) });
 
-  function redisplay(which = null) { for (const b of host.blocks()) if (!which || which(b)) display(b.id); }
+  function redisplay(which = null) {
+    const all = () => { for (const b of host.blocks()) if (!which || which(b)) display(b.id); };
+    if (host.pass) host.pass(all); else all();
+  }
   // what display would show now differs from what it showed: another key, or a result come (or gone) for it; a block
   // edited: its views show the live preview, so the key it has mounted
   function stale(b) {
