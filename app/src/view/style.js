@@ -175,6 +175,7 @@ html.dark .blk.editing[data-edit-layout="stacked"] > .blk-main > .blk-source { -
 .blk.rtx-fit > .blk-main > .blk-render .rtx-line-band { margin-left: var(--fit-l, 0px); margin-right: var(--fit-r, 0px); }
 .blk.editing.rtx-fit:is([data-edit-layout="side"], [data-edit-layout="stacked"]) > .blk-main > .blk-render.stale::before { right: var(--fit-r, 0px); }
 .live-note { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
+.live-note-say { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .live-note > summary { display: flex; align-items: baseline; gap: 7px; list-style: none; cursor: pointer; padding: 2px 2px; border-radius: 4px; }
 .live-note > summary::-webkit-details-marker { display: none; }
 .live-note > summary:hover { background: var(--hover); }

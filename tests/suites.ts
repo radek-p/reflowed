@@ -119,6 +119,7 @@ export const SUITES: Suite[] = [
   S('selection-dev', 'dev', 15, (c) => node('tests/test-selection.ts', 'dev', `${c.dev}/`)),
   S('cref-dev', 'dev', 15, (c) => node('tests/test-cref.ts', 'dev', `${c.dev}/`), FAST),
   S('popover-hold', 'dev', 10, (c) => node('tests/test-popover-hold.ts', `${c.dev}/`), { alone: true, note: 'frame sampling (±1 px)' }),
+  S('popover-keys', 'dev', 5, (c) => node('tests/test-popover-keys.ts', `${c.dev}/`)),   // the editing popover by keyboard (Tab, Enter, Escape, the focus back) and its error note's status region, each layout
   S('ios-zoom', 'dev', 3, (c) => node('tests/test-ios-zoom.ts', `${c.dev}/`)),   // WebKit iPhone: tapping to edit does not zoom (editables >= 16 px on a coarse pointer)
   S('mobile-fit', 'dev', 5, (c) => node('tests/test-mobile-fit.ts', `${c.dev}/`)),   // phones: the app fits above the keyboard (the 50 % cap of the visible part, the caret in view), the safe areas and theme-color
   S('mobile-chrome', 'dev', 5, (c) => node('tests/test-mobile-chrome.ts', `${c.dev}/`)),   // phones: one row of chrome, the save state on the tab only, Add to Home Screen
@@ -181,7 +182,7 @@ export const EST_SECONDS: Record<string, number> = {
   'pdf-svg': 1, 'file-deps': 1, 'loading-units': 1, resources: 40, 'resources-setting': 25, 'resources-origin': 90, 'workbench-units': 2, workbench: 120, keys: 1, 'motion-units': 1, 'view-units': 1, minify: 1, tex: 1, 'tex-lex': 1, 'tex-calls': 1,
   provenance: 1, brand: 1, 'w4-units': 1, 'cite-units': 1, 'cite-engine': 38, 'bundle-cache': 3, 'engine-node': 90,
   'app-bundle': 1, 'dev-seed': 12, 'webkit-open': 11, 'fmt-early': 60, 'fewer-requests': 30, 'fewer-requests-release': 40, 'fmt-early-release': 180, 'fixture-cache': 20, recovery: 18, 'fonts-dump': 2, 'editor-frame': 3, 'page-fonts': 25, 'colour-maps': 15, home: 2, 'reset-dev': 1, 'home-samples-dev': 29, w10: 37, w3: 27, 'e2e-dev': 140,
-  panes: 82, 'two-editors': 60, follow: 40, 'kept-docs': 1, motion: 142, widths: 240, notes: 19, settings: 18, view: 7, files: 10, chrome: 60,
+  panes: 82, 'two-editors': 60, follow: 40, 'popover-keys': 40, 'kept-docs': 1, motion: 142, widths: 240, notes: 19, settings: 18, view: 7, files: 10, chrome: 60,
   sidebar: 11, inspector: 10, 'refs-panel': 30, 'selection-dev': 21, 'cref-dev': 3, 'popover-hold': 45, 'ios-zoom': 30, 'mobile-fit': 60, 'far-dev': 100, 'cite-card-dev': 226,
   'cite-dev': 76, sheets: 4, 'caret-bounds': 1289, boot: 54,
   'doc-header': 3, 'meta-dev': 125, 'readonly-dev': 2, 'older-core-dev': 4, 'replay-dev': 12, 'quota-dev': 1, 'caret-math-dev': 7,
@@ -204,7 +205,7 @@ export const WIDE = ['panes', 'e2e-dev', 'w3', 'recovery', 'keys', 'meta-dev', '
 const STORE = ['home', 'reset-dev', 'home-samples-dev', 'recovery', 'quota-dev', 'readonly-dev', 'older-core-dev', 'replay-dev', 'cache', 'follow', 'doc-units'];
 const ENGINE_CORE = ['engine-node', 'engine-stamp', 'engine-build-id', 'cite-engine', 'nested-seed', 'e2e-dev', 'caret-dev', 'keys'];
 const RELEASE = ['public-bundles', 'build-chromium', 'release-mode', 'minify', 'provenance', 'home-samples-file', 'e2e-file', 'smoke-firefox-webkit', 'multifile', 'fmt-early-release', 'fewer-requests-release'];
-const EDIT = ['caret-dev', 'caret-bounds', 'selection-dev', 'caret-math-dev', 'popover-hold', 'follow', 'motion', 'ios-zoom', 'mobile-fit'];
+const EDIT = ['caret-dev', 'caret-bounds', 'selection-dev', 'caret-math-dev', 'popover-hold', 'popover-keys', 'follow', 'motion', 'ios-zoom', 'mobile-fit'];
 const UI = ['kit', 'sheets', 'settings', 'view', 'boot', 'sidebar', 'chrome', 'doc-header', 'inspector', 'files', 'mobile-fit', 'mobile-chrome'];
 
 export interface Rule { paths: string[]; suites: string[]; why: string }

@@ -4,7 +4,10 @@
 // .err-row .err-line .err-msg .err-copy, .live-note(-icon|-text|-hint|-actions|-box), .live-diff.
 //
 //   renderErrors(box, problems, { report(p), open(p) })     a block's error rows (empty: none)
-//   renderSourcePanel(box, session)                          CodeMirror's host + the stacked note (session.note)
+//   renderSourcePanel(box, session)                          CodeMirror's host + the stacked note (session.note), and
+//                                                            the note's line for a screen reader (a status region that
+//                                                            is there while the block is edited: it says the error when
+//                                                            the note appears or its line changes, not on a re-render)
 //   renderErrorsPanel(box, session)                          side by side: the note in the block's .errors
 //   (session: { note: signal(null | { errors, good, current(), report(p), open(p), revert() }), rows: signal([]), layout: signal(mode), report(p), open(p) })
 import { html, render } from '../design/ui/core.js';
@@ -28,15 +31,17 @@ export function ErrorRows({ problems, report, open }) {
   return html`${problems.map((p, i) => html`<${ErrorRow} key=${`${i}:${p.line}:${p.message}`} p=${p} report=${report} open=${open} />`)}`;
 }
 
+/** the note's line: the first message, its line, how many more */
+const noteLine = (errors) => { const first = errors[0]; return `${first.message}${first.line ? ` (line ${first.line})` : ''}${errors.length > 1 ? ` and ${errors.length - 1} more` : ''}`; };
+
 /** The error while editing: one line (the first message, how many more), opening to the rows; the way back. */
 export function LiveNote({ note }) {
   const [diff, setDiff] = useState(false);
   const { errors, good } = note;
-  const first = errors[0];
   const current = note.current();
   const changed = good != null && current != null && good !== current;
   return html`<details class="live-note">
-      <summary><span class="live-note-icon" aria-hidden="true">!</span><span class="live-note-text">${first.message}${first.line ? ` (line ${first.line})` : ''}${errors.length > 1 ? ` and ${errors.length - 1} more` : ''}</span><span class="live-note-hint">the preview shows the last version that compiled</span></summary>
+      <summary><span class="live-note-icon" aria-hidden="true">!</span><span class="live-note-text">${noteLine(errors)}</span><span class="live-note-hint">the preview shows the last version that compiled</span></summary>
       <${ErrorRows} problems=${errors} report=${note.report} open=${note.open} />
     </details>
     ${changed ? html`<div class="live-note-actions">
@@ -48,7 +53,9 @@ export function LiveNote({ note }) {
 
 function SourcePanel({ session }) {
   const note = session.note.value, stacked = session.layout.value === 'stacked';
-  return html`<${Island} class="cm-island" />${note && stacked ? html`<div class="live-note-box"><${LiveNote} note=${note} /></div>` : null}`;
+  // the region stays while the block is edited and only its text changes: a screen reader says the error when it comes
+  // or changes; the same text drawn again (each keystroke's re-render) is no change, and says nothing
+  return html`<${Island} class="cm-island" />${note && stacked ? html`<div class="live-note-box"><${LiveNote} note=${note} /></div>` : null}<div class="live-note-say" role="status">${note ? `Error: ${noteLine(note.errors)}. The preview shows the last version that compiled.` : ''}</div>`;
 }
 function ErrorsPanel({ session }) {
   const note = session.note.value, stacked = session.layout.value === 'stacked', rows = session.rows.value;
