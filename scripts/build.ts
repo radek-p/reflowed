@@ -32,6 +32,7 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appBuildOptions, PUB as PUBLIC, ensurePublicBundles } from './lib/app-bundle.ts';
 import { provenance, publicProblem, generatorOf } from './lib/provenance.ts';
+import { readReflowtexLock } from './lock-reflowtex.ts';
 import { writeMultiFile, appOutputs, zstdCached } from './lib/multifile.ts';
 import * as zlib from 'node:zlib';
 import { gzipSync, gunzipSync } from 'node:zlib';
@@ -79,11 +80,13 @@ const workerJs = readFileSync(worker.path, 'utf8');
 process.env.TECTONIC_CACHE ??= join(BUILD, 'tectonic-cache');
 const { getIndex, resolveTarUrl, getFileCachedSync } = await import(join(TC, 'engine/server/bundle.ts'));
 const bundleUrl: string = await resolveTarUrl();
-// provenance; a release is built from the public repo's main, clean (--public-any to override)
-const PROV = provenance({ tc: TC, pub: PUB, wasm: join(ENGINE, 'dist/async/tectonic_wasm.wasm'), fmt: join(TC, 'engine/api/formats/latex.fmt'), bundleUrl });
+// provenance; a release is built from the reflowtex commit reflowtex.lock.json names, with no local changes
+// (scripts/lock-reflowtex.ts); --public-any allows another, and the provenance records that it was given
+const PROV = provenance({ tc: TC, pub: PUB, lock: readReflowtexLock(HERE).commit, publicAny: args.has('--public-any'),
+  wasm: join(ENGINE, 'dist/async/tectonic_wasm.wasm'), fmt: join(TC, 'engine/api/formats/latex.fmt'), bundleUrl });
 const PUB_PROBLEM = publicProblem(PROV);
 if (PUB_PROBLEM && !args.has('--no-seed-cache') && !args.has('--public-any')) {
-  console.error(`BUILD REFUSED: ${PUB_PROBLEM}; a release is built from the public main with no local changes (--public-any to override)`);
+  console.error(`BUILD REFUSED: ${PUB_PROBLEM}; a release is built from the locked reflowtex commit with no local changes (node scripts/lock-reflowtex.ts --check; --public-any to override)`);
   process.exit(1);
 }
 console.log(`provenance: ${generatorOf(VERSION, '…', PROV)}${PUB_PROBLEM ? ` (${PUB_PROBLEM})` : ''}`);

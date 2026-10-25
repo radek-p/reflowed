@@ -45,6 +45,12 @@ fi
 REFLOWTEX="$(cd "$REFLOWTEX" && pwd)"
 HUGO_INT="$REFLOWTEX/integrations/hugo"
 echo "build.sh: reflowtex from $REFLOWTEX ($(git -C "$REFLOWTEX" rev-parse --short HEAD 2>/dev/null || echo 'not a git checkout'))"
+# the commit the editor is built with (reflowtex.lock.json): another one is said, not refused (a preview of the site)
+LOCKED="$(sed -n 's/^ *"commit": *"\([0-9a-f]\{40\}\)".*/\1/p' "$REPO/reflowtex.lock.json")"
+AT="$(git -c safe.directory="$REFLOWTEX" -C "$REFLOWTEX" rev-parse HEAD 2>/dev/null || true)"
+if [ "$AT" != "$LOCKED" ]; then
+  echo "build.sh: note: reflowtex is at ${AT:-an unknown commit}, not at ${LOCKED:-?}, the commit reflowtex.lock.json names" >&2
+fi
 
 # The pipeline runs on Node, straight from reflowtex's TypeScript sources; its
 # dependencies are installed into that checkout's node_modules on first use.

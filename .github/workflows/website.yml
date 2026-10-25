@@ -9,7 +9,10 @@ name: Deploy website
 #   2. It is staged into website/static/app/ with its TeX tree (website/tools/stage-app.ts): "Open ReflowEd" opens
 #      app/, and the tree is served beside it at app/texlive/2022/.
 #   3. The site is built as the Reflow TeX site is: inside Reflow TeX's CI image (a pinned TeX toolchain with Node
-#      and Hugo), with the reflowtex pipeline from a checkout of radek-p/reflowtex.
+#      and Hugo), with the reflowtex pipeline from the same checkout of reflowtex the editor is built with.
+#
+# reflowtex comes from the commit reflowtex.lock.json names (scripts/lock-reflowtex.ts), checked out detached;
+# the release build refuses any other. A push to reflowtex changes nothing here until the lock names it.
 #
 # The image: Reflow TeX's CI publishes it as ghcr.io/radek-p/reflowtex-ci:<tag>, public, the tag a hash of its
 # Dockerfile, docker/ and package-lock.json. This job works the tag out the same way from the reflowtex checkout and
@@ -18,9 +21,6 @@ name: Deploy website
 #
 # Caches: the engine release's files (by the lock), Tectonic's bundle chunks the editor's TeX set is packed from (by
 # the working-set lists), the browsers (by app/package-lock.json), the site's compiled blocks (by their sources).
-#
-# Variables (Settings › Secrets and variables › Actions › Variables), optional:
-#   REFLOWTEX_REF        the reflowtex branch, tag or commit to build with (default main)
 
 on:
   push:
@@ -47,10 +47,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - id: reflowtex
+        name: The reflowtex commit reflowtex.lock.json names
+        run: |
+          repository="$(jq -er .repository reflowtex.lock.json)"
+          commit="$(jq -er .commit reflowtex.lock.json)"
+          [[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ && "$commit" =~ ^[0-9a-f]{40}$ ]] \
+            || { echo "reflowtex.lock.json: a repository owner/name and a 40-digit commit, please" >&2; exit 1; }
+          echo "repository=$repository" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "reflowtex: $repository at $commit"
+
       - uses: actions/checkout@v4
         with:
-          repository: radek-p/reflowtex
-          ref: ${{ vars.REFLOWTEX_REF || 'main' }}
+          repository: ${{ steps.reflowtex.outputs.repository }}
+          ref: ${{ steps.reflowtex.outputs.commit }}
           path: reflowtex
 
       - uses: actions/setup-node@v4

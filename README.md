@@ -26,6 +26,19 @@ The builds find the reflowtex checkout through `REFLOWTEX=<path>`; without it,
 a `reflowtex/` directory beside this one (or beside any directory above it) is
 used.
 
+reflowtex is pinned as the engine is: `reflowtex.lock.json` names the
+reflowtex commit this commit of ReflowEd is built and tested with. A release
+build refuses a checkout that is not at that commit or has changes, and the
+website workflow checks that commit out. To move to another reflowtex commit
+(it must be on GitHub, where the workflow fetches it from), check it out in
+the reflowtex checkout and lock it:
+
+```
+git -C ../reflowtex checkout <commit>
+node scripts/lock-reflowtex.ts               # writes reflowtex.lock.json; commit it
+node scripts/lock-reflowtex.ts --check       # is the checkout the locked commit?
+```
+
 ## Layout
 
 | Directory | What |
@@ -46,10 +59,11 @@ Each source file starts with a comment that says what it does and how to use it.
 You need Node 24 and a clone of reflowtex.
 Every command below runs from the top of this repository.
 
-1. reflowtex, next to this checkout:
+1. reflowtex, next to this checkout, at the commit `reflowtex.lock.json` names:
 
    ```
    git clone https://github.com/radek-p/reflowtex ../reflowtex
+   git -C ../reflowtex checkout "$(node -p "require('./reflowtex.lock.json').commit")"
    (cd ../reflowtex && npm ci)
    ```
 

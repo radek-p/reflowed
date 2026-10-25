@@ -239,7 +239,7 @@ export const RULES: Rule[] = [
   { why: 'the engine', paths: ['engine/{src,api,server,encode,tex,slots,pictures,licences,scripts}/**', 'engine/reflow-tectonic.json', 'scripts/fetch-engine.ts', 'engine/package.json', 'engine/package-lock.json', 'engine/*.txt', 'engine/working-set-tiers.json'], suites: ENGINE_CORE },
   { why: 'engine tests', paths: ['engine/tests/**'], suites: ['pdf-svg', 'recovery'] },
   { why: "the editor's TeX files", paths: ['tex/**'], suites: [...ENGINE_CORE, 'meta-dev'] },
-  { why: 'the release build', paths: ['scripts/build.ts', 'scripts/minify*', 'scripts/licences.ts', 'scripts/node-engine.ts', 'scripts/engine-stamp.ts', 'scripts/fetch-engine.ts', 'scripts/node24.sh', 'scripts/lib/**'], suites: RELEASE },
+  { why: 'the release build', paths: ['scripts/build.ts', 'scripts/minify*', 'scripts/licences.ts', 'scripts/node-engine.ts', 'scripts/engine-stamp.ts', 'scripts/fetch-engine.ts', 'scripts/node24.sh', 'scripts/lib/**', 'scripts/lock-reflowtex.ts', 'reflowtex.lock.json'], suites: RELEASE },
   { why: 'the dev bundle', paths: ['scripts/w3-*', 'scripts/typecheck.ts'], suites: ['typecheck', 'app-bundle', 'w3', 'build-chromium', 'public-bundles'] },
   { why: 'seeds and samples', paths: ['scripts/seed*.ts', 'scripts/record*.ts', 'samples/**'], suites: ['intro-versions', 'site-intro', 'typecheck', 'seed-title-form', 'home-samples-dev', 'intro-dev', 'nested-seed', 'e2e-dev'] },
   { why: "the website's tools (the intro's copy)", paths: ['website/tools/**'], suites: ['site-intro'] },
