@@ -36,13 +36,16 @@ body.wb-fitted .rtx-editor.rtx-wb { bottom: 0; }
 .rtx-wb .rtx-tab > main.rtx-pane[data-pane] { position: absolute; inset: 0; overflow: auto; overflow-x: hidden; overscroll-behavior: contain;
   padding: calc(var(--wb-inset-top, 0px) + 24px) ${PANE_PAD}px 0; scroll-padding-top: var(--wb-inset-top, 0px); box-sizing: border-box; outline: none; }
 .rtx-wb .rtx-tab > main.rtx-pane[data-pane]::after { content: ''; display: block; height: 40vh; }
-/* the column centred in its pane, at most the pane's width less small margins (as the split panes: app.css); while the
-   groups' widths move, the pane's host is placed so that it stays so (lockedLeft) */
 /* the strip's variables (and the frame's, viewport.ts: set on <body> while a keyboard is up) stop at the pane: the pane reads them (its padding, scroll-padding-top), nothing in
    it does. A group's strip switching between one line and two sets them on the group (data-form), and every element of
    its pane was restyled with them (4,732 in a 30-block article, 23 ms; four times in a drop between two groups) */
 .rtx-wb .rtx-tab > main.rtx-pane[data-pane] > * { --wb-top: initial; --wb-strip-h: initial; --wb-head: initial; --wb-inset-top: initial; --wb-above: initial; --wb-vtop: initial; --wb-vh: initial; }
+/* the column centred in its pane, at most the pane's width less small margins (as the split panes: app.css); while the
+   groups' widths move, the pane's host is placed so that it stays so (lockedLeft). Its width, --col, is the pane's own, on
+   the tab (view/index.js writePanes): read by the column's box and the find bar, by nothing inside the column, where it
+   stops (a change of it restyled every element of the pane, at the end of every slide in 'fit' and a fitted 'paper') */
 .rtx-wb .rtx-tab > main.rtx-pane[data-pane] > * { max-width: var(--col); margin-left: max(${COL_MARGIN}px, calc((100% - var(--col)) / 2)); margin-right: max(${COL_MARGIN}px, calc((100% - var(--col)) / 2)); }
+.rtx-wb .rtx-tab > main.rtx-pane[data-pane] > * > * { --col: initial; }
 .rtx-wb .rtx-tab .blk-render .latex-display { --latex-display-peek: 16px; }
 .rtx-wb .rtx-tab > main.rtx-pane[data-pane][data-ctl="narrow"] .blk-render .latex-display { --latex-display-peek: 8px; }
 

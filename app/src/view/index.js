@@ -5,6 +5,8 @@
 //     The options are the page's (a user preference, on <html> like the theme). view.attach(root) gives an editor
 //     (its container: app/editor-root.ts) its View button (app/mount.ts); the first one attached is the shell the
 //     column's width is measured in
+//     The column (--col) is each pane's, on its tab (the workbench's panes); an editor with no such panes has the
+//     page's (--col, --rtx-free) on its shell; <body> has only the blocks' zoom (--rtx-view-zoom)
 //   view.settings / view.set(patch) / view.zoomBy(dir) / view.measure() / view.open() / view.close()
 //   view.editLayoutFor(blockEl) -> { mode, … }    app.js, entering a block (edit-layout.js)
 //   view.colorMap                                 the name blocks carry as data-color-map (app.js mount)
@@ -56,11 +58,13 @@ export async function installView({ notes = null } = {}) {
   installStyle();
   const { reading } = await import('reflowtex/companion');
   const root = document.documentElement;
-  // the column's variables (--col, --rtx-view-zoom, --rtx-free) on <body>, not <html>: Chromium restyles
-  // every element of the page for a change of a variable on the root, whatever resets it below; on <body> a change stops
-  // where the variable is reset (view/style.js: svg), 5,035 elements -> 886 in a 30-block article. They change with the
-  // panes' width (a window resize, a splitter or a column dropped in 'paper' and 'fit')
-  const cols = () => document.body ?? root;
+  // the blocks' zoom (--rtx-view-zoom, the text size: every pane's) on <body>, not <html>: Chromium restyles every
+  // element of the page for a change of a variable on the root, whatever resets it below; on <body> a change stops where
+  // the variable is reset (view/style.js: svg). The column (--col, --rtx-free) is not the page's: it changes with the
+  // panes' widths (a window resize, a splitter, a side column in 'paper' and 'fit'), and on <body> each change restyled
+  // every element of the page that is in no pane (the side panels, the strips) at the end of every slide: it is written
+  // where it is read, each pane's on its tab (writePanes), a mounted editor's on its shell (writeShells)
+  const zoomOn = () => document.body ?? root;
   const s = loadSettings();
 
   // the viewer's colour maps: ours added to whatever the page has (view/colour-maps.js)
@@ -84,7 +88,7 @@ export async function installView({ notes = null } = {}) {
       // the smallest width that holds \textwidth (a quarter px more, so rounding cannot lose it)
       const own = textwidthPt ? Math.ceil(textwidthPt * PX_PER_PT) + 0.25 : 0;
       // \textwidth not known yet (no document current: a page still opening): the column as it is, else medium (no jump)
-      if (!own) col = last?.col ?? (parseFloat(cols().style.getPropertyValue('--col')) || WIDTHS.find((w) => w.name === 'medium').px * s.zoom);
+      if (!own) col = last?.col ?? WIDTHS.find((w) => w.name === 'medium').px * s.zoom;
       else {
         col = own * s.zoom;
         // narrower than \\textwidth: the column fits the window (lines re-broken at the text size chosen), never a
@@ -98,10 +102,12 @@ export async function installView({ notes = null } = {}) {
     }
     return { col, eff, fitted, limited };
   }
-  // one column per pane: each pane's --col and --rtx-free from its own width and, for Paper, its own
-  // document's \textwidth (the most common source width of the blocks it shows). The page had one column, measured in the
-  // focused pane ([data-part] moves with the focus: app/doc-tabs.ts markParts): a narrow pane beside a wide one narrowed
-  // both, and a click in the other pane changed them. The page's values (on <body>) stay for what is in no pane.
+  // one column per pane: each pane's --col from its own width and, for Paper, its own document's \textwidth (the most
+  // common source width of the blocks it shows), on its tab (the pane's parent: its <main> and, while it is the current
+  // pane, the find bar read it; nothing below the column's box inherits it: app/wb/css.ts). The page had one column,
+  // measured in the focused pane ([data-part] moves with the focus: app/doc-tabs.ts markParts): a narrow pane beside a
+  // wide one narrowed both, and a click in the other pane changed them. (No --rtx-free on a pane: in the workbench the
+  // displays' peek is fixed, app/wb/css.ts.) An editor with no such panes (app/mount.ts) has the page's column on its shell.
   const paneObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => { if (s.width === 'fit' || s.width === 'paper') later(); }) : null;
   const observedPanes = new WeakSet();
   const paneKnown = new WeakMap();                 // pane -> its \textwidth (pt), once its blocks have one
@@ -123,11 +129,22 @@ export async function installView({ notes = null } = {}) {
       return { el, avail, l: layout(avail, pt) };
     });
   }
+  /** a variable written only when it changes (a write restyles what inherits it) */
+  const setOn = (el, k, v) => { if (el.style.getPropertyValue(k) !== v) el.style.setProperty(k, v); };
   function writePanes(rows) {
-    for (const { el, avail, l } of rows) {
-      if (el.style.getPropertyValue('--col') !== `${l.col}px`) el.style.setProperty('--col', `${l.col}px`);
-      const free = `${Math.min(Math.max(0, Math.floor((avail + 48 - Math.min(l.col, avail)) / 2)), Math.ceil(100 * l.eff))}px`;
-      if (el.style.getPropertyValue('--rtx-free') !== free) el.style.setProperty('--rtx-free', free);
+    for (const { el, l } of rows) setOn(el.parentElement ?? el, '--col', `${l.col}px`);
+  }
+  /** the page's column (l, measured in `avail` px) on the shell of each editor whose column is in no pane of its own: a
+   *  mounted editor's (app/mount.ts: its page and split panes, its find bar read it); --rtx-free capped where the peek it
+   *  feeds stops growing (100 px at the blocks' zoom), so a width change that leaves the peek alone leaves it alone too */
+  function writeShells(rows, l, avail) {
+    const tabs = new Set(rows.map((x) => x.el.parentElement));
+    const free = `${Math.min(Math.max(0, Math.floor((avail + 48 - Math.min(l.col, avail)) / 2)), Math.ceil(100 * l.eff))}px`;
+    for (const r of attached.keys()) {
+      const shell = r.part('shell');
+      if (!shell || tabs.has(shell)) continue;           // the workbench's: the focused pane's tab (its own column)
+      setOn(shell, '--col', `${l.col}px`);
+      setOn(shell, '--rtx-free', free);
     }
   }
   function apply({ animate = false } = {}) {
@@ -148,14 +165,7 @@ export async function installView({ notes = null } = {}) {
       clearTimeout(apply.t);
       apply.t = setTimeout(() => root.classList.remove('rtx-width-anim'), 400);
     }
-    const setVar = (k, v) => { if (cols().style.getPropertyValue(k) !== v) cols().style.setProperty(k, v); };   // only a change restyles
-    setVar('--col', `${l.col}px`);
-    setVar('--rtx-view-zoom', String(l.eff));
-    // capped where the peek it feeds stops growing (100 px at the blocks' zoom): set on <html>, every change
-    // restyles every element, so a window or sidebar change that leaves the peek alone leaves this alone too
-    const free = Math.max(0, Math.floor((sw + 48 - Math.min(l.col, sw)) / 2));
-    const freeCss = `${Math.min(free, Math.ceil(100 * l.eff))}px`;
-    setVar('--rtx-free', freeCss);
+    setOn(zoomOn(), '--rtx-view-zoom', String(l.eff));
     // justification: the viewer's --latex-align, read at every layout; lay the blocks out again
     // ragged right and hidden handles are advanced features: with the switch off, the defaults
     const adv = advanced.peek(), align = adv ? s.align : DEFAULTS.align, handles = adv ? s.handles : DEFAULTS.handles;
@@ -164,6 +174,7 @@ export async function installView({ notes = null } = {}) {
     if (alignWas !== align) relayoutAll();
     root.toggleAttribute('data-no-handles', !handles);    // a page-wide option: on <html>, as the theme
     writePanes(paneRows);
+    writeShells(paneRows, l, sw);
     last = l;
     pop?.sync();
   }
@@ -206,8 +217,8 @@ export async function installView({ notes = null } = {}) {
   const movingIn = new Set();
   const later = () => { if (movingIn.size) return; if (!raf) raf = requestAnimationFrame(() => { raf = 0; apply(); }); };
   // while the panes' widths change (panes/widths.js: the blocks keep their lines meanwhile) the column's
-  // variables wait: set on <html>, each change restyled every element of the page, every frame. Applied at the end,
-  // in the same task, before the blocks are re-broken at the new width.
+  // variables wait (each change restyles and lays out the panes): applied when the motion is over, a frame before the
+  // blocks are re-broken at the new width (widths.js end: two tasks, neither long)
   // each attached editor's (view.attach): its widths moving, its results shown
   const onWidths = (r, w) => {
     if (w?.moving) { movingIn.add(r); if (raf) { cancelAnimationFrame(raf); raf = 0; } return; }

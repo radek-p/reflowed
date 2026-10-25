@@ -8,6 +8,9 @@
 //     top) within 1 px of where it was; afterwards nothing pinned, no old lines left, every block at a fresh layout's
 //     height for its width (laid out again from scratch: equal) and laid out at its element's width;
 //   - the narrowing sidebar: the text clipped with a soft edge during the motion; the old lines cross-fade (ghosts);
+//   - the end of a side column's slide (one pane, a narrow window): no long task from the workbench's resizeend until
+//     its work is done (the column applied, then the re-break, in tasks of their own), and no column variables on
+//     <body> (they restyled the page outside the panes at every slide's end);
 //   - a column width picked in View (its eased motion), narrower and back;
 //   - reduced motion: no motion, no cross-fade, each block re-broken at most once.
 // Waits on the governor's and the viewer's idle promises and frames, never on fixed times. Long tasks are counted in the
@@ -213,6 +216,39 @@ async function measure(page: any, tag: string, act: () => Promise<unknown>, { re
   return { r, ws, drift };
 }
 
+/** the end of a side column's slide: the tasks from the workbench's resizeend (a mark in the trace) until the change's
+ *  work is done: none over 50 ms; the column's variables on no page-wide element */
+async function slideEnd(page: any, tag: string) {
+  await calibrate(page);
+  await settled(page); await idle(page); await frames(page, 3);
+  await page.evaluate(() => {
+    const w = window as any;
+    w.__slideEnd?.off();
+    const x = { ended: false, off: (() => false) as () => unknown, long: [] as { start: number; ms: number }[], end: Infinity, po: null as PerformanceObserver | null };
+    x.off = w.editorAPI.workbench().on('resizeend', () => { if (x.ended) return; x.ended = true; x.end = performance.now(); console.timeStamp('rtx-slide-end'); });
+    x.po = new PerformanceObserver((l) => { for (const e of l.getEntries()) x.long.push({ start: e.startTime, ms: Math.round(e.duration) }); });
+    x.po.observe({ type: 'longtask', buffered: false });
+    w.__slideEnd = x;
+  });
+  const work = await traceWork(page, async () => {
+    await sidebarBtn(page);
+    await page.waitForFunction(() => (window as any).__slideEnd.ended);
+    await settled(page); await frames(page, 3);
+  });
+  const wall = await page.evaluate(() => {
+    const x = (window as any).__slideEnd;
+    x.po.disconnect(); x.off();
+    return x.long.filter((t: any) => t.start + t.ms >= x.end).map((t: any) => t.ms);
+  });
+  await calibrateAfter(page);
+  const mark = work.marks.find((m) => m.name === 'rtx-slide-end');
+  const cpu = mark ? work.tasks.filter((t) => t.at + t.wall >= mark.at && t.cpu > LIM(LONG_MS)).map((t) => Math.round(t.cpu)) : null;
+  const long = TIMING_STRICT ? wall.filter((d: number) => d > LONG_MS) : cpu;
+  gate(check, `${tag}: no long task (> ${L(LONG_MS)}) from the slide's end until its work is done`, !!mark && !!long && long.length === 0, { cpu, wall, marked: !!mark });
+  const vars = await page.evaluate(() => [document.body, document.documentElement].map((el) => ({ el: el.tagName, col: el.style.getPropertyValue('--col'), free: el.style.getPropertyValue('--rtx-free') })));
+  check(`${tag}: no column variable (--col, --rtx-free) on <body> or <html>`, vars.every((v: any) => !v.col && !v.free), vars);
+}
+
 const run = (name: string) => !ONLY || ONLY.test(name);
 for (const doc of DOCS) {
   // ── split on, the sidebar in split view, the drag, split off, a pane hidden (1440 px) ──
@@ -257,6 +293,9 @@ for (const doc of DOCS) {
     if (opened) await measure(page, `${doc}: sidebar off (one pane, 1000 px)`, () => sidebarBtn(page));
     await measure(page, `${doc}: sidebar on (one pane, 1000 px)`, () => sidebarBtn(page), { narrowing: true });
     if (!opened) await measure(page, `${doc}: sidebar off (one pane, 1000 px)`, () => sidebarBtn(page));
+    // the slide's end alone, both ways (at this width the sidebar changes the column: 'paper' fitted to the pane)
+    const shownNow = () => page.evaluate(() => !(window as any).editorAPI.workbench().sides.peek().left.collapsed);
+    for (let k = 0; k < 2; k++) await slideEnd(page, `${doc}: the end of the sidebar's slide, ${(await shownNow()) ? 'off' : 'on'} (one pane, 1000 px)`);
     await ctx.close();
   }
   // ── a column width picked in View: the column eases to it (one pane, 1440 px) ──

@@ -35,8 +35,9 @@ export function installControls(root) {
   const html = root.doc.documentElement;
   const view = () => root.part('view');
   const mains = (v) => v.querySelectorAll('main[data-pane]');
-  const columnPx = () => {
-    const v = getComputedStyle(root.doc.body ?? html).getPropertyValue('--col').trim();   // (view/index.js: on <body>)
+  /** the pane's column, px: its own --col (view/index.js: on its tab, or a mounted editor's shell; the page's default) */
+  const columnPx = (p) => {
+    const v = getComputedStyle(p).getPropertyValue('--col').trim();
     const n = parseFloat(v) || 704;
     return /rem$/.test(v) ? n * (parseFloat(getComputedStyle(html).fontSize) || 16) : n;
   };
@@ -45,11 +46,11 @@ export function installControls(root) {
   function update() {
     const v = view();
     if (!v) return;
-    const split = v.classList.contains('scrolls'), col = columnPx();
+    const split = v.classList.contains('scrolls');
     for (const p of mains(v)) {
       const w = split ? p.clientWidth : v.clientWidth;
       if (!w) continue;                                            // hidden (home): decided when shown
-      const m = controlsMode(p.dataset.ctl, w, col);
+      const m = controlsMode(p.dataset.ctl, w, columnPx(p));
       if (p.dataset.ctl !== m) p.dataset.ctl = m;
     }
   }
@@ -70,7 +71,7 @@ export function installControls(root) {
   const mo = new MutationObserver(() => { watch(); update(); });
   if (v0) mo.observe(v0, { childList: true, attributes: true, attributeFilter: ['class', 'hidden'] });
   const moCol = new MutationObserver(update);
-  moCol.observe(html, { attributes: true, attributeFilter: ['style'] });   // --col (view/index.js: the page's view options)
+  moCol.observe(html, { attributes: true, attributeFilter: ['style'] });   // the page's view options (the text size: Paper's column; view/index.js)
   update();
 
   // ── the hover zone ──

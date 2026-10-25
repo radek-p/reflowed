@@ -53,7 +53,8 @@
 //   widths.stats() · widths.resetStats()   { pinned, rebroken, lazy, ghosts, frames: [{ n, ms, visible, left }], slices, pins }
 //   widths.dispose()
 //   'editor:widths' (document event, detail { moving }): a change of the panes' widths is under way / over. While
-//   it is, what follows the column (view/index.js: --col on <html>, every element restyled) waits for the end.
+//   it is, what follows the column (view/index.js: each pane's --col) waits for the end; the re-break comes a frame
+//   after it (a transition's and a hold's alike).
 //   const widths = createWidths({ panes: () => Pane[], relayout(el), laidAt?(el) -> { widthPt, align } | null, reduced?(), state? })
 //     state: the container's signals (app/page-state.ts): state.widths says when the widths are moving
 import { idle, cancelIdle } from '../perf/idle.ts';
@@ -523,8 +524,18 @@ export function createWidths({ panes, relayout, laidAt = null, state = null, red
       if (!dragging) return;
       dragging = false;
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
-      emit(false);
-      return settle({ fade: false });
+      emit(false);                              // the column's settings applied now (view/index.js), the blocks still pinned
+      // the re-break in the next frame's task, as a transition's: the column's restyle and layout, and the re-break, are
+      // two tasks, neither long (one task of 57-71 ms at the end of a side column's slide in a long document); a change
+      // begun meanwhile settles them itself
+      const g = gen;
+      held++;
+      return nextFrame().then(() => {
+        held--;
+        if (g === gen && !dragging && !disposed) return settle({ fade: false });
+        schedule();
+        return undefined;
+      });
     },
     idle: () => (pinned.size || idleH || nextH || dragging || held ? new Promise((r) => waiters.push(r)) : Promise.resolve()),
     get pinned() { return pinned.size; },

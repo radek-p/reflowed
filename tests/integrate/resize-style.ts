@@ -1,7 +1,8 @@
 // ── a change of the panes' sizes restyles the panes' boxes, not every glyph ──
 // Inherited variables set high in the tree restyled every element below them at each change: the resizing class's
 // user-select on the workbench root (the drag's start and its drop), --col and --rtx-free on <html> (Chromium restyles
-// the whole page for a variable changed on the root, whatever resets it below), a group's strip variables when its
+// the whole page for a variable changed on the root, whatever resets it below), then on <body>, and a pane's --col inherited
+// by every element of its blocks, a group's strip variables when its
 // tabs switch between one line and two, --pane-h on a pane. A splitter dragged across both forms: no style recalc of
 // more than a quarter of the page's elements at once (it was all of them, up to 9,820, 75 ms); and each change alone.
 //   a section of tests/test-integrate.ts: node tests/test-integrate.ts [base] --only '^resize-style$'
@@ -54,8 +55,12 @@ export default async function (h: Harness): Promise<void> {
   const force = `getComputedStyle(document.querySelector('main.rtx-pane .blk')).color`;
   const form = await one(`(() => { const g = document.querySelector('.wb-group[data-form]'); const was = g.dataset.form; g.dataset.form = was === 'one' ? 'two' : 'one'; ${force}; g.dataset.form = was; ${force}; })()`);
   check('resize-style: a group\'s strip switching between one line and two restyles its strip, not its pane (at most 100 elements)', form.length > 0 && Math.max(...form) <= 100, { form });
-  const col = await one(`(() => { const b = document.body, c = parseFloat(getComputedStyle(b).getPropertyValue('--col')); b.style.setProperty('--col', (c - 1) + 'px'); ${force}; b.style.setProperty('--col', c + 'px'); ${force}; })()`);
-  check(`resize-style: a change of the column (--col, on <body>) restyles at most a quarter of the page's elements, not the glyphs`, col.length > 0 && Math.max(...col) <= quarter, { col, quarter });
+  // a pane's column (--col, on its tab: view/index.js) stops below the column's box (app/wb/css.ts): its change
+  // restyles the box and the find bar, not the pane's blocks; <body> carries none (it restyled the page outside the panes)
+  const col = await one(`(() => { const t = document.querySelector('main.rtx-pane').parentElement, c = parseFloat(t.style.getPropertyValue('--col')); t.style.setProperty('--col', (c - 1) + 'px'); ${force}; t.style.setProperty('--col', c + 'px'); ${force}; })()`);
+  check(`resize-style: a change of a pane's column (--col, on its tab) restyles at most 200 elements, not its blocks`, col.length > 0 && Math.max(...col) <= 200, { col });
+  const bodyCol = await page.evaluate(() => [document.body.style.getPropertyValue('--col'), document.body.style.getPropertyValue('--rtx-free')]);
+  check('resize-style: no column variable (--col, --rtx-free) on <body>', bodyCol.every((v: string) => !v), { bodyCol });
   const ph = await one(`(() => { const m = document.querySelector('main.rtx-pane'), v = m.style.getPropertyValue('--pane-h'); m.style.setProperty('--pane-h', (parseFloat(v) - 1) + 'px'); ${force}; m.style.setProperty('--pane-h', v); ${force}; })()`);
   check('resize-style: a pane\'s height (--pane-h) restyles at most a quarter of the page\'s elements', ph.length > 0 && Math.max(...ph) <= quarter, { ph, quarter });
   const rz = await one(`(() => { const r = document.querySelector('.wb-root'); r.classList.add('wb-root--resizing', 'wb-root--resizing-col'); ${force}; r.classList.remove('wb-root--resizing', 'wb-root--resizing-col'); ${force}; })()`);

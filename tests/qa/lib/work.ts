@@ -8,6 +8,8 @@
 //   w.long(50)                  tasks over 50 ms of CPU
 //   w.event('click', 'keydown') the most CPU one input event's dispatch took (its handlers and the layout they force)
 //   w.cpu                       the main thread's CPU time over the window
+//   w.marks                     the page's console.timeStamp(label) calls: { name, at } (at: the tasks' clock), so a
+//                               check can take the tasks from a point in the window on (t.at + t.wall > mark.at)
 //   timed(check, name, workOk, workDetail, wallOk, wallDetail)
 //
 // Calibrated limits. CPU time grows too on a loaded host (shared caches, frequency
@@ -36,6 +38,8 @@ export interface Work {
   events: { type: string; wall: number; cpu: number }[];
   /** CPU time (ms) of the main thread's tasks in the window */
   cpu: number;
+  /** the page's console.timeStamp(label) marks, in the tasks' clock (ms) */
+  marks: { name: string; at: number }[];
   /** tasks whose CPU time is over ms */
   long(ms: number): Task[];
   /** the most CPU (ms) a dispatch of one of these input events took; 0 if none */
@@ -83,8 +87,9 @@ export function analyse(events: any[]): Work {
   const main = [...byThread.values()].sort((a, b) => cpuOf(b) - cpuOf(a))[0] ?? [];
   const tasks: Task[] = main.filter(isTask).map((e) => ({ at: e.ts / 1000, wall: (e.dur ?? 0) / 1000, cpu: (e.tdur ?? e.dur ?? 0) / 1000 }));
   const evs = main.filter((e) => e.name === 'EventDispatch').map((e) => ({ type: String(e.args?.data?.type ?? ''), wall: (e.dur ?? 0) / 1000, cpu: (e.tdur ?? e.dur ?? 0) / 1000 }));
+  const marks = events.filter((e) => e.name === 'TimeStamp').map((e) => ({ name: String(e.args?.data?.message ?? e.args?.data?.name ?? ''), at: e.ts / 1000 }));
   return {
-    tasks, events: evs,
+    tasks, events: evs, marks,
     cpu: tasks.reduce((a, t) => a + t.cpu, 0),
     long: (ms) => tasks.filter((t) => t.cpu > ms),
     event: (...types) => Math.max(0, ...evs.filter((e) => types.includes(e.type)).map((e) => e.cpu)),

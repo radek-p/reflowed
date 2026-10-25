@@ -240,8 +240,8 @@ function registerDocument(wb: WorkbenchStore, tabs: () => DocTabs, openDoc: (id:
     switcher: (tab) => ({ onSelect: (e) => { void switcher(e.currentTarget ?? e.anchor!, tab, openDoc, wb); } }),
     rename: (tab, name) => { const ed = tabs().editorOf(tab.id) as unknown as { setTitle?(t: string): void } | null; ed?.setTitle?.(name); },
     focus: (ctx) => { const p = tabs().pane(ctx.viewId); (p?.el ?? null)?.focus?.({ preventScroll: true }); },
-    // its text centred in the group while the groups' widths move (its column: the pane's --col, an inline style: no layout read)
-    lockedLeft: (ctx, w) => lockedLeft(w, parseFloat(tabsOr(() => tabs().pane(ctx.viewId)?.el.style.getPropertyValue('--col') ?? ''))),
+    // its text centred in the group while the groups' widths move (its column: the pane's --col, an inline style on its tab: no layout read)
+    lockedLeft: (ctx, w) => lockedLeft(w, parseFloat(tabsOr(() => tabs().pane(ctx.viewId)?.el.parentElement?.style.getPropertyValue('--col') ?? ''))),
     Component: DocumentTab,
   });
   function DocumentTab({ tab, ctx }: { tab: Tab; ctx: WbContext }) {
