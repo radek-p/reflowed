@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { resultsDir } from './qa/lib/results.ts';
 import { staticServer } from './qa/lib/static-server.ts';
+import { freePort } from './qa/lib/free-port.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(resultsDir(ROOT), 'resources');
@@ -87,7 +88,7 @@ writeFileSync(join(LIB, 'index.html'), '<!doctype html><meta charset="utf-8"><ti
 let server: ChildProcess | null = null;
 let BASE = arg('--url')?.replace(/\/$/, '') ?? '';
 if (!BASE) {
-  const port = 20000 + (process.pid % 20000);
+  const port = await freePort();
   server = spawn(process.execPath, [join(ROOT, 'tests/integration/serve.ts'), String(port)], { stdio: ['ignore', 'pipe', 'inherit'] });
   BASE = `http://localhost:${port}`;
   for (let i = 0; ; i++) {

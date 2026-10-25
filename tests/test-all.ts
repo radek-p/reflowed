@@ -58,6 +58,7 @@ import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rm
 import { join, resolve } from 'node:path';
 import { cpus, loadavg } from 'node:os';
 import { ensureBrowsers } from './qa/lib/browsers.ts';
+import { freePort } from './qa/lib/free-port.ts';
 import { introBuilt } from './qa/lib/samples.ts';
 import { SUITES, scriptOf, KNOWN, KNOWN_REVIEW_DAYS, knownAge, afterRerun, normLine, tooLoadedLines, factorsIn, ROOT, select, estimate, seeded, type Suite, type Ctx } from './suites.ts';
 
@@ -194,8 +195,6 @@ process.on('SIGINT', () => { stop(); process.exit(130); });
 
 const needDev = picked.some((p) => p.s.group === 'dev');
 const needSeed = !COLD && picked.some((p) => seeded(p.s));
-// ports: 8 per lane from a base that depends on the pid (two test-alls side by side do not meet)
-const port0 = 21000 + (process.pid % 1000) * 32;
 /** a lane: its own dev servers (cold, seeded); the file is shared (read only) */
 interface Lane { i: number; ctx: Ctx; seeded: string }
 const lanes: Lane[] = Array.from({ length: LANES }, (_, i) => ({ i, ctx: { dev: '', file: FILE }, seeded: '' }));
@@ -210,9 +209,9 @@ if (needDev) {
     if (wcode !== 0) { console.error(`the worker did not build (engine/scripts/build-worker.ts exit ${wcode})`); process.exit(1); }
   }
   for (const L of lanes) {
-    const p = port0 + L.i * 8;
-    L.ctx.dev = await up('tests/integration/serve.ts', p, '/bundle/info');
-    if (needSeed) L.seeded = await up('tests/integration/serve.ts', p + 2, '/bundle/info', '--seed-cache');
+    // free ports, the system's pick (two test-alls side by side, or other sessions' servers, do not meet)
+    L.ctx.dev = await up('tests/integration/serve.ts', await freePort(), '/bundle/info');
+    if (needSeed) L.seeded = await up('tests/integration/serve.ts', await freePort(), '/bundle/info', '--seed-cache');
     console.log(`lane ${L.i}: dev app ${L.ctx.dev}${L.seeded ? ` · seeded ${L.seeded}` : ''}`);
   }
   if (needSeed) {

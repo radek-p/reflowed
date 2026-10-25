@@ -83,7 +83,7 @@ export const SUITES: Suite[] = [
   S('fixture-cache', 'dev', 5, (c) => node('tests/test-fixture-cache.ts', `${c.dev}/`, c.file), { seedOnly: true }),   // the fixture's blocks: stale recorded again, cold still compiles, never in a release   // the seeded dev server opens the paper with 0 compiles
   S('app-bundle', 'dev', 2, () => node('tests/test-app-bundle.ts'), FAST),   // (after the dev bundle and worker builds)
   S('resources', 'dev', 10, (c) => node('tests/test-resources.ts', '--url', c.dev, '--file', c.file), { cold: true, needs: 'file', note: 'the engine on the release\'s embedded set only, with and without the TeX resource server' }),
-  S('resources-origin', 'dev', 5, (c) => node('tests/test-resources-origin.ts', '--file', c.file), { needs: 'file', note: 'the single file over http (a static server on 8187), the tree beside it by default; Chromium, Firefox, WebKit probes' }),
+  S('resources-origin', 'dev', 5, (c) => node('tests/test-resources-origin.ts', '--file', c.file), { needs: 'file', note: 'the single file over http (a static server on a free port), the tree beside it by default; Chromium, Firefox, WebKit probes' }),
   S('resources-setting', 'dev', 5, (c) => node('tests/test-resources-setting.ts', `${c.dev}/`)),   // the server address in Document settings
   S('recovery', 'dev', 15, (c) => node('engine/tests/recovery.test.ts', '--url', c.dev), { cold: true, note: 'the worker failing and restarting' }),
   S('home', 'dev', 10, (c) => node('tests/test-home.ts', `${c.dev}/`, '--no-shots'), FAST),   // the Documents view (Preact)
@@ -155,9 +155,9 @@ export const SUITES: Suite[] = [
   S('smoke-firefox-webkit', 'smoke', 30, (c) => node('tests/test-build.ts', '--firefox', '--webkit', '--file', c.file)),
   // the multi-file release beside the file (dist/reflowtex-editor/), over http from a subdirectory as on a static
   // host (no type for .wasm, gzip with no Content-Length, slowed), Chromium, Firefox, WebKit
-  S('fewer-requests-release', 'file', 10, (c) => node('tests/test-fewer-requests.ts', '--release', c.file, '--port', '8174', ...(existsSync(join(ROOT, 'build/resources/www/texlive')) ? ['--tree', 'build/resources/www'] : [])), { note: 'a static server on 8174; what the UI needs in one request; with the TeX tree installed (scripts/fetch-engine.ts), a package from it in one round of parallel requests' }),
-  S('fmt-early-release', 'file', 20, (c) => node('tests/test-fmt-early.ts', '--release', c.file, '--port', '8173'), { note: 'a static server on 8173; the intro shown with the engine packs held back 30 s' }),
-  S('multifile', 'file', 20, (c) => node('tests/test-multifile.ts', '--file', c.file), { note: 'static servers on 8171-8172; the loading indicator, the engine from the packs, requests' }),
+  S('fewer-requests-release', 'file', 10, (c) => node('tests/test-fewer-requests.ts', '--release', c.file, ...(existsSync(join(ROOT, 'build/resources/www/texlive')) ? ['--tree', 'build/resources/www'] : [])), { note: 'a static server on a free port; what the UI needs in one request; with the TeX tree installed (scripts/fetch-engine.ts), a package from it in one round of parallel requests' }),
+  S('fmt-early-release', 'file', 20, (c) => node('tests/test-fmt-early.ts', '--release', c.file), { note: 'a static server on a free port; the intro shown with the engine packs held back 30 s' }),
+  S('multifile', 'file', 20, (c) => node('tests/test-multifile.ts', '--file', c.file), { note: 'static servers on free ports; the loading indicator, the engine from the packs, requests' }),
 ];
 // the suites the intro is the subject of (they stop at once without it): skipped, with the reason, where it is not built
 for (const s of SUITES) if (['popover-hold', 'refs-panel', 'files', 'e2e-dev', 'widths', 'far-dev'].includes(s.name)) s.needs ??= 'intro';

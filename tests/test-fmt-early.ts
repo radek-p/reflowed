@@ -7,7 +7,7 @@
 // Waits on conditions (every block shown, editorAPI.whenIdle()), never on times; the held-back files are a network delay.
 //
 //   node tests/test-fmt-early.ts http://localhost:8150/                 the seeded dev server (--seed-cache): the format held
-//   node tests/test-fmt-early.ts --release dist/reflowtex-editor [--port 8094]
+//   node tests/test-fmt-early.ts --release dist/reflowtex-editor [--port <n>]
 //                                                                         the multi-file release on a plain static server here:
 //                                                                         the format pack held, then the format and wasm packs
 //                                                                         (the engine's own: init's TeX files pack makes the fonts
@@ -17,6 +17,7 @@
 // The document is the intro (seed intro.json, #/doc/intro): it is in every seed set (the release ships it always).
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -137,7 +138,7 @@ if (!RELEASE) {
   // ── the multi-file release, on a plain static server (no compression, no caching headers: the worst case is the tests') ──
   const DIR = resolve(RELEASE.replace(/\.html$/, ''));
   if (!existsSync(join(DIR, 'manifest.json'))) { console.log(`${DIR}: no multi-file release there`); process.exit(1); }
-  const PORT = Number(arg('--port') ?? 8094);
+  const PORT0 = Number(arg('--port') ?? 0);   // 0: a free one (a fixed default met other runs' servers)
   const TYPES: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.txt': 'text/plain' };
   const server = createServer((req, res) => {
     let p = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname);
@@ -148,7 +149,8 @@ if (!RELEASE) {
     res.writeHead(200, { 'Content-Type': TYPES[extname(f)] ?? 'application/octet-stream', 'Content-Length': String(b.length) });
     res.end(b);
   });
-  await new Promise<void>((r) => server.listen(PORT, '127.0.0.1', () => r()));
+  await new Promise<void>((r) => server.listen(PORT0, '127.0.0.1', () => r()));
+  const PORT = (server.address() as AddressInfo).port;
   try {
     const url = `http://127.0.0.1:${PORT}/?store=memory#/doc/${DOC}`;
     for (const which of ['chromium', 'webkit'] as const) {

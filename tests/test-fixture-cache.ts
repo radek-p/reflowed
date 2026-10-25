@@ -10,11 +10,11 @@
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync, gzipSync } from 'node:zlib';
+import { freePort } from './qa/lib/free-port.ts';
 import { ensureFixtureCache, fixtureCacheState, FIXTURE_CACHE } from './integration/fixture-cache.ts';
 
 const HERE = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -25,7 +25,7 @@ let n = 0, fail = 0;
 const check = (name: string, ok: boolean, detail: unknown = '') => { n++; if (!ok) fail++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${detail === '' ? '' : ` — ${JSON.stringify(detail).slice(0, 600)}`}`); };
 
 // a cold dev server of its own (no --seed-cache): what the suites that opt out get
-const port = await new Promise<number>((r) => { const s = createServer().listen(0, () => { const p = (s.address() as any).port; s.close(() => r(p)); }); });
+const port = await freePort();
 const cold = spawn(process.execPath, [join(HERE, 'tests/integration/serve.ts'), String(port)], { cwd: HERE, stdio: 'ignore' });
 const COLD = `http://127.0.0.1:${port}`;
 for (let i = 0; ; i++) { try { if ((await fetch(`${COLD}/bundle/info`)).ok) break; } catch { /* not up yet */ } if (i > 600) throw new Error('the cold server did not start'); await new Promise((r) => setTimeout(r, 100)); }

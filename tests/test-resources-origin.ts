@@ -2,7 +2,7 @@
 // over http by a static server (tests/qa/lib/static-server.ts), the TeX Live tree beside it (reflowEd/texlive/2022/),
 // and the same file in a directory without one. No server address is set anywhere: the page's default does it.
 //
-//   node tests/test-resources-origin.ts [--file dist/reflowtex-editor.html] [--port 8187] [--browsers chromium,firefox,webkit]
+//   node tests/test-resources-origin.ts [--file dist/reflowtex-editor.html] [--port <n>] [--browsers chromium,firefox,webkit]
 //        [--engine-in firefox,webkit]
 //
 // Cases:
@@ -27,7 +27,7 @@ import { staticServer } from './qa/lib/static-server.ts';
 const argv = process.argv.slice(2);
 const arg = (k: string) => (argv.includes(k) ? argv[argv.indexOf(k) + 1] : null);
 const FILE = resolve(arg('--file') ?? join(EDITOR, 'dist/reflowtex-editor.html'));
-const PORT = Number(arg('--port') ?? 8187);
+const PORT = Number(arg('--port') ?? 0);   // 0: a free one
 const BROWSERS = (arg('--browsers') ?? 'chromium,firefox,webkit').split(',').filter(Boolean) as ('chromium' | 'firefox' | 'webkit')[];
 const TREE = join(EDITOR, 'build/resources/www/texlive');
 const t = harness('resources-origin');

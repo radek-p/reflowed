@@ -8,7 +8,7 @@
 // (every block shown, editorAPI.whenIdle()), never on times.
 //
 //   node tests/test-fewer-requests.ts http://localhost:8150/                        the seeded dev server (--seed-cache)
-//   node tests/test-fewer-requests.ts --release dist/reflowtex-editor [--port 8051] [--latency <ms>]
+//   node tests/test-fewer-requests.ts --release dist/reflowtex-editor [--port <n>] [--latency <ms>]
 //            --latency: each answer of the static server waits this long first (a phone's round trip; the gates do not
 //            depend on it, the times do)
 //            --tree <dir>: a TeX Live tree (build/resources/www, installed by scripts/fetch-engine.ts) served beside the release at texlive/2022/
@@ -19,6 +19,7 @@
 //   --measure: print the counts and times only, no checks
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -122,7 +123,7 @@ if (!RELEASE) {
   // the multi-file release on a plain static server (no compression: the precompressed start-up file must not need it)
   const DIR = resolve(RELEASE.replace(/\.html$/, ''));
   if (!existsSync(join(DIR, 'manifest.json'))) { console.log(`${DIR}: no multi-file release there`); process.exit(1); }
-  const PORT = Number(arg('--port') ?? 8051);
+  const PORT0 = Number(arg('--port') ?? 0);   // 0: a free one (a fixed default met other runs' servers)
   const TYPES: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.txt': 'text/plain' };
   const LATENCY = Number(arg('--latency') ?? 0);
   const TREE = arg('--tree') ? resolve(arg('--tree')!) : null;
@@ -147,7 +148,8 @@ if (!RELEASE) {
     res.writeHead(200, { 'Content-Type': TYPES[extname(f)] ?? 'application/octet-stream', 'Content-Length': String(b.length) });
     res.end(b);
   });
-  await new Promise<void>((r) => server.listen(PORT, '127.0.0.1', () => r()));
+  await new Promise<void>((r) => server.listen(PORT0, '127.0.0.1', () => r()));
+  const PORT = (server.address() as AddressInfo).port;
   try {
     const url = `http://127.0.0.1:${PORT}/?store=memory#/doc/${DOC}`;
     const manifest = JSON.parse(readFileSync(join(DIR, 'manifest.json'), 'utf8')) as { files: { id: string; path: string; bytes: number; group: string; type: string; parts?: unknown[] }[] };

@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
+import { freePort } from './qa/lib/free-port.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CHUNK = 4096;
@@ -61,7 +62,6 @@ const RELAY = `http://127.0.0.1:${(cdnServer.address() as AddressInfo).port}/rel
 
 // ── dev servers ──────────────────────────────────────────────────────────────
 /** a port nothing listens on now (the OS picks it) */
-const freePort = () => new Promise<number>((res) => { const s = createServer(); s.listen(0, '127.0.0.1', () => { const p = (s.address() as AddressInfo).port; s.close(() => res(p)); }); });
 interface Dev { proc: ChildProcess; port: number; log: string[] }
 async function startServer(port: number, cache: string): Promise<Dev> {
   const proc = spawn(process.execPath, [join(ROOT, 'tests/integration/serve.ts'), String(port)], {

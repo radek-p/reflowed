@@ -20,6 +20,7 @@
 import { createRequire } from 'node:module';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { createServer, type AddressInfo } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -49,7 +50,8 @@ writeFileSync(join(LIB, 'index.html'), '<!doctype html><meta charset="utf-8"><ti
 let server: ChildProcess | null = null;
 let BASE = urlArg?.replace(/\/$/, '') ?? '';
 if (!BASE) {
-  const port = 20000 + (process.pid % 20000);
+  // a free port (the system's pick, let go): a pid-derived one met other runs' servers
+  const port = await new Promise<number>((r, j) => { const s = createServer().once('error', j); s.listen(0, () => { const p = (s.address() as AddressInfo).port; s.close(() => r(p)); }); });
   server = spawn(process.execPath, [join(EDITOR, 'tests/integration/serve.ts'), String(port)], { stdio: ['ignore', 'pipe', 'inherit'] });
   BASE = `http://localhost:${port}`;
   // up when it answers (the server prints nothing we can rely on)

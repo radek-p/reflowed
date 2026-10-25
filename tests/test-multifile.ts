@@ -4,7 +4,7 @@
 // first server gzip on everything (chunked: no Content-Length) with the engine's files slowed to 3 MB/s and the app's
 // to 1 MB/s, as a real line would be; the second server plain (Content-Length, no gzip). All on 127.0.0.1.
 //
-//   node tests/test-multifile.ts [--dir dist/reflowtex-editor] [--file dist/reflowtex-editor.html] [--browsers chromium,firefox,webkit] [--port 8171]
+//   node tests/test-multifile.ts [--dir dist/reflowtex-editor] [--file dist/reflowtex-editor.html] [--browsers chromium,firefox,webkit] [--port <n>]
 //   (--file X.html: the multi-file release beside it, X/; neither there: a quick build, scripts/build.ts --no-seed-cache)
 //
 // Per browser, on the gzip server:
@@ -33,7 +33,8 @@ import { staticServer, type StaticServer } from './qa/lib/static-server.ts';
 const argv = process.argv.slice(2);
 const arg = (k: string) => (argv.includes(k) ? argv[argv.indexOf(k) + 1] : null);
 const t = harness('multifile');
-const PORT = Number(arg('--port') ?? 8171), PLAIN = PORT + 1;
+// the two servers' ports: free ones (port 0), or --port and the next one; fixed defaults met other runs' servers
+const PORT = Number(arg('--port') ?? 0), PLAIN = PORT ? PORT + 1 : 0;
 const BROWSERS = (arg('--browsers') ?? 'chromium,firefox,webkit').split(',').filter(Boolean) as ('chromium' | 'firefox' | 'webkit')[];
 let DIR = resolve(arg('--dir') ?? (arg('--file') ?? join(EDITOR, 'dist/reflowtex-editor.html')).replace(/\.html$/, ''));
 if (!existsSync(join(DIR, 'index.html'))) {
