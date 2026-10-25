@@ -12,6 +12,7 @@
 //   - one PageDown: one step, of which at most a third of the pane animates (the rest jumps at once)
 //   - PageDown held (five presses in a row): one step each, no long task
 //   - End in a text field (the find bar) is left to the field
+// Each document starts from the default layout (?fresh): its tab alone, pane A.
 // Waits on events (nav:jumped, nav:back, nav:scrolled), whenIdle() and frames; never on fixed times. Long tasks are
 // counted in the main thread's CPU time (tests/qa/lib/work.ts); --timing-strict counts them by the clock.
 import { createRequire } from 'node:module';
@@ -108,7 +109,10 @@ const bound = (r: any) => r.seenPx <= 2.05 * r.paneH;          // about two pane
 
 for (const doc of docsHere(['long', 'intro'])) {
   await page.goto('about:blank');
-  await page.goto(`${URL0}${sep}${seedQuery(doc)}store=memory#/doc/${doc}`);
+  // ?fresh: the default layout, this document's tab alone. Without it the page restores the last layout (the
+  // previous document's tab; a release ignores ?store=memory, so that document is still in its store) and opens this
+  // one beside it: pane A, the first document tab, would be the previous document's pane, not this one's
+  await page.goto(`${URL0}${sep}${seedQuery(doc)}store=memory&fresh#/doc/${doc}`);
   await page.waitForFunction(() => (window as any).editorAPI?.whenIdle && document.querySelectorAll('[data-part="page"] .blocks > .blk').length > 20);
   await idle();
   SEL.a = await paneA(page); P.a = idOf(SEL.a);
