@@ -40,7 +40,7 @@ import { spacingOf } from './spacing.ts';
 import { resampler, joinContext } from './fidelity/resample.ts';
 import { attachAssetPictures, type AssetEntry } from './assets.ts';
 import { pdfToSvg } from './pdf-svg.ts';   // PDF pictures without a rendition
-import { mapOutlines } from './doc-fonts.ts';
+import { mapLines } from './doc-fonts.ts';
 import { chain, mapProvider, type ResourceProvider } from '../../loading/provider.ts';
 import { httpProvider, texRequires, xhrGetSync, type HttpProvider } from '../../loading/http.ts';
 import { readPack } from '../../loading/pack.ts';
@@ -54,6 +54,7 @@ import { Pipeline } from '@pub/src/pipeline/pipeline.ts';
 import { readSerializerOutput } from '@pub/src/pipeline/nodes.ts';
 import { encodeDocument } from '@pub/src/pipeline/encode.ts';
 import { Fonts, glyphRequirements } from '@pub/src/pipeline/fonts/fonts.ts';
+import { setDocumentMapLines } from '@pub/src/pipeline/fonts/type1.ts';
 import protoText from '@pub/src/schema/latex.proto';
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -206,6 +207,7 @@ async function init(args: { pack?: string; packBytes?: Uint8Array; packs?: Uint8
   vfs.mount('/reflowtex', (rel) => (rel === 'src/schema/latex.proto' ? enc.encode(protoText) : null));
   vfs.mount('/node_modules', () => null);
   setKpsewhich(kpsewhich);
+  setDocumentMapLines(docMapLines);
   return { build: ENGINE_BUILD, files: names.size, unpackMs: tUnpacked - t0, ms: performance.now() - t0 };
 }
 
@@ -229,21 +231,18 @@ const withEngine = <A, R>(f: (a: A) => R) => (a: A): R => {
   return f(a);
 };
 
-/** The encoder's kpsewhich (fonts: a TFM face's X.pfb, a map's outline, an OTF):
- *  the embedded set and the document's files, and an outline a document map line
- *  names for a face (\\pdfmapline{+Face Face <file.pfb}, \\pdfmapfile{doc.map}). */
+/** The encoder's kpsewhich (fonts: a TFM face's X.pfb, a map's outline and encoding, an OTF):
+ *  the embedded set and the document's files. */
 function kpsewhich(name: string): string | null {
-  if (names.has(name) || assets.get(name)?.bytes || server?.has(name)) return `/texmf/${name}`;
-  const face = /^(.+)\.pf[ab]$/.exec(name)?.[1];
-  const alias = face ? docOutlines().get(face) : undefined;
-  if (alias && alias !== name && (names.has(alias) || assets.get(alias)?.bytes || server?.has(alias))) return `/texmf/${alias}`;
-  return null;
+  return names.has(name) || assets.get(name)?.bytes || server?.has(name) ? `/texmf/${name}` : null;
 }
-let outlinesFor: string | null = null, outlines = new Map<string, string>();
-function docOutlines(): Map<string, string> {
+/** The document's own font map lines (\\pdfmapline, \\pdfmapfile{doc.map}), for the encoder's Type 1
+ *  conversion (doc-fonts.ts): the same array until the preamble or the document's map files change. */
+let mapLinesFor: string | null = null, docLines: string[] = [];
+function docMapLines(): string[] {
   const sig = `${pre.preamble}\u0000${[...assets.keys()].filter((n) => /\.map$/i.test(n)).join()}`;
-  if (sig !== outlinesFor) { outlinesFor = sig; outlines = mapOutlines(pre.preamble, (n) => getFile(n)); }
-  return outlines;
+  if (sig !== mapLinesFor) { mapLinesFor = sig; docLines = mapLines(pre.preamble, (n) => getFile(n)); }
+  return docLines;
 }
 
 let wasmModule: WebAssembly.Module;

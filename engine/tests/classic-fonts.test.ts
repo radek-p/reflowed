@@ -4,7 +4,10 @@
 // font file the worker serves for it: the glyph TeX set is the one drawn.
 //   * \usepackage{lmodern} maths: lmmi/lmsy/lmex are Type 1 outlines read through the encodings
 //     pdftex.map names (lm-mathit.enc, lm-mathsy.enc, lm-mathex.enc; their own vectors are standard
-//     ones), and those encodings are in the embedded set.
+//     ones), and those encodings are in the embedded set;
+//   * a document's own face, declared by a map line naming an outline and an encoding
+//     (\pdfmapline{+face PSName "… ReEncodeFont" <enc.enc <outline.pfb}, doc-fonts.ts): drawn
+//     through that encoding.
 //   node tests/classic-fonts.test.ts      (after node scripts/build-worker.ts)
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -69,6 +72,18 @@ async function glyphs(preamble: string, source: string, assets: { name: string; 
   check('lmodern: every maths glyph is the one TeX set', JSON.stringify(maths) === JSON.stringify(want), JSON.stringify(maths));
   const lacking = drawn.filter(([, g]) => g === '.notdef' || g.startsWith('no file'));
   check('lmodern: no glyph without a font file or drawn as .notdef', lacking.length === 0, JSON.stringify(lacking));
+}
+
+// ── a document's own face through its own map line ──────────────────────────
+{
+  const tfm = (await getFile('lmmi10.tfm'))!.data as Uint8Array;
+  const preamble = String.raw`\documentclass{article}
+\pdfmapline{+docmi LMMathItalic10-Regular "enclmmathit ReEncodeFont" <lm-mathit.enc <lmmi10.pfb}
+\DeclareFontFamily{U}{docmi}{}\DeclareFontShape{U}{docmi}{m}{n}{<-> docmi}{}`;
+  const { drawn, problems } = await glyphs(preamble, 'A {\\usefont{U}{docmi}{m}{n}\\char11\\char12} B.', [{ name: 'docmi.tfm', bytes: new Uint8Array(tfm) }]);
+  check('own map line: the block compiles', problems.length === 0, problems.join(' | '));
+  const own = drawn.filter(([f]) => f === 'docmi');
+  check('own map line: the face is drawn through the encoding the line names (alpha, beta)', JSON.stringify(own) === JSON.stringify([['docmi', 'alpha'], ['docmi', 'beta']]), JSON.stringify(drawn));
 }
 
 await w.terminate();
