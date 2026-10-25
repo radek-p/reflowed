@@ -97,13 +97,15 @@ export default async function (h: Harness): Promise<void> {
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 240000 }), page.keyboard.press('Enter')]);
   check('Enter on download: the PDF saved as <title>.pdf (io/download.ts fileName), the menu closed', dl.suggestedFilename() === `${fileName(title)}.pdf` && !(await page.$('.main-menu')),
     { name: dl.suggestedFilename(), title });
-  // the pointer: open opens the PDF in a new tab, as the row did before
+  // the pointer: open opens the PDF in a new tab, as the row did before (what window.open is given is recorded: a
+  // headless browser saves a PDF instead of showing it, so the new tab's own URL stays empty)
+  await page.evaluate(() => { const w = window as any, o = w.open; w.__opened = []; w.open = function (u: unknown, ...r: unknown[]) { w.__opened.push(String(u)); return o.call(this, u, ...r); }; });
   await page.click('#btn-main-menu');
   await page.hover('.main-menu [data-action="export"]');
   await page.waitForSelector('.main-menu.menu-sub[aria-label="Export"]');
   const [tab] = await Promise.all([ctx.waitForEvent('page', { timeout: 240000 }), page.click('.main-menu [data-row="export-pdf"] .mi-act[data-act="open"]')]);
-  await tab.waitForLoadState('domcontentloaded').catch(() => {});
-  check('open: the PDF in a new tab (its blob URL)', /^blob:/.test(tab.url()), tab.url());
+  const opened: string[] = await page.evaluate(() => (window as any).__opened);
+  check('open: a new tab on the PDF (a blob URL), the menu closed', !!tab && opened.length === 1 && /^blob:/.test(opened[0]!) && !(await page.$('.main-menu')), opened);
   await tab.close();
 
   // ── the Settings panel ──
