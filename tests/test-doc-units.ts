@@ -359,7 +359,7 @@ const inMemory = (t: any) => t.doc.blocks.map((b: any) => `${b.kind}:${b.source}
     const preHash = hash(`${pre.preamble}\n${d.bib?.source ?? ''}`);
     const thm = new Set(theoremKinds(d.preamble.source).map((t: any) => t.env));
     const keys = d.blocks.map((b: any) => {
-      const want = blockCacheKey(backend, { source: blockSource(b.kind, b.source, pre), context: derived.contexts.get(b.id) ?? '' }, { salt: 'S', preHash, assets: derived.assetSig(b.source) });
+      const want = blockCacheKey(backend, { source: blockSource(b.kind, b.source, pre), context: derived.contexts.get(b.id) ?? '' }, { salt: 'S', preHash, assets: derived.assetSig(b) });
       const got = derived.ck(b);
       n++; if (got !== want) { same = false; firstBad ||= `${d.id} ${b.id}`; }
       if (derived.kindOf(b.source) !== guessKind(b.source, thm)) { same = false; firstBad ||= `kind ${b.id}`; }

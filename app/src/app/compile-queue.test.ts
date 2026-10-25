@@ -84,5 +84,36 @@ check('the background request lands its blocks, its preamble result and its font
   check('typing: input quiet: the landed results shown again once (one redisplay for three landings)', redisplays === 1 && !q2.draining(), `redisplays ${redisplays}`);
   check('typing: waiting() is one pass and false when everything is typeset', !q2.waiting() && perPass.at(-1) === 1);
 }
+
+// A block's first compile names the files it opened (a figure a macro places): its key, which hashes them, moves. The
+// result is kept under the key it moved to as well (host.landed), so the block is not sent again for the same answer.
+{
+  const blocks: Block[] = [{ id: 'f', source: '\\shot{x}', kind: 'figure' }, { id: 'p', source: 'text', kind: 'paragraph' }];
+  const doc3 = { preamble: { source: '' }, blocks };
+  const known = new Set<string>();                       // the blocks whose files are known (doc/block-files.ts note)
+  const keyOf = (b: Block) => `${b.id}:${b.source}${known.has(b.id) && b.id === 'f' ? ':x.png' : ''}`;
+  let requests = 0;
+  // as the engine's backend: each block's result through onBlock as it is ready, then the answer
+  const backend3 = { id: 'fake', compile(req: Req & { onBlock?(id: string, r: unknown): void }) {
+    requests++;
+    const blocks = Object.fromEntries(req.blocks.map((b) => [b.id, ok(b.id)]));
+    for (const [id, r] of Object.entries(blocks)) req.onBlock?.(id, r);
+    return Promise.resolve({ blocks, fonts: {} });
+  } };
+  const cache3 = new Map<string, unknown>();
+  const q3 = createCompileQueue({
+    doc: () => doc3, backend: () => backend3, cache: cache3, keyOf, compileSource: (b: Block) => b.source, contextOf: () => '', skip: () => false, isEditing: () => false,
+    visible: new Set(), indexOf: (id: string) => blocks.findIndex((b) => b.id === id), perf, counters: { requests: 0, partsSent: 0, compiledIds: [] }, display() {}, redisplay() {},
+    stale: () => false, token: () => 0, compiling() {}, liveSending() {}, liveLanded() {}, persist() {}, setStatus() {}, preHash: () => 'p', preambleLanded() {}, applyFonts() {},
+    changed() {}, changedLater() {},
+    landed: (id: string, key: string) => { const b = blocks.find((x) => x.id === id)!; if (keyOf(b) !== key || known.has(id)) return null; known.add(id); return keyOf(b); },
+  });
+  q3.soon();
+  await q3.whenSettled();
+  check('first compile: the result kept under the key it was asked for and the key the block moved to', cache3.has('f:\\shot{x}') && cache3.has('f:\\shot{x}:x.png') && cache3.has('p:text'), JSON.stringify([...cache3.keys()]));
+  q3.soon();
+  await q3.whenSettled();
+  check('… and nothing is sent again (one request)', requests === 1 && !q3.waiting(), `requests ${requests}`);
+}
 console.log(`${n - bad}/${n} passed`);
 process.exit(bad ? 1 : 0);

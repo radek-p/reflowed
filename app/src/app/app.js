@@ -50,7 +50,7 @@ import { pdfRequest } from './pdf-request.js';                        // the PDF
 import { reportQuota, isQuota } from '../../../engine/web/quota.js';             // out of space: said
 import { openShortcuts } from '../chrome/shortcuts.js';                // the shortcuts dialog (Preact)
 import { mountTopBar } from '../chrome/top-bar.js';
-import { createDocSession, hash, GRAPHICS } from '../doc/index.js';   // the document: writes, block list, undo, operations
+import { createDocSession, hash } from '../doc/index.js';   // the document: writes, block list, undo, operations
 import { createCompileQueue } from './compile-queue.js';
 import { createSectionFocus } from '../docview/focus.js';
 import { createNavigator, createReveal } from '../nav/navigate.js';
@@ -159,7 +159,7 @@ export function createDocEditor(ctx) {
   const cache = results.cache;           // compile key -> BlockResult
   const { writer, write, op, logOps, saveBlock, saveMeta, flushTyping, safety, settled } = persist;
   const { blockById, indexOf, newBlock, placeBlock, unplaceBlock } = model;
-  const { contextOf, enginePreamble, compileSource, ck, viewKey, viewResult, assetOf, kindOf, computeContexts } = derived;
+  const { contextOf, enginePreamble, compileSource, ck, viewKey, viewResult, kindOf, computeContexts } = derived;
   const { moveBlocks, moveBlock, applyBlocks, setSource } = ops;   // (the hosts of nesting, find, the outline and the References pane; the rest goes through commands)
 
   // ── Saving through the store (../doc/persist.js, app/save-state.js) ──
@@ -337,16 +337,16 @@ export function createDocEditor(ctx) {
   }
 
   // ── Figures: an SVG figure has "Edit figure" (svgfig/); PDF figures are images (the Ipe editor is gone) ──
-  const figureNames = (src) => derived.figureNames(src);
   async function editFigure(id, name = null, opts = {}, view = null) {
     const b = blockById(id);
-    const f = b && figureNames(b.source).find((x) => !name || x.name === name);
+    const f = b && derived.usedAssets(b).find((x) => (name ? x.name === name : svgFigs.isSvg(x.name)));
     // an SVG figure; the editor opens from the view it was asked from (its picture), else the focused pane's
     if (f && svgFigs.isSvg(f.name)) return svgFigs.edit(b, view ?? panes.focused().viewOf(id), f, opts);
   }
   // SVG figures (svgfig/app-hooks.js): the editor, and drawn figures as files that follow their blocks
   const svgFigs = createSvgFigureHooks({ ctx, doc: () => S.doc, store, backend: () => backend, ids, write, op, logOps, perform, history, unplaceBlock, placeBlock,
-    newBlock, indexOf, blockById, renderAll, compileSoon, display, redisplay: (w) => blocks.redisplay(w), leaveEdit: (o) => edits.leaveAll(o), editing: () => edits.activeId(), editFigure, saveBlock, toast, hash, assetHash: derived.assetHash, GRAPHICS, assetOf, figureNames: (s) => figureNames(s) });
+    newBlock, indexOf, blockById, renderAll, compileSoon, display, redisplay: (w) => blocks.redisplay(w), leaveEdit: (o) => edits.leaveAll(o), editing: () => edits.activeId(), editFigure, saveBlock, toast, hash,
+    noteAsset: (m) => derived.noteAsset(m), forgetAsset: (m) => derived.forgetAsset(m), filesOf: (b) => derived.filesOf(b), usedAssets: (b) => derived.usedAssets(b) });
 
   // ── Features (app/feature.ts): what each adds to every document editor; a new one is one entry here ──
   const feats = composeFeatures([
@@ -476,7 +476,7 @@ export function createDocEditor(ctx) {
     liveSending: (keys) => edits.live.sending(keys), liveLanded: (id, key) => edits.live.landed(id, key), persist: (key, r) => store.cache.put(key, r).catch(() => {}),
     setStatus: (t, k) => setStatus(t, k), progress: (left, nErr) => results.status.typesetting(left, nErr), preHash: () => derived.preHash, preambleLanded: (r) => { results.preamble.value = r; showPreambleState(); },
     applyFonts: (f) => applyFonts(f), changed: () => changed(), changedLater: () => changedLater(), batch: BATCH,
-    shownStale: (b) => shownStale(b), pass: (fn) => derived.pass(fn),
+    shownStale: (b) => shownStale(b), pass: (fn) => derived.pass(fn), landed: (id, key, r) => derived.landed(id, key, r),
   });
   /** a block not being edited whose cached result is not what it shows (whenIdle waits for that display) */
   function shownStale(b) {
@@ -676,7 +676,7 @@ export function createDocEditor(ctx) {
       const id = S.doc.id;
       while (writer.pending) await writer.idle();
       if (S.doc?.id !== id) return null;
-      return ctx.io.files(await files.exportDoc(), files.assetOf(id));
+      return ctx.io.files(await files.exportDoc(), files.assetOf(id), {}, { block: (b) => derived.filesOf(b), preamble: () => derived.preambleFiles() });
     },
     goTo: async (id) => { if (await nav.goTo(id, { align: 'center' })) flashBlock(id); },
     // where: the block's section and its kind ("§2.1 · Figure"); the outline's locator, its words left out

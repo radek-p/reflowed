@@ -1,6 +1,9 @@
 // The Files panel: hidden by default; the "Show advanced features" switch (the Settings panel's Advanced section) shows its tab;
 // its list is the Export .zip's files (names and sizes, read from the downloaded zip) for the intro (its figures) and the tests' biblatex document (its .bbl); a click
-// on a figure reveals its first use; the switch off takes the tab away again. Waits on DOM state and the app's idle.
+// on a figure reveals its first use; the switch off takes the tab away again. The intro places its figures through a
+// macro (\shot): each is used where its block's compile opened it (the engine's record, doc/block-files.ts), and a
+// figure replaced in place typesets its block again. On the engine (the intro from the dev seed), the browser's own
+// store (a reload keeps the document). Waits on DOM state and the app's idle.
 //
 //   node tests/test-files.ts [http://localhost:8158/]
 import { createRequire } from 'node:module';
@@ -8,7 +11,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readZip } from '../app/src/io/archive.ts';
-import { listFiles, refsIn } from '../app/src/io/files.ts';
+import { listFiles } from '../app/src/io/files.ts';
+import { namedIn, createBlockFiles, usedBy } from '../app/src/doc/block-files.ts';
 import { resultsDir } from './qa/lib/results.ts';
 import { openBiblatexDoc } from './qa/fixtures/biblatex-doc.ts';
 
@@ -27,8 +31,8 @@ function check(name: string, ok: boolean, detail: unknown = '') {
 }
 // ── the list's rules, without a browser (io/files.ts) ──────────────────────────
 {
-  const r = refsIn('\\includegraphics[width=3cm]{fig/a} % \\includegraphics{fig/b}\n\\usepackage{x,y}\\input{sec/c}\\bibliographystyle{plain}');
-  check('refsIn: figures, packages (as .sty), inputs and styles; comments left out', JSON.stringify(r) === JSON.stringify(['fig/a', 'sec/c', 'x.sty', 'y.sty', 'plain.bst']), r);
+  const r = namedIn('\\includegraphics[width=3cm]{fig/a} % \\includegraphics{fig/b}\n\\usepackage{x,y}\\input{sec/c}\\bibliographystyle{plain}');
+  check('namedIn: figures, packages (as .sty), inputs and styles; comments left out', JSON.stringify(r) === JSON.stringify(['fig/a', 'sec/c', 'x.sty', 'y.sty', 'plain.bst']), r);
   const blk = (id: string, pos: string, source: string, kind = 'paragraph') => ({ id, docId: 'd', pos, kind, source, file: 'main.tex', attrs: {}, rev: 0, updatedAt: 0 });
   const doc: any = { id: 'd', title: 't', preamble: { source: '\\documentclass{article}\n\\usepackage{mine}\n\\graphicspath{{figures/}}' }, settings: {}, bib: { kind: 'bib', source: '@misc{a,}', path: 'refs.bib' },
     files: [{ path: 'main.tex', role: 'main' }], meta: {},
@@ -40,6 +44,11 @@ function check(name: string, ok: boolean, detail: unknown = '') {
   check('uses: a figure by \\includegraphics through \\graphicspath, ± its extension, in document order', by['figures/x.pdf'].uses.join() === 'b2,b3', by['figures/x.pdf'].uses);
   check('uses: a commented-out \\includegraphics is not a use', by['figures/y.pdf'].uses.length === 0 && !by['figures/y.pdf'].preamble, by['figures/y.pdf']);
   check('uses: a package by the preamble; the .bib by the bibliography block; main: every block', by['mine.sty'].preamble && by['refs.bib'].uses.join() === 'b4' && by['main.tex'].uses.length === 4 && by['main.tex'].preamble, { sty: by['mine.sty'], bib: by['refs.bib'].uses });
+  // a figure placed through a macro: used where the block's compile opened it (its result's record)
+  const rec = createBlockFiles();
+  rec.note('b1', { files: ['figures/y', 'figures/y.pdf'] });
+  const used = listFiles(doc, [a('A', 'figures/x.pdf'), a('B', 'figures/y.pdf'), a('C', 'mine.sty')] as any, {}, { block: (b) => rec.of(b), preamble: () => usedBy(doc.preamble.source) }).files;
+  check('uses: a figure a macro places, by the block whose compile opened it', used.find((f) => f.path === 'figures/y.pdf')?.uses.join() === 'b1', used.find((f) => f.path === 'figures/y.pdf'));
 }
 
 const browser = await chromium.launch();
@@ -49,7 +58,7 @@ const page = await ctx.newPage();
 page.setDefaultTimeout(120000);
 page.on('pageerror', (e: any) => problems.push(`pageerror: ${e.message}`));
 page.on('console', (m: any) => { if (m.type() === 'error') problems.push(`console: ${m.text()}`); });
-await page.goto(`${BASE}?store=memory&backend=none#/doc/intro`);
+await page.goto(`${BASE}#/doc/intro`);
 await page.waitForFunction(() => (window as any).editorAPI?.whenIdle);
 const idle = () => page.evaluate(() => (window as any).editorAPI.whenIdle());
 await idle();
@@ -112,13 +121,19 @@ const paper = await compare('intro');
   check('intro: the main .tex and its figures are listed', kinds.has('main') && kinds.has('figure'), [...kinds]);
   const fig = paper.find((x) => x.kind === 'figure' && x.uses > 0);
   check('intro: a figure says where it is used', !!fig && !/Not named/.test(fig.where ?? ''), fig);
+  // all seven are placed by \shot, a macro: each one's block is where its compile opened it
+  const figs = paper.filter((x) => x.kind === 'figure');
+  const enabled = await page.$$eval('#panel-files .fl-row[data-kind="figure"]', (els: any[]) => els.filter((e) => e.getAttribute('aria-disabled') !== 'true').length);
+  check('intro: its 7 figures are each named by one block, and each row goes to it (none disabled)', figs.length === 7 && figs.every((x) => x.uses === 1 && !/Not named/.test(x.where ?? '')) && enabled === 7,
+    figs.map((x) => `${x.path}: ${x.uses} ${x.where}`));
   if (fig) {
     // the reader is at the top; the figure's first use is further down
     await page.evaluate(() => document.querySelector("main.rtx-pane")!.scrollTo(0, 0));
     const want = await page.evaluate((p: string) => {
       const B = (window as any).editorAPI.blocks();
       const stem = p.replace(/\.[A-Za-z0-9]+$/, '');
-      return B.find((b: any) => [...b.source.matchAll(/\\includegraphics\*?\s*(?:\[[^\]]*\]\s*)?\{([^{}]*)\}/g)].some((m: any) => { const r = m[1].trim(); return r === p || r === stem || p.endsWith(`/${r}`) || stem.endsWith(`/${r}`); }))?.id ?? null;
+      // the first block that names it as an argument: \includegraphics{…} or the intro's \shot{…} (labels are fig:…)
+      return B.find((b: any) => b.source.includes(`{${p}}`) || b.source.includes(`{${stem}}`))?.id ?? null;
     }, fig.path!);
     await page.click(`#panel-files .fl-row[data-path="${fig.path}"]`);
     await page.waitForFunction((id: string) => {
@@ -163,6 +178,33 @@ await page.waitForFunction(() => !document.querySelector('[data-side] [data-ptab
   const st = await page.evaluate(() => ({ panel: !!document.getElementById('panel-files'), shown: [...document.querySelectorAll('[data-side] [data-panel-view]')].filter((p: any) => !p.closest('.wb-panel--hidden')).map((p) => p.id) }));
   check('the switch off: no Files tab or panel; the Outline is shown', !st.panel && st.shown.join() === 'panel-outline', st);
 }
+// ── a figure placed by a macro, replaced in place: its block typesets again, with the new file ──
+await page.evaluate(() => { location.hash = '#/doc/intro'; });
+await page.waitForFunction(() => (window as any).editorAPI.route().name === 'doc' && (window as any).editorAPI.currentDoc()?.title?.includes('Introduction'));
+await idle();
+{
+  // a 1×1 PNG, a file the intro does not have
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  const NAME = 'figures/shot-outline.png';
+  const who = await page.evaluate(async ({ name, png }: { name: string; png: string }) => {
+    const E = (window as any).editorAPI, doc = E.currentDoc(), store = E.store();
+    const a = await store.getAssetByName(doc.id, name);
+    const b = E.blocks().find((x: any) => x.source.includes(`\shot{${name.replace(/\.png$/, '')}}`));
+    await store.putAsset(doc.id, { id: a.id, name: a.name, mime: a.mime }, Uint8Array.from(atob(png), (c) => c.charCodeAt(0)));
+    return { id: b?.id ?? null, was: a.hash };
+  }, { name: NAME, png: PNG });
+  await page.reload();
+  await page.waitForFunction(() => (window as any).editorAPI?.whenIdle && (window as any).editorAPI.route?.().name === 'doc');
+  await idle();
+  const after = await page.evaluate(({ id, png }: { id: string; png: string }) => {
+    const E = (window as any).editorAPI;
+    const el = document.querySelector(`main.rtx-pane .blk[data-id="${id}"]`);
+    return { stats: E.backendObject()?.stats?.() ?? null, shows: !!el && el.innerHTML.includes(png.slice(0, 40)), errors: E.blocks().find((b: any) => b.id === id)?.errors ?? null };
+  }, { id: who.id!, png: PNG });
+  check('a figure a macro places, replaced in place: its block typesets again (its stored result is stale) and shows the new file',
+    !!who.id && (after.stats?.staleFiles ?? 0) >= 1 && (after.stats?.compiled ?? 0) >= 1 && after.shows && after.errors?.length === 0, { who, ...after, stats: after.stats && { compiled: after.stats.compiled, staleFiles: after.stats.staleFiles } });
+}
+
 const unexpected = problems.filter((p) => !/favicon|Failed to load resource/.test(p));
 check('no page errors', unexpected.length === 0, unexpected);
 

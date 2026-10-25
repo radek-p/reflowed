@@ -16,7 +16,8 @@
 //           isEditing(id) (any pane edits it), visible (Set), indexOf(id), perf, counters, display(id), redisplay(which?), stale(b), token(id), compiling(id, on),
 //           liveSending(keys), liveLanded(id, key), persist(key, result), setStatus(text, kind), progress?(left, errors), preHash(),
 //           preambleLanded(result), applyFonts(fonts), changed(), changedLater(), batch?,
-//           shownStale(b)? (its result is cached, not what the block shows), pass?(fn) (fn: a read of every block's key) }
+//           shownStale(b)? (its result is cached, not what the block shows), pass?(fn) (fn: a read of every block's key),
+//           landed?(id, key, result) (the result kept as the block's last; the block's key now when it moved with it) }
 //   q.soon() · q.needsCompile(b) · q.waiting(except?) (a block, other than `except`, waits to be typeset)
 //   q.userBlock(id) · q.left(id) (the block just left: first for 5 s)
 //   q.markDue(id) · q.clearDue(id) · q.isDue(id) (an edited block's live preview is due; several: one per pane) · q.settle() · q.reset() (the document closed)
@@ -50,6 +51,13 @@ export function createCompileQueue(h) {
   const drained = () => { for (const w of drainWaiters.splice(0)) w(); };
   const errorResult = (e) => ({ key: '', status: 'error', transient: true, errors: [{ severity: 'error', message: e.message, line: null }], warnings: [], nodelist: null });
   const persist = (key, r) => { const b = B(); if (b.keyPrefix && r.status === 'ok') h.persist(`${b.keyPrefix()}:${key}`, r); };
+  /** a block's result kept under the key it was asked for, and under the key the block has now when the result moved
+   *  it (h.landed: its first compile named the files the key hashes; the same result, nothing to typeset again) */
+  function keepResult(id, key, r) {
+    h.cache.set(key, r);
+    const now = h.landed?.(id, key, r);
+    if (now && now !== key) h.cache.set(now, r);
+  }
 
   function compileSoon() {
     if (compileTimer || !D()) return;
@@ -106,7 +114,7 @@ export function createCompileQueue(h) {
     for (const [id, key] of keys) {
       const r = res.blocks?.[id];
       if (!r) continue;
-      h.cache.set(key, r);
+      keepResult(id, key, r);
       h.liveLanded(id, key);
       persist(key, r);
     }
@@ -126,7 +134,7 @@ export function createCompileQueue(h) {
     const backendNow = B();
     try {
       const res = await backendNow.compile({ preamble: h.preamble ? h.preamble() : D().preamble.source, blocks: [{ id: b.id, source: h.compileSource(b), kind: b.kind, context: h.contextOf(b) || undefined }], keep: [], priority: 'user',
-        onBlock: (id, r) => { if (backendNow !== B() || id !== b.id || !r) return; h.cache.set(key, r); h.liveLanded(id, key); h.display(id); } });
+        onBlock: (id, r) => { if (backendNow !== B() || id !== b.id || !r) return; keepResult(id, key, r); h.liveLanded(id, key); h.display(id); } });
       if (res && backendNow === B()) land(res, keys, null);
     } catch (e) {
       h.cache.set(key, errorResult(e));
@@ -189,7 +197,7 @@ export function createCompileQueue(h) {
     let res = null;
     inflight = backendNow.compile({ preamble, blocks: sent, keep, limit: BATCH,
       // each block as soon as it is ready (others answer all at once)
-      onBlock: (id, r) => { if (backendNow !== B() || !keys.has(id) || !r) return; h.cache.set(keys.get(id), r); h.liveLanded(id, keys.get(id)); applyLater(id); } });
+      onBlock: (id, r) => { if (backendNow !== B() || !keys.has(id) || !r) return; keepResult(id, keys.get(id), r); h.liveLanded(id, keys.get(id)); applyLater(id); } });
     try {
       res = await inflight;
     } catch (e) {

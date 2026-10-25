@@ -17,7 +17,11 @@
 //
 // host: { ctx, doc(), store, backend(), ids, write, op, logOps, perform, history, unplaceBlock, placeBlock,
 //         newBlock, indexOf, blockById, renderAll, compileSoon, display, leaveEdit, editing(), editFigure,
-//         saveBlock, toast, hash, assetHash, GRAPHICS, assetOf, figureNames(source) }
+//         saveBlock, toast, hash, noteAsset(meta), forgetAsset(meta) (the keys' file signatures),
+//         filesOf(b) (doc/block-files.ts: what the block uses, its compile's record and its source's names),
+//         usedAssets(b) (the document's files it uses: { name, opts, include }) }
+// A figure is the block's when the block uses its file: written in its source, or placed by a macro (what its
+// compile opened).
 
 import { svgFigures } from './index.js';
 import { createLabelEdits } from './label-edit.js';
@@ -30,13 +34,13 @@ export function createSvgFigureHooks(host) {
     const d = doc();
     const i = d.assets.findIndex((a) => a.id === m.id);
     if (i >= 0) d.assets[i] = m; else d.assets.push(m);
-    host.assetHash.set(m.name, m.rendition?.hash ? `${m.hash}+${m.rendition.hash}` : m.hash);
+    host.noteAsset(m);
     if (svgFigures.isSvgAsset(m)) svgAssets.add(m.name);
   }
   function forgetAsset(m) {
     const d = doc();
     d.assets = d.assets.filter((a) => a.id !== m.id);
-    host.assetHash.delete(m.name); svgAssets.delete(m.name);
+    host.forgetAsset(m); svgAssets.delete(m.name);
   }
   const figs = svgFigures.lifecycle({ ...host, doc, noteAsset, forgetAsset });
 
@@ -57,7 +61,7 @@ export function createSvgFigureHooks(host) {
         compileLabel: (src, o) => backend.compileSnippet(src, o),
         renderTikz: backend.renderTikz ? (src) => backend.renderTikz(src, '\\usepackage{tikz}') : null,
         preamble: doc().preamble.source, scale, name: f.name,
-        include: [...b.source.matchAll(host.GRAPHICS)].find((m) => host.assetOf(m[2].trim()) === f.name)?.[0] ?? '',
+        include: f.include ?? '',
         from: u?.render?.querySelector('.latex-picture') ?? u?.render ?? null,
       });
     } catch (e) { host.toast(`Figure: ${e.message}`); return; } finally { open = false; }
@@ -70,13 +74,13 @@ export function createSvgFigureHooks(host) {
   // a drawn figure's label edited in place, in the document
   const scaleOf = (opts) => Number(/(?:^|,)\s*scale\s*=\s*([\d.]+)/.exec(opts ?? '')?.[1]) || undefined;
   /** The SVG figure a document picture shows: the block's pictures that carry figure texts, in order, are
-   *  its \includegraphics of SVG figures, in order. */
+   *  the SVG figures it uses, in order (its \includegraphics first, then those its compile opened). */
   function figureAt(pic) {
     const blk = pic.closest('.blk[data-id]');
     const b = blk && host.blockById(blk.dataset.id);
     if (!b) return null;
     const pics = [...blk.querySelectorAll('.latex-picture')].filter((p) => p.querySelector('[data-rtx-text]'));
-    const figs = [...b.source.matchAll(host.GRAPHICS)].map((m) => ({ name: host.assetOf(m[2].trim()), opts: m[1] ?? '', include: m[0] })).filter((x) => x.name && svgAssets.has(x.name));
+    const figs = host.usedAssets(b).filter((x) => svgAssets.has(x.name));
     const f = figs[pics.indexOf(pic)];
     return f ? { block: b.id, name: f.name, scale: scaleOf(f.opts), include: f.include } : null;
   }
@@ -125,7 +129,7 @@ export function createSvgFigureHooks(host) {
     lifecycle: figs,
     isSvg: (name) => svgAssets.has(name),
     // the shell's button, contributed: it was app.js's figureButton and a figure flag on every block
-    blockAction: (b) => (host.figureNames(b.source).some((f) => svgAssets.has(f.name))
+    blockAction: (b) => (host.usedAssets(b).some((f) => svgAssets.has(f.name))
       ? { id: 'edit-figure', label: 'Edit figure', title: 'Edit the figure', cls: 'fig-edit', run: (view) => host.editFigure(b.id, null, {}, view) } : null),
     edit, loaded,
     slash: { kinds, pick: onPick },

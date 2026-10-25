@@ -12,7 +12,7 @@ import { exportOlder, startAnew } from './start-anew.ts';
 
 export { importFiles, importUpload, importIntoStore, importIntoDocument, createFromImport, freshIds, decodeText, isIpePdf, mimeOf, type ImportReport } from './import.ts';
 export { setMetaPackage } from '../meta/package.ts';
-export { projectFiles, listFiles, usesOf, refsIn, type ProjectFile } from './files.ts';
+export { projectFiles, listFiles, usesOf, type ProjectFile, type FilesUsed } from './files.ts';
 export { exportFiles, exportSingle, zipOpenDoc, loadAssets, isFigure, type FileKind, type ProjectEntry, exportZipFromStore, exportTexFromStore } from './export.ts';
 export { download, fileName } from './download.ts';
 export { unpack, readTar, writeTar, readZip, writeZip, crc32, isZip, isTar, isPdf, type Entry } from './archive.ts';

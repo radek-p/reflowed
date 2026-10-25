@@ -5,6 +5,6 @@ export { createPersist, splice } from './persist.js';
 export { createModel } from './model.js';
 export { createHistory } from './history.js';
 export { createOps } from './ops.ts';
-export { createDerived, hash, GRAPHICS } from './derived.js';
+export { createDerived, hash } from './derived.js';
 export { createResults } from './results.js';
 export { createDocSession } from './session.js';
