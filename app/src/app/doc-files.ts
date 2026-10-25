@@ -1,6 +1,7 @@
-// A document's files (the first part of createDocEditor moved out of app.js): the Versions
-// dialog, "Reset to original" and the newer-example banner of a default document, "Import .tex…", and the exports
-// (.tex, .zip, PDF). A new export format goes here and in commands/editor.js; app.js only wires the host.
+// A document's files (the first part of createDocEditor moved out of app.js): the Versions dialog
+// (home/versions-dialog.js, the one the home opens too), "Reset to original" and the newer-example banner of a
+// default document, "Import .tex…", and the exports (.tex, .zip, PDF). A new export format goes here and in
+// commands/editor.js; app.js only wires the host.
 //
 //   const files = createDocFiles(host)
 //     files.openVersions() · files.closeVersions()
@@ -8,7 +9,7 @@
 //     files.importTex()
 //     files.exportTex() · files.exportZip({ plain? }) · files.exportPdf()
 //     files.exportDoc() -> what an export writes (the stored document, SVG figures' trash left out) · files.assetOf(docId)
-import { openVersionsDialog } from '../chrome/versions.js';
+import { openVersionsDialog } from '../home/versions-dialog.js';
 import { download, fileName } from '../io/download.ts';
 
 /** The open document, as the files need it. */
@@ -39,7 +40,6 @@ export interface DocFilesHost {
   forExport(doc: unknown): unknown;
   /** the backend's PDF of what Export PDF compiles, now (null: the backend has none) */
   pdf(): Promise<PdfResult> | null;
-  mountVersions?(body: HTMLElement, o: { store: unknown; docId: string; title?: string; onRestore(): void }): void;
   reopen(docId: string): void;
   openDoc(docId: string): void;
   /** where the newer-example banner goes; null: this pane shows none */
@@ -58,12 +58,12 @@ export function createDocFiles(host: DocFilesHost) {
 
   return {
     exportDoc, assetOf,
-    /** versions panel in the kit's Dialog (chrome/versions.js); a restore reopens the document */
+    /** the document's Versions dialog; a restore closes it and reopens the document */
     async openVersions() {
       await host.settled();
       const { id: docId, title } = doc();
-      const vd: Closeable = openVersionsDialog((body: HTMLElement) => host.mountVersions?.(body, { store: host.store, docId, title, onRestore: () => { vd.close(); reopen(docId); } }),
-        { onClosed: () => { if (versions === vd) versions = null; } });
+      versions?.close();
+      const vd: Closeable = openVersionsDialog({ store: host.store, docId, title, onRestore: () => { vd.close(); reopen(docId); } });
       versions = vd;
     },
     closeVersions() { versions?.close(); },

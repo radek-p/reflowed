@@ -412,7 +412,11 @@ const loadMs = Date.now() - t0;
   const named = await p.locator('dialog.versions-dialog .rv-list').textContent();
   await shot(p, '15-versions');
   check('versions: Save version adds one', n0 >= 1 && n1 === n0 + 1 && /Before the talk/.test(named ?? ''), `${n0} → ${n1}`);
-  await p.keyboard.press('Escape');
+  // the one Versions dialog (the home's too): the document named in the title, closed by its Close button
+  const vTitle = await p.locator('dialog.versions-dialog .ui-dialog-title').textContent();
+  await p.click('dialog.versions-dialog [data-action="close-versions"]');
+  const vClosed = await p.waitForFunction(() => !document.querySelector('dialog.versions-dialog'), null, { timeout: 3000 }).then(() => true, () => false);
+  check('versions: "Versions of “title”", Close closes it', /^Versions of “.+”$/.test(vTitle ?? '') && vClosed, { vTitle, vClosed });
   // export .tex from the menu
   await p.click('#btn-doc-menu');
   const [dl] = await Promise.all([p.waitForEvent('download'), p.click('.doc-menu [data-action="export-tex"]')]);

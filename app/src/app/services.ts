@@ -54,7 +54,6 @@ export async function createPageServices({ params, route = () => null, store: st
   const kinds = Object.fromEntries(MODULES.map((k) => [k, real(k) ? 'real' : 'stub'])) as Kinds;
   const storeMod: StoreModule = real('store') ? storeReal : stubs;
   const ioMod: IoModule = real('io') ? ioReal : stubs;
-  const mountVersions = real('home') ? homeReal.mountVersions : null;   // (the stubs have no Versions panel)
   const refsMod: RefsModule = real('refs') ? refsReal : stubs;
   ioMod.setMetaPackage?.(META_STY);
 
@@ -99,7 +98,6 @@ export async function createPageServices({ params, route = () => null, store: st
     editorContext: {
       recallsOf: refsMod.recallsOf ?? null,
       AutoSnapshots: storeMod.AutoSnapshots ?? null, beforeDestructive: storeMod.beforeDestructive ?? stubs.beforeDestructive,
-      mountVersions,
       modulesReal: Object.fromEntries(MODULES.map((k) => [k, kinds[k] === 'real'])),
     },
   };

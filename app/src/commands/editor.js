@@ -8,7 +8,7 @@
 //   c.enterEdit(id, event, caret, line, range, pane)
 //   c.page                 the page's actions: find(), toggleFocus(on?), toggleSidebar(), shortcuts(), settings(open, line),
 //                          versions(), resetSeed(), importTex(), exportTex(), exportZip(o), exportPdf(), toggleSplit(),
-//                          focusSection(id | null, pane?) (section focus: docview/focus.js), gotoDefinition(k), can: { versions, resetSeed, importTex, exportZip, exportPdf, plainTitle }
+//                          focusSection(id | null, pane?) (section focus: docview/focus.js), gotoDefinition(k), can: { resetSeed, importTex, exportZip, exportPdf, plainTitle }
 //
 // The rows of the shortcuts dialog are the commands with `keys` and `help`, in the order defined here (the order of
 // the table app.js kept by hand before). A key with a modifier is written as the workbench writes its own
@@ -94,7 +94,7 @@ export function editorCommands(platform) {
     { id: 'view.shortcuts', label: 'Keyboard shortcuts', key: 'keys', shortcut: '?', run: (c) => c.page.shortcuts() },
     { id: 'view.split', label: 'Split view', run: (c) => c.page.toggleSplit() },
     { id: 'doc.settings', label: 'Document settings', key: 'settings', run: (c, { line = null } = {}) => c.page.settings(true, line) },
-    { id: 'doc.versions', label: 'Versions…', key: 'versions', when: (c) => c.page.can.versions(), run: (c) => c.page.versions() },
+    { id: 'doc.versions', label: 'Versions…', key: 'versions', run: (c) => c.page.versions() },
     { id: 'doc.resetSeed', label: 'Reset to original', key: 'reset-seed', destructive: true, when: (c) => c.page.can.resetSeed(), run: (c) => c.page.resetSeed() },
     { id: 'doc.importTex', label: 'Import .tex…', key: 'import-tex', destructive: true, when: (c) => c.page.can.importTex(), run: (c) => c.page.importTex() },
     { id: 'doc.exportTex', label: 'Export .tex', key: 'export-tex', run: (c) => c.page.exportTex() },

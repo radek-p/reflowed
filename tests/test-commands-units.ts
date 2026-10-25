@@ -66,7 +66,7 @@ for (const [platform, mod, sh, alt, enter] of [['mac', '⌘', '⇧⌘', '⌥', '
   const ctx = (via: string) => ({ via, S, selected: () => selected.at(-1) ?? null, select: (bid: string) => selected.push(bid), focusedPane: () => 'a',
     enterEdit: (bid: string, _e: any, caret: any) => edited.push(`${bid}@${caret}`), parentAt: () => null,
     selectStep: (from: number, dir: number) => selected.push(S.doc.blocks[from + dir]?.id), selectIndex: (k: number) => selected.push(S.doc.blocks[k]?.id), slashBelow: noop,
-    page: new Proxy({ can: { versions: () => false, resetSeed: () => false, importTex: () => true, exportZip: () => true, exportPdf: () => false } }, { get: (t: any, k: string) => t[k] ?? ((...a: any[]) => page.push(`${k}${a.length ? `(${JSON.stringify(a[0])})` : ''}`)) }) });
+    page: new Proxy({ can: { resetSeed: () => false, importTex: () => true, exportZip: () => true, exportPdf: () => false } }, { get: (t: any, k: string) => t[k] ?? ((...a: any[]) => page.push(`${k}${a.length ? `(${JSON.stringify(a[0])})` : ''}`)) }) });
   const C = createCommands({ context: ctx }).define(editorCommands('mac'));
   const text = () => S.doc.blocks.map((b: any) => b.source).join('|');
   const start = text();

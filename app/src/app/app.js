@@ -466,7 +466,7 @@ export function createDocEditor(ctx) {
 
   // ── Files: versions, the seed reset and banner, import, exports (app/doc-files.ts) ──
   const files = createDocFiles({ doc: () => S.doc, store, io: () => ctx.io, leaveEditors: () => edits.leaveAll(), settled, toast, setStatus, forExport: (d) => feats.forExport(d),
-    pdf: () => (typeof backend.pdf === 'function' ? backend.pdf(pdfRequest(S.doc, nest.flatten)) : null), mountVersions: ctx.mountVersions, reopen: (id) => ctx.reopen?.(id),
+    pdf: () => (typeof backend.pdf === 'function' ? backend.pdf(pdfRequest(S.doc, nest.flatten)) : null), reopen: (id) => ctx.reopen?.(id),
     openDoc: (id) => router.openDoc(id), bannerHost: () => (guest && !tabs ? null : tabs ? ctx.only.pane : root.part('page')) });   // pane A's; each tab's first pane
 
   // ── Compiling (the scheduler is app/compile-queue.js) ───────
@@ -542,7 +542,7 @@ export function createDocEditor(ctx) {
       exportTex: () => files.exportTex(), exportZip: (o) => files.exportZip(o), exportPdf: () => files.exportPdf(), toggleSplit: () => (ctx.shell.toggleSplit ? ctx.shell.toggleSplit() : panes.toggle()),   /* the host splits (a tab beside) */
       gotoDefinition: (k) => gotoDefinition(k), setPreamble: (s) => meta.putPreamble(s), recompileAll: () => { if (S.doc) meta.onPreamble(); },
       scrollTo: (id, pane, o) => scrollToBlock(id, pane, o), reveal: (id, range, o) => revealBlock(id, range, o), openNote: (t) => ctx.notes?.openNote(t, root) || revealBlock(t.blockId, { from: t.offset, to: t.offset + t.length }),   // the panels' commands
-      can: { versions: () => !!ctx.mountVersions, resetSeed: () => !!(S.doc && ctx.io?.isSeedDoc?.(S.doc.id)), importTex: () => !!ctx.io?.openImportTex,
+      can: { resetSeed: () => !!(S.doc && ctx.io?.isSeedDoc?.(S.doc.id)), importTex: () => !!ctx.io?.openImportTex,
         exportZip: () => !!ctx.modulesReal?.io, exportPdf: () => typeof backend.pdf === 'function' },
     },
   }) }).define(editorCommands());

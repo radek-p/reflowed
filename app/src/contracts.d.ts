@@ -19,8 +19,7 @@
 //     rtx:store    web/src/store/index.js     createDocStore(opts?): Promise<DocStore>; ids: Ids;
 //                                             takeSnapshot, beforeDestructive, AutoSnapshots, …
 //     rtx:io       web/src/io/index.js        io: IO; importIntoStore, loadSeed, …
-//     rtx:home     web/src/home/index.js      mountHome(el, ctx: HomeContext): Mounted;
-//                                             mountVersions(el, { store, docId, onRestore })
+//     rtx:home     web/src/home/index.js      mountHome(el, ctx: HomeContext): Mounted
 //     rtx:refs     web/src/refs/index.js      refs: Refs
 //     rtx:backend  engine/web/backend.js      createBackend(opts?): Backend
 // - Block attrs are the importer's and export's: code that edits a block keeps

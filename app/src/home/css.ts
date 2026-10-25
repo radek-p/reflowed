@@ -93,10 +93,8 @@ const CSS = String.raw`
 .home-foot .ui-btn { color: var(--ui-ink-3); }
 .home-foot .ui-btn:hover { color: var(--ui-ink); }
 
-/* the versions panel (the editor's Versions dialog, and the home's) */
+/* the versions panel (versions-dialog.js: the home's and the editor's) */
 .rv { color: var(--ui-ink); font: var(--ui-text-md)/var(--ui-leading) var(--ui-font); }
-.rv-head { display: flex; align-items: center; gap: var(--ui-2); margin: 0 0 var(--ui-3); }
-.rv-head h2 { flex: 1 1 auto; margin: 0; font-size: var(--ui-text-xl); font-weight: var(--ui-semibold); line-height: var(--ui-leading-tight); }
 .rv-save { display: flex; gap: var(--ui-2); margin: 0 0 var(--ui-3); }
 .rv-save .ui-input { flex: 1 1 auto; }
 .rv-list { display: flex; flex-direction: column; gap: 2px; }

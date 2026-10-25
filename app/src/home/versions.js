@@ -1,9 +1,9 @@
 // The versions panel on the kit: "Save version" with an optional name, the snapshots (newest first;
 // automatic ones badged), restore with a one-line confirmation (the present is saved first, so a restore
-// can be undone by restoring "Before restoring …"). In a dialog that has its own title (the editor's
-// Versions, the home's) the panel draws no heading of its own.
+// can be undone by restoring "Before restoring …"). It lives in the Versions
+// dialog (versions-dialog.js), whose title names the document: the panel draws no heading of its own.
 //
-//   const v = mountVersions(el, { store, docId, title?, onRestore?(docId, safety) })
+//   const v = mountVersions(el, { store, docId, onRestore?(docId, safety) })
 //   v.refresh(); await v.idle(); v.destroy()
 // Hooks kept: .rv, .rv-list > .rv-item[data-snapshot-id] (.rv-label, .rv-badge, .rv-when), form.rv-save
 // input[name=label], [data-action=save-version|restore|confirm-restore], .rv-status, .rv-empty.
@@ -19,7 +19,6 @@ function Panel({ v }) {
   const snaps = v.snaps.value;
   const submit = (e) => { e.preventDefault(); v.save(input.current.value); };
   return html`<div class="rv">
-    ${v.heading ? html`<div class="rv-head"><h2>${v.heading}</h2></div>` : null}
     <form class="rv-save" onSubmit=${submit}>
       <${Input} inputRef=${input} name="label" placeholder="Name this version (optional)" aria-label="Version name" autocomplete="off" />
       <${Button} variant="primary" type="submit" data-action="save-version">Save version<//>
@@ -55,10 +54,7 @@ export function mountVersions(el, ctx) {
   let destroyed = false;
   let pending = Promise.resolve();
   const track = (p) => { pending = pending.then(() => Promise.resolve(p).catch(() => {})); return p; };
-  // in a dialog with a title (the editor's Versions, the home's) the dialog says what this is
-  const inDialog = !!el.closest?.('dialog')?.querySelector('.ui-dialog-title');
   const v = {
-    heading: inDialog ? null : ctx.title ? `Versions of “${ctx.title}”` : 'Versions',
     snaps: signal(null), status: signal(''), confirm: signal(null), busy: signal(false),
     async save(raw) {
       const label = raw.trim() || `Version of ${new Date().toLocaleString()}`;

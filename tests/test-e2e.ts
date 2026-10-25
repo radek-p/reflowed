@@ -504,7 +504,21 @@ await step('versions save/restore', async () => {
   await page.waitForFunction((n: number) => document.querySelectorAll('dialog.versions-dialog .rv-item').length > n, n0);
   await vIdle();
   check('Save version adds one', true, `${n0} → ${await page.locator('dialog.versions-dialog .rv-item').count()}`);
-  await page.keyboard.press('Escape');
+  // the one Versions dialog (the home opens it too): the document named in its title, a Close button, a press on the
+  // backdrop closes it, the close button and Esc too
+  const docTitle = await page.evaluate(async () => { const id = (window as any).editorAPI.route().id; return ((await (window as any).editorAPI.store().listDocs()) as any[]).find((d) => d.id === id)?.title || 'Untitled'; });
+  const vTitle = await page.locator('dialog.versions-dialog .ui-dialog-title').textContent();
+  const closedBy = async (how: () => Promise<unknown>) => {
+    if (!(await page.locator('dialog.versions-dialog[open]').count())) { await docMenu('versions'); await page.waitForSelector('dialog.versions-dialog[open] .rv'); await vIdle(); }
+    await how();
+    return page.waitForFunction(() => !document.querySelector('dialog.versions-dialog'), null, { timeout: 3000 }).then(() => true, () => false);
+  };
+  const byClose = await closedBy(() => page.click('dialog.versions-dialog [data-action="close-versions"]'));
+  const byBackdrop = await closedBy(() => page.mouse.click(4, 4));
+  const byX = await closedBy(() => page.click('dialog.versions-dialog .dlg-close'));
+  const byEsc = await closedBy(() => page.keyboard.press('Escape'));
+  check('the editor\'s Versions is the one dialog: "Versions of “title”", closed by Close, a backdrop press, its close button, Esc',
+    vTitle === `Versions of “${docTitle}”` && byClose && byBackdrop && byX && byEsc, { vTitle, docTitle, byClose, byBackdrop, byX, byEsc });
   await api('setSource', lemma.id, '\\begin{theorem}Overwritten by mistake.\\end{theorem}');
   await idle();
   await docMenu('versions');
