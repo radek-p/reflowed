@@ -443,7 +443,9 @@ function updateFonts(list: FontReqs[], flush = true): { fonts: Record<string, st
   const patched = [...dirty];
   if (dirty.size) {
     const fonts = new Fonts('/fonts');
-    try { fonts.patch(new Map([...dirty].map((f) => [f, reqAll.get(f)!])), plog); }
+    // whole: a font is patched once, with every glyph's private-use entry, so its file and name are the same for
+    // every document (and a later block never makes the page swap its face for a re-patched one)
+    try { fonts.patch(new Map([...dirty].map((f) => [f, reqAll.get(f)!])), plog, { whole: true }); }
     catch (e) { plog(`fonts: ${(e as Error).message}`); }
     for (const [o, s] of fonts.served) served.set(o, s);
     dirty.clear();
