@@ -62,7 +62,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   if (fromAt >= 0 && !argv[fromAt + 1]) { console.error('lock-reflowtex: --from needs a directory'); process.exit(2); }
   const { publicRepo } = await import('./lib/public-repo.ts');
   const dir = resolve(fromAt >= 0 ? argv[fromAt + 1] : publicRepo());
-  const rest = argv.filter((a, i) => i !== fromAt && i !== fromAt + 1);
+  const rest = fromAt < 0 ? argv : argv.filter((a, i) => i !== fromAt && i !== fromAt + 1);
   if (rest.includes('--check')) {
     const lock = readReflowtexLock(root);
     const p = lockedProblem(repo(dir), lock.commit);

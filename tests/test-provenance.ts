@@ -95,6 +95,15 @@ check('lock: a repository that is not owner/name is refused when read', /owner\/
 // --check, from the command line: the throwaway checkout is not at the real lock's commit
 const cli = spawnSync(process.execPath, [join(EDITOR, 'scripts/lock-reflowtex.ts'), '--check', '--from', pub], { encoding: 'utf8', timeout: 30000 });
 check('lock-reflowtex --check: another commit exits 1, naming the locked one', cli.status === 1 && cli.stdout.includes(lock.commit), { status: cli.status, out: cli.stdout, err: cli.stderr });
+// --check alone (the checkout from REFLOWTEX): checks, never writes the lock (it once took `--check` for no argument and
+// locked the checkout's commit)
+{
+  const before = readFileSync(join(EDITOR, LOCK), 'utf8');
+  const alone = spawnSync(process.execPath, [join(EDITOR, 'scripts/lock-reflowtex.ts'), '--check'], { encoding: 'utf8', timeout: 30000, env: { ...process.env, REFLOWTEX: pub } });
+  const after = readFileSync(join(EDITOR, LOCK), 'utf8');
+  if (after !== before) writeFileSync(join(EDITOR, LOCK), before);
+  check('lock-reflowtex --check alone: exits 1 for another commit and leaves the lock as it was', alone.status === 1 && after === before && alone.stdout.includes(lock.commit), { status: alone.status, out: alone.stdout, changed: after !== before });
+}
 
 // ── the website workflow builds with the locked commit, from the lock
 const wf = readFileSync(join(EDITOR, '.github/workflows/website.yml'), 'utf8');
