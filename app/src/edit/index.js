@@ -209,3 +209,4 @@ export function createEditing(core) {
   };
 }
 export { createUndo } from './undo.js';   // undo, redo and what they show
+export { renderClick, renderDblclick } from './live-preview.js';   // a click on a block's render (the live preview's rule)

@@ -10,7 +10,7 @@
 //   v.id · v.pane · v.root · v.main · v.render · v.preview · v.source · v.errors · v.add · v.handle · v.mounted
 //   v.dispose()   the viewer view destroyed, the Preact roots cleared, the element removed
 import { mountBlockShell } from '../docview/block-shell.js';
-import { besideRender } from '../edit/frame-click.js';
+import { listenRender } from '../edit/live-preview.js';
 
 export function createBlockView({ id, pane, action = null, on }) {
   let v = null;
@@ -31,14 +31,8 @@ export function createBlockView({ id, pane, action = null, on }) {
     dispose,
   };
   g.root.dataset.pane = pane;
-  const click = (e) => on.click?.(e, v), dbl = (e) => on.dblclick?.(e, v), foc = () => on.focus?.(v), prev = (e) => on.preview?.(e, v);
-  g.render.addEventListener('click', click);
-  // a click in the frame just beside the render (its padding, where a hanging full stop ends): as on the render
-  const frame = (e) => { if (besideRender(g.render, g.root, g.main, e)) click(e); };
-  g.root.addEventListener('click', frame);
-  g.render.addEventListener('dblclick', dbl);
-  g.render.addEventListener('focus', foc);
-  g.preview.addEventListener('click', prev);
+  // the gestures: a click on the render or in the frame just beside it, a double click, its focus, the stand-in
+  const unlisten = listenRender(g, { click: (e) => on.click?.(e, v), dblclick: (e) => on.dblclick?.(e, v), focus: () => on.focus?.(v), preview: (e) => on.preview?.(e, v) });
   const detach = on.attachHandle?.(g.handle, v) ?? null;
 
   function dispose() {
@@ -46,11 +40,7 @@ export function createBlockView({ id, pane, action = null, on }) {
     v.disposed = true;
     detach?.();
     if (v.mounted) { try { v.mounted.block.destroy(); } catch { /* gone */ } v.mounted = null; }
-    g.render.removeEventListener('click', click);
-    g.root.removeEventListener('click', frame);
-    g.render.removeEventListener('dblclick', dbl);
-    g.render.removeEventListener('focus', foc);
-    g.preview.removeEventListener('click', prev);
+    unlisten();
     v.bracket?.remove(); v.fold?.remove(); v.bracket = v.fold = null;
     g.destroy();
     g.root.remove();

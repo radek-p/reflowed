@@ -29,7 +29,7 @@ import { scanHeadings, scanTodos, todoMacros, countWords, texToText, blankCommen
 import { createPanels } from './panels.ts';
 import { createFind } from './find.js';
 import { errorReport } from '../view/copy-errors.js';                         // copyable errors
-import { createEditing, createUndo } from '../edit/index.js';                             // editing: a session per pane, two at once
+import { createEditing, createUndo, renderClick, renderDblclick } from '../edit/index.js';   // editing: a session per pane, two at once; a render's click rule
 import { renderErrors } from '../edit/panel.js';                               // error rows (Preact)
 import { createBlockDrag } from '../docview/drag.js';                          // drag a block, in and between panes
 import { createPanes, createPaneStates, closeSplitKeeping } from '../panes/index.ts';                               // the panes: equal views of the document
@@ -219,20 +219,13 @@ export function createDocEditor(ctx) {
   // ── Blocks in the panes (../panes/) ─────────────────────────────
   // Each block has one STATE here (ui: its result, decor, live fields) and one VIEW per pane (panes/block-view.js),
   // all made, painted and given results the same way (panes/blocks.js). No pane's element is the block's.
-  // (a reference, a citation or a link is refnav's unit: refnav/index.js decides its click before this does)
-  const INTERACTIVE = 'a, button, [role="button"], [tabindex], .latex-action, .latex-stream[data-kind="hint"]';
+  // a click on a block's render, the rule a host of the live preview runs too (edit/live-preview.js renderClick)
+  const clickHost = { blockById: (id) => blockById(id), session: (pane) => edits.session(pane), titleForm: (id) => metaForm.open(id),
+    enterEdit: (...a) => enterEdit(...a) };
   /** what a view does on a click, a focus, its + and focus icon, its handle: the same in every pane */
   const viewOn = {
-    click(e, v) {
-      const b = blockById(v.id);
-      if (!b) return;
-      const s = edits.session(v.pane);                                   // the editor of the pane clicked in
-      const hit = e.target.closest(INTERACTIVE);
-      if (hit && hit !== v.render && v.render.contains(hit)) { if (s.id && s.id !== b.id) s.leave(); return; }
-      if (b.kind === 'title' && s.id !== b.id && metaForm.open(b.id)) { if (s.id) s.leave(); return; }
-      enterEdit(b.id, e, null, null, null, v.pane);
-    },
-    dblclick: (e, v) => enterEdit(v.id, e, null, null, null, v.pane),
+    click: (e, v) => renderClick(e, v, clickHost),
+    dblclick: (e, v) => renderDblclick(e, v, clickHost),
     focus: (v) => select(v.id, { focus: false, pane: v.pane }),   // the selection of the pane focused in
     preview: (e, v) => enterEdit(v.id, null, null, null, null, v.pane),
     /** the + (the slash menu; the new block opens in the pane of the button) */

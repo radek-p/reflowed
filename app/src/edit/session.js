@@ -14,9 +14,8 @@
 //   s.id · s.editor · s.surface · s.mode · s.show(state) · s.caretSoon() · s.applyRemote(changes) · s.marks()
 //   s.keepInView()   the window's visible part changed (an on-screen keyboard): the code caret kept in view
 import { signal } from '@preact/signals';
-import { screenCTM } from '../view/screen-ctm.ts';
 import { morph } from '../app/motion.js';
-import { sourcePositionFor } from '../app/source-position.js';
+import { positionAt, markPreview } from './live-preview.js';
 import { renderSourcePanel, renderErrorsPanel, clearPanel } from './panel.js';
 import { remoteChange } from '../app/editor-entry.js';
 import { openMotion, closeMotion } from '../motion/popover.js';
@@ -24,7 +23,6 @@ import { besideRender } from './frame-click.js';
 import { fitOn, fitOff } from './fit.js';
 import { POP_SHADOW } from '../motion/place.js';
 import { previewOf } from '../panes/paint.ts';
-import { shownBlock } from '../view/shown.ts';
 import { visibleBox } from '../../../workbench/src/viewport.ts';
 
 export function createSession(core, pane) {
@@ -118,9 +116,9 @@ export function createSession(core, pane) {
     const ev = o.event;
     const click = ev && 'clientX' in ev ? { x: ev.clientX, y: ev.clientY, target: ev.target } : null;
     if (!click || o.caret != null || o.line != null || !core.shows(sf, u)) return { click, pos: null };
-    // the text editor's hit rule on the render of this very source (view/edit-layout.js offsetAt); else the fuzzy ways
-    const hit = u.mounted.ck === core.viewKey(b) ? V()?.offsetAt?.(sf.render, core.cache.get(u.mounted.ck), b.source, b.source, click.x, click.y) : null;
-    const pos = hit != null ? { offset: hit, method: 'boundary', glyph: '' } : sourcePositionFor({ source: b.source, el: sf.render, result: core.cache.get(core.ck(b)) ?? null }, click);
+    // the text editor's hit rule on the render of this very source (edit/preview-marks.ts offsetAt); else the fuzzy ways
+    const pos = positionAt(sf.render, { result: core.cache.get(u.mounted.ck), compiled: u.mounted.ck === core.viewKey(b) ? b.source : null, text: b.source,
+      click, fuzzyResult: core.cache.get(core.ck(b)) ?? null });
     core.setLastPosition(pos ? { id, ...pos } : null, pane);
     return { click, pos };
   }
@@ -414,9 +412,9 @@ export function createSession(core, pane) {
       const compiled = u.liveCk === u.mounted.ck ? u.liveSource : null;
       try {
         const sm = s.editor.view.state.selection.main;
-        const mk = V().markCaret(sf.render, core.cache.get(u.mounted.ck), compiled, s.editor.text, s.editor.caret, { from: sm.from, to: sm.to });
         // a caret in a wide display: the display scrolls (only as far as needed) so it stays in view, marked again there
-        if (s.follow && mk?.x != null && revealCaret(sf, core.viewerBlock?.(sf), mk.x)) V().markCaret(sf.render, core.cache.get(u.mounted.ck), compiled, s.editor.text, s.editor.caret, { from: sm.from, to: sm.to });
+        markPreview(sf.render, { result: core.cache.get(u.mounted.ck), compiled, text: s.editor.text, caret: s.editor.caret, sel: { from: sm.from, to: sm.to },
+          block: core.viewerBlock?.(sf), follow: s.follow, clip: () => clipOf(sf) });
         // the window moves only while following; not while the popover's motion slides the blocks (their
         // rects carry its transforms), nor when the open placed the page itself
         const follow = scroll && s.follow && !sf.root.classList.contains('rtx-moving');
@@ -426,35 +424,16 @@ export function createSession(core, pane) {
     }
   }
 
-  /** the display the caret bar is in, scrolled so the caret is inside its visible width; true when it moved */
-  function revealCaret(sf, block, x) {
-    const bar = sf.render.querySelector('.rtx-caret-bar');
-    if (!bar || !block?.revealInDisplay) return false;
-    const el = shownBlock(sf.render);
-    const shown = el ? [...el.querySelectorAll('.latex-display')].filter((d) => !d.parentElement?.closest('.latex-display')) : [];
-    const b = bar.getBoundingClientRect(), y = (b.top + b.bottom) / 2;
-    const i = shown.findIndex((d) => { const r = d.getBoundingClientRect(); return y >= r.top && y <= r.bottom; });
-    if (i < 0) return false;
-    const d = shown[i], svg = d.querySelector('svg'), m = screenCTM(svg);   // (CSS zoom in it in every browser)
-    if (!m) return false;
-    const p = new DOMPoint(x, y).matrixTransform(m.inverse());
-    const before = d.scrollLeft;
-    // the visible width: the display's box, less what of it the window (or a pane) cuts off
-    const split = !!core.paneScroll(pane)?.split, clip = split ? sf.root.closest('main[data-pane]')?.getBoundingClientRect() : null;
-    const r = d.getBoundingClientRect();
-    const lo = Math.max(0, clip ? clip.left : 0), hi = Math.min(document.documentElement.clientWidth, clip ? clip.right : Infinity);
-    const cut = Math.max(0, lo - r.left, r.right - hi);
-    try { block.revealInDisplay(i, p.x, { margin: 24 + cut }); } catch { return false; }
-    return d.scrollLeft !== before;
-  }
+  /** the box of the pane the surface is shown in, when it is a split pane's (it cuts the window): a caret revealed in a
+   *  wide display stays inside it (edit/live-preview.js revealCaret) */
+  const clipOf = (sf) => (core.paneScroll(pane)?.split ? sf.root.closest('main[data-pane]')?.getBoundingClientRect() ?? null : null);
 
   /** A click on the render of the block being edited: the caret goes there (the editor keeps its focus). */
   function previewClick(event) {
     const id = s.id, u = ui(id), b = core.blockById(id), sf = s.surface;
     if (!id || !s.editor || !u?.mounted || !sf || sf.render.hidden || !(sf.render.contains(event.target) || besideRender(sf.render, sf.root, sf.main, event)) || !core.shows(sf, u)) return;
     const compiled = u.liveCk === u.mounted.ck ? u.liveSource : u.mounted.ck === core.viewKey(b) ? b.source : null;
-    const hit = compiled != null ? V()?.offsetAt?.(sf.render, core.cache.get(u.mounted.ck), compiled, s.editor.text, event.clientX, event.clientY) : null;
-    const pos = hit != null ? { offset: hit, method: 'boundary', glyph: '' } : sourcePositionFor({ source: s.editor.text, el: sf.render, result: core.cache.get(u.mounted.ck) ?? null }, { x: event.clientX, y: event.clientY, target: event.target });
+    const pos = positionAt(sf.render, { result: core.cache.get(u.mounted.ck), compiled, text: s.editor.text, click: { x: event.clientX, y: event.clientY, target: event.target } });
     if (!pos) return;
     core.setLastPosition({ id, ...pos }, pane);
     s.editor.view.focus();
