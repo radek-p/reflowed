@@ -1,6 +1,8 @@
 // INSPECTOR: the public Reflow TeX inspector (reflowtex src/inspector: boxes and glue, resources, colours) inside
 // ReflowEd, on ONE pane. Behind "Show advanced features" (settings/advanced.js); the dev page only (the single file
-// has no files beside it for the panel to load).
+// has no files beside it for the panel to load): app/services.ts imports this module outside a release only, so a
+// release has none of what it installs at import (its setting, its view, its key listener, its style element).
+// The shortcut ⌥⇧I / Alt+Shift+I toggles it with the advanced switch on; otherwise the key goes on (inspector/shortcut.ts).
 //
 // The public panel is used as it is, through its host API (window.reflowtex.inspector: open, close, inspect, setDock)
 // and its page agent's documented contract (agent.js, "any other tool may evaluate it"). Nothing in it is forked.
@@ -30,6 +32,7 @@ import { html, render, Segmented, IconButton, registerView, Frame, FrameContext 
 import { advanced, registerAdvanced } from '../settings/advanced.js';
 import { registerSetting } from '../settings/registry.ts';
 import { isRelease } from '../app/release-mode.js';
+import { shortcutAction } from './shortcut.ts';
 
 export const VIEW_ID = 'inspector';
 const BASE = 'lib/viewer/inspector/';
@@ -249,14 +252,15 @@ if (typeof window !== 'undefined') {
 const registered = { id: VIEW_ID, title: 'Inspector', Component: InspectorBar, slot: 'pane-corner' };
 registerView(registered);
 
-// The public panel's shortcut (Alt+Shift+I) opens it on the whole page: here it is ours, and only with the
-// advanced switch on (this listener is in place before the panel's script loads, so it runs first).
+// The shortcut, Alt+Shift+I: taken only when it toggles the inspector (inspector/shortcut.ts). This listener is in
+// place before the public panel's script loads, so it runs before that script's own listener for the key.
+// (Not a row of a page key table: those run after the public panel's capture listener on the window.)
 if (typeof window !== 'undefined') {
   addEventListener('keydown', (e) => {
-    if (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyI') {
-      e.preventDefault(); e.stopImmediatePropagation();
-      if (advanced.peek() && inspector.available()) inspector.toggle();
-    }
+    const act = shortcutAction(e, { canShow: advanced.peek() && inspector.available(), panelLoaded: !!window.reflowtex?.inspector });
+    if (!act) return;
+    e.stopImmediatePropagation();
+    if (act === 'toggle') { e.preventDefault(); inspector.toggle(); }
   }, true);
   const css = document.createElement('style');
   css.id = 'rtx-insp-css';

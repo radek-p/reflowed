@@ -2,7 +2,6 @@
 // api (its editor's test surface, app/app.js), and the workbench's parts. Tests only; product code acts through
 // commands and document hosts (tests/test-arch-units.ts, 5a).
 import { layerState, views as registeredViews } from '../design/ui/index.js';
-import { inspector } from '../inspector/index.js';
 import { editorRoots } from '../app/editor-root.ts';
 import { createDocumentView } from '../docview/document-view.js';   // tests: a second instance
 import type { WorkbenchStore } from '../../../workbench/src/index.ts';
@@ -15,7 +14,7 @@ let lastHome: { idle?(): Promise<void> } | null = null;
 export function setLastHome(h: { idle?(): Promise<void> } | null, was: object | null = null) { if (!was || lastHome === was) lastHome = h; }
 
 export function installTestSurface({ wb, tabs, store, services, kinds, openDoc, route, statusIdle }: {
-  wb: WorkbenchStore; tabs: DocTabs; store: StoreLike; services: { backends: { id: string }[]; notes: unknown; view: unknown; io: unknown };
+  wb: WorkbenchStore; tabs: DocTabs; store: StoreLike; services: { backends: { id: string }[]; notes: unknown; view: unknown; io: unknown; inspector: unknown };
   kinds: object; openDoc(id: string, o?: { beside?: boolean }): Promise<string>; route(): object;
   /** the tabs' status no longer held (wb/status-hold.ts) */
   statusIdle?(): Promise<void>;
@@ -45,7 +44,8 @@ export function installTestSurface({ wb, tabs, store, services, kinds, openDoc, 
     notes: () => services.notes, io: () => services.io, view: () => services.view, bibpane: () => tabs.bibpane, refnav: () => tabs.refnav,
     views: () => registeredViews().map((v: ViewDef) => ({ id: v.id, title: v.title, slot: v.slot })),
     layers: () => layerState().map((l: { kind: string; z: string }) => ({ kind: l.kind, z: l.z })),
-    inspector: () => inspector,
+    /** the page's inspector (inspector/index.js); null in a release (not loaded there) */
+    inspector: () => services.inspector,
     refsState: () => (cur() as { refsState?(): unknown } | null)?.refsState?.() ?? null,
     /** the backend object of the current document (PDF export, stats) */
     backendObject: () => { const id = tabs.currentEditor()?.backendId() ?? null; return services.backends.find((b) => b.id === id) ?? null; },

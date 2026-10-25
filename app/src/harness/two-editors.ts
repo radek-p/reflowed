@@ -16,7 +16,6 @@ import { createPageServices, pageReady } from '../app/services.ts';
 import { mountEditor, type MountedEditor } from '../app/mount.ts';
 import { editorRoots } from '../app/editor-root.ts';
 import { testFixtureDocument } from '../app/test-fixture.js';
-import { inspector } from '../inspector/index.js';
 
 type Slot = 'a' | 'b';
 interface DocInit { title: string; preamble: string; bib: unknown; meta: unknown; blocks: { source: string; kind: string; file: string }[] }
@@ -58,7 +57,7 @@ async function start() {
     mounted: () => [...mounted.keys()],
     roots: () => editorRoots().length,
     store: () => store,
-    inspector,
+    inspector: services.inspector,
   };
 }
 

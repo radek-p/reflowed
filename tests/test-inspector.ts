@@ -4,10 +4,10 @@
 //
 //   node tests/test-inspector.ts [http://localhost:8156/]       (a dev server: tests/integration/serve.ts)
 //
-// Hidden by default (no control, no menu item, the shortcut does nothing, nothing loaded); the advanced switch shows
-// its control; with two panes it inspects pane A only (its blocks, its outlines; pane B has no marks); focusing pane
-// B moves it, picking a pane in its bar pins it; its own close and the advanced switch turn it off and remove
-// everything; no block is re-broken by any of it (the viewer's paint counter and the blocks' widths stay).
+// Hidden by default (no control, no menu item, the shortcut does nothing and goes on to a text field unprevented,
+// nothing loaded); the advanced switch shows its control; with two panes it inspects pane A only (its blocks, its
+// outlines; pane B has no marks); focusing pane B moves it, picking a pane in its bar pins it; its own close and the
+// advanced switch turn it off and remove everything (the key then still goes on to a text field unprevented); no block is re-broken by any of it (the viewer's paint counter and the blocks' widths stay).
 // Results: test-results/inspector/results.json.
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -100,6 +100,17 @@ async function blockMenuActions(pane: string, k = 2) {
   await page.waitForSelector('.block-menu:not(.doc-menu)');
   return page.evaluate(() => [...document.querySelectorAll('.block-menu .menu-item')].map((x: any) => x.dataset.action));
 }
+/** Alt+Shift+I pressed in a text field (a keydown dispatched on an input): did the field hear it, was its default prevented */
+const keyInField = () => page.evaluate(() => {
+  const input = document.createElement('input');
+  document.body.append(input);
+  input.focus();
+  let heard = false;
+  input.addEventListener('keydown', () => { heard = true; });
+  const done = input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ˆ', code: 'KeyI', altKey: true, shiftKey: true, bubbles: true, cancelable: true }));
+  input.remove();
+  return { heard, prevented: !done };
+});
 async function closeMenu() { await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('.menu')); }
 
 // ── hidden by default ─────────────────────────────────────────────────────────
@@ -114,6 +125,10 @@ async function closeMenu() { await page.keyboard.press('Escape'); await page.wai
   await frames();
   const s = await state();
   check('... Alt+Shift+I does nothing: the public panel is not even loaded', !s.loaded && !s.host && !s.layer && !s.bar && !s.on, s);
+  const k = await keyInField();
+  await frames();
+  const s2 = await state();
+  check('... Alt+Shift+I in a text field (the inspector cannot show) reaches the field, not prevented (on a Mac: a character)', k.heard && !k.prevented && !s2.on && !s2.loaded, { k, s2 });
   const reg = await page.evaluate(() => (window as any).editorAPI.views().find((x: any) => x.id === 'inspector'));
   check('it is a registered view: id inspector, its own container slot', reg?.slot === 'pane-corner', reg);
 }
@@ -233,6 +248,12 @@ const s0 = await state();
   await page.keyboard.press('Alt+Shift+KeyI');
   await ready();
   check('... and the shortcut does nothing again', !(await state()).on);
+  // the public panel's script is on the page now (its own listener for the key): in a text field the key is still not
+  // prevented, and that listener does not open the panel on the whole page
+  const k = await keyInField();
+  await frames();
+  const ks = await state();
+  check('... Alt+Shift+I in a text field, the panel loaded: not prevented, no panel opened', !k.prevented && ks.loaded && !ks.on && !ks.host && !ks.open, { k, ks });
   const z = await state();
   check('no re-break at any toggle (paints and widths as before the first)', z.paints === s0.paints && z.widths === s0.widths, { before: s0.paints, after: z.paints });
 }

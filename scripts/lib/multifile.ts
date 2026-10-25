@@ -50,8 +50,9 @@ export function webManifest(icons: readonly { src: string; size: number; purpose
 }
 
 /** dynamic-import entries the app needs only when a feature is used (their own chunks; anything else it imports is
- *  essential): the SVG figure editor (svgfig/index.js opens it), the Ipe figures (the backend asks for them) */
-export const LAZY = ['app/src/svgfig/editor.js', 'app/src/figures/index.js'];
+ *  essential): the SVG figure editor (svgfig/index.js opens it), the Ipe figures (the backend asks for them), the
+ *  inspector (app/services.ts, outside a release only: a release never fetches it) */
+export const LAZY = ['app/src/svgfig/editor.js', 'app/src/figures/index.js', 'app/src/inspector/index.js'];
 
 export interface AppOutput { path: string; text: string; entry: boolean; imports: { path: string; kind: string }[]; entryPoint?: string }
 export interface MultiParts {

@@ -1,8 +1,8 @@
 // THE PAGE'S SERVICES: what every editor mounted on a page shares, made once by the page's host
 // (main.js for the standalone page, a test harness for two editors): the modules (`rtx:<name>`: the module's
 // entry or app/stubs.js), the document store, the refs module, the backends (one engine worker per page),
-// notes (the viewer's kind and the compile wrapper), the View options and the inspector. Each editor
-// gets them through app/mount.ts's `services`.
+// notes (the viewer's kind and the compile wrapper), the View options and the inspector (outside a release only:
+// null in a release, its module never imported). Each editor gets them through app/mount.ts's `services`.
 //
 //   await pageReady()                                  the viewer is on the page, the companion package loaded
 //   const s = await createPageServices({ params, route?, store? })
@@ -22,8 +22,7 @@ import { featureFailed, isRelease } from './release-mode.js';
 import { devSeedCache } from './dev-seed.js';
 import { installNotes } from '../notes/index.js';
 import { installView } from '../view/index.js';
-import { inspector } from '../inspector/index.js';
-import type { EditorServices, NotesService, ViewService } from './mount.ts';
+import type { EditorServices, InspectorService, NotesService, ViewService } from './mount.ts';
 
 const MODULES = ['store', 'io', 'home', 'refs', 'backend'] as const;
 type ModuleName = typeof MODULES[number];
@@ -88,6 +87,12 @@ export async function createPageServices({ params, route = () => null, store: st
   backend.warm?.();
   let view: ViewService | null = null;              // view options: width, text size, colours, edit layout (the page's)
   try { view = await installView({ notes }); } catch (e) { view = featureFailed('view', e); }
+  // the inspector (a developer tool): imported outside a release only, so a release has none of it (its module
+  // installs a setting, a view, a key listener and a style element when it is evaluated)
+  let inspector: InspectorService | null = null;
+  if (!isRelease()) {
+    try { inspector = (await import('../inspector/index.js')).inspector; } catch (e) { inspector = featureFailed('inspector', e); }
+  }
 
   const services: EditorServices = {
     store, ids, refs, makeRefs, backends, backend, io, notes, view, inspector, numberingState: refsMod.numberingState ?? null,
