@@ -62,6 +62,9 @@ inconsolata.sty	4327	1451
 inputenc.sty	5049	1824
 lasy6.tfm	520	270
 libertine.sty	19187	2935
+lm-mathex.enc	3486	721
+lm-mathit.enc	2405	669
+lm-mathsy.enc	2840	840
 logreq.def	1620	494
 logreq.sty	6187	2181
 mathrsfs.sty	300	235

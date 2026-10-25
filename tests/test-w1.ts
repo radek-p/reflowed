@@ -41,6 +41,7 @@ if (all || argv.has('--node')) {
   run('working-set lists (Node): each list file exists, its names are in the embedded set', join(ENGINE, 'tests/working-set-lists.test.ts'));
   run('spacing (Node): page gaps = one document\'s, sample + intro', join(ENGINE, 'tests/spacing.test.ts'), []);
   run('source positions (Node): TFM text, ligatures, hyphenation, accents, maths, peeks', join(ENGINE, 'tests/positions.test.ts'));
+  run('classic fonts (Node, the worker on the embedded set): lmodern maths draws the glyphs TeX set', join(ENGINE, 'tests/classic-fonts.test.ts'));
   run('Unicode input in TFM-encoded documents (Node): ń ł ő ř ß é print, with positions', join(ENGINE, 'tests/tfm-unicode.test.ts'));
   run('hyphenation of 8-bit text (Node): every T1/OT1 word has TeX\'s points as discretionaries', join(ENGINE, 'tests/tfm-hyphenation.test.ts'));
   run('source map guard (Node): the glyph-order invariant checked per item', join(ENGINE, 'tests/sourcemap-guard.test.ts'));
