@@ -1,6 +1,6 @@
 build/
 dist/
-node_modules/
+node_modules
 test-results/*.json
 test-results/*/browser-*.png
 test-results/*/node-*.png

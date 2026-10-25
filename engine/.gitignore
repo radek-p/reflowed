@@ -1,6 +1,6 @@
 # anchored: engine/api and engine/encode keep their own rules
 /build/
 /dist/
-/node_modules/
+/node_modules
 /server/cache/
 /dist-next/

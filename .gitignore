@@ -1,5 +1,5 @@
 # Built and downloaded files: never tracked
-node_modules/
+node_modules
 build/
 dist/
 # what the test suites write (logs, results, screenshots)
