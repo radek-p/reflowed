@@ -105,7 +105,7 @@ export function revealCaret(render: HTMLElement, block: RevealBlock | null | und
   // the visible width: the display's box, less what of it the window (or a pane) cuts off
   const box = clip();
   const r = d.getBoundingClientRect();
-  const lo = Math.max(0, box ? box.left : 0), hi = Math.min(document.documentElement.clientWidth, box ? box.right : Infinity);
+  const lo = Math.max(0, box ? box.left : 0), hi = Math.min(render.ownerDocument.documentElement.clientWidth, box ? box.right : Infinity);
   const cut = Math.max(0, lo - r.left, r.right - hi);
   try { block.revealInDisplay(i, p.x, { margin: 24 + cut }); } catch { return false; }
   return d.scrollLeft !== before;

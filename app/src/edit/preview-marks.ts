@@ -1,6 +1,7 @@
 // The caret, the selection and the caret's line drawn in a typeset block, and a point of it mapped back to a source
-// offset: the live preview's marks. It reads the viewer's public host API only (view/viewer-host.ts): a block
-// element, the engine's result (its sourcemap), the source it was compiled from and the editor's text; no app state.
+// offset: the live preview's marks (edit/live-preview.ts), over the viewer's public host API (view/viewer-host.ts)
+// only. No app state: a block element, the engine's result (its sourcemap), the source it was compiled from and the
+// editor's text are all it reads. Everything it makes is made by the block's own document (a frame's too).
 //
 //   markCaret(renderEl, result, compiled, text, caret, sel?) -> { method, x, sure, bands } | null
 //   offsetAt(renderEl, result, compiled, text, x, y) -> offset in text | null   (the engine's map only)
@@ -251,6 +252,7 @@ export function markCaret(renderEl: HTMLElement, result: PreviewResult | null, c
   const base = renderEl.getBoundingClientRect();
   // a mark over a wide display goes inside the display's scroller, in its content's coordinates: it scrolls with
   // the glyphs it marks (natively, in the same frame) when the display is scrolled sideways
+  const doc = renderEl.ownerDocument, win = doc.defaultView ?? window;
   const displays = [...el!.querySelectorAll<HTMLElement>('.latex-display')].filter((d) => !d.parentElement?.closest('.latex-display'))
     .map((d) => ({ d, r: d.getBoundingClientRect() }));
   const hostAt = (x: number, y: number): { host: HTMLElement; ox: number; oy: number; display: boolean } => {
@@ -264,14 +266,14 @@ export function markCaret(renderEl: HTMLElement, result: PreviewResult | null, c
   let bands = 0;
   if (sel && sel.to > sel.from) {
     const from = carryCaret(compiled, text, sel.from), to = carryCaret(compiled, text, sel.to);
-    const frag = document.createDocumentFragment();
+    const frag = doc.createDocumentFragment();
     const put = (r: Box | null | undefined, math: boolean) => {
       if (!r || r.right - r.left <= 0) return;
-      const d = document.createElement('div');
+      const d = doc.createElement('div');
       d.className = math ? 'rtx-sel-band rtx-sel-glyph' : 'rtx-sel-band';
       const h = hostAt((r.left + r.right) / 2, (r.top + r.bottom) / 2);
       d.style.cssText = `left:${r.left - h.ox}px;top:${r.top - h.oy}px;width:${r.right - r.left}px;height:${r.bottom - r.top}px`;
-      if (h.display) { let f = inDisplay.get(h.host); if (!f) inDisplay.set(h.host, (f = document.createDocumentFragment())); f.append(d); } else frag.append(d);
+      if (h.display) { let f = inDisplay.get(h.host); if (!f) inDisplay.set(h.host, (f = doc.createDocumentFragment())); f.append(d); } else frag.append(d);
       bands++;
     };
     // text bands end where the caret would: a selection that starts or ends with a space
@@ -323,15 +325,15 @@ export function markCaret(renderEl: HTMLElement, result: PreviewResult | null, c
     for (const [d, f] of inDisplay) d.append(f);
   }
   if (!p) return bands ? { method: c.method, bands } : null;
-  const bar = document.createElement('div');
+  const bar = doc.createElement('div');
   bar.className = p.sure ? 'rtx-caret-bar' : 'rtx-caret-bar rtx-caret-unsure';
-  const dpr = devicePixelRatio || 1, z = parseFloat(getComputedStyle(el!).zoom) || 1;
+  const dpr = win.devicePixelRatio || 1, z = parseFloat(win.getComputedStyle(el!).zoom) || 1;
   const w = Math.max(1 / dpr, Math.round(2 * z * dpr) / dpr);
   const snap = (v: number) => Math.round(v * dpr) / dpr;
   const bh = hostAt(p.x, (p.top + p.bottom) / 2);
   bar.style.cssText = `left:${snap(p.x - bh.ox - w / 2)}px;top:${snap(p.top - bh.oy)}px;width:${w}px;height:${snap(Math.max(4, p.bottom - p.top))}px`;
   // the caret's line, faintly (paired with the source editor's active line)
-  const line = document.createElement('div');
+  const line = doc.createElement('div');
   line.className = 'rtx-line-band';
   line.style.cssText = `left:-6px;right:-6px;top:${snap(p.top - base.top - 2)}px;height:${snap(Math.max(4, p.bottom - p.top) + 4)}px`;
   renderEl.append(line);                              // the line band spans the block's width: it stays in the render
