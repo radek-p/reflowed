@@ -1,5 +1,6 @@
 // The workbench's browser suite, area "looks": looks: glass, the viewport, the kit gallery, light and dark, overflow. Run by tests/e2e.ts (--area looks).
-import { req, pw, argv, ONLY, HTML, JS, fails, check, skip, BROWSER, browser, fresh, oneLine, idle, groups, group, layout, tabsOf, labels, groupEl, center, drag, tabSel, stopSel, chord, activeId, events, evs, WB, REPO, decodePng, luma, KEYMAP, readFileSync, writeFileSync, existsSync, join, settled, narrowLook, narrowBad } from './harness.ts';
+import { req, pw, argv, ONLY, HTML, JS, fails, check, skip, BROWSER, browser, fresh, oneLine, idle, groups, group, layout, tabsOf, labels, groupEl, center, drag, tabSel, stopSel, chord, activeId, events, evs, WB, REPO, decodePng, luma, KEYMAP, readFileSync, writeFileSync, existsSync, join, settled, narrowLook, narrowBad, ownBars, ownBar } from './harness.ts';
+import { thumbGeometry } from '../../src/overlay-scrollbar.ts';
 
 // ── the glass strip: text contrast over any content; the name above the section; the solid fallback ──
 group('glass strip: contrast over content, name above section, fallback', async () => {
@@ -42,9 +43,8 @@ group('glass strip: contrast over content, name above section, fallback', async 
   const g = await page.evaluate(() => { const s = getComputedStyle(document.querySelector('.wb-strip')!, '::before'); return { bf: (s as any).backdropFilter || (s as any).webkitBackdropFilter, bg: s.backgroundColor,
     under: document.querySelector('.wb-panel:not(.wb-panel--hidden) .wb-view')!.getBoundingClientRect().top - document.querySelector('.wb-group')!.getBoundingClientRect().top,
     strip: document.querySelector('.wb-group .wb-strip')!.getBoundingClientRect().height }; });
-  const ff = !(await page.evaluate(() => CSS.supports('selector(::-webkit-scrollbar)')));
-  // (no ::-webkit-scrollbar, no track margin: the view starts below the strip, by the strip's height, whatever the pills')
-  check('the strip blurs what is under it (its own masked layer); the view runs under the strip' + (ff ? ' (Firefox: below it)' : ''), /blur/.test(g.bf) && g.strip > 0 && Math.abs(g.under - (ff ? g.strip : 0)) <= 0.01, g);
+  // (every engine: Firefox too, whose bar is the workbench's own, its track below the strip)
+  check('the strip blurs what is under it (its own masked layer); the view runs under the strip', /blur/.test(g.bf) && g.strip > 0 && Math.abs(g.under) <= 0.01, g);
   const pad = await page.evaluate(() => { const v = document.querySelector('.wb-panel:not(.wb-panel--hidden) .demo-doc, .wb-panel:not(.wb-panel--hidden) .demo-list')!; const first = v.firstElementChild!.getBoundingClientRect(); return first.top - document.querySelector('.wb-group')!.getBoundingClientRect().top - document.querySelector('.wb-strip')!.getBoundingClientRect().height; });
   check('at rest the first line is below the strip (padded)', pad >= 0, pad);
   const mask = await page.evaluate(() => { const s = getComputedStyle(document.querySelector('.wb-strip')!, '::before') as any; const r = document.querySelector('.wb-strip')!.getBoundingClientRect(); return { top: s.top, bottom: s.bottom, mask: s.maskImage || s.webkitMaskImage, tr: s.transform }; });
@@ -55,14 +55,16 @@ group('glass strip: contrast over content, name above section, fallback', async 
   const solid = await page.evaluate(() => { const s = getComputedStyle(document.querySelector('.wb-strip')!, '::before'); return { bg: s.backgroundColor, page: getComputedStyle(document.body).backgroundColor, bf: (s as any).backdropFilter }; });
   check('… which is opaque (the page colour, no blur)', solid.bg === solid.page && (!solid.bf || solid.bf === 'none'), solid);
   await page.evaluate(() => document.querySelector('.wb-root')!.classList.remove('wb-solid'));
-  // the scrollbar starts below the strip: Chromium and WebKit inset its track; Firefox starts the view below it
-  const sc = await page.evaluate(() => { const v = document.querySelector('.wb-panel:not(.wb-panel--hidden) [data-wb-scroll]') as HTMLElement; v.scrollTop = 0;
-    const r = v.getBoundingClientRect(), s = document.querySelector('.wb-group .wb-strip')!.getBoundingClientRect();
-    return { right: r.right, top: r.top, bottom: r.bottom, sb: v.offsetWidth - v.clientWidth, strip: s.bottom, webkit: CSS.supports('selector(::-webkit-scrollbar)'), mode: document.documentElement.dataset.wbScrollbars }; });
-  // overlay bars (macOS, iOS; headless WebKit on Linux has them too) stay the platform's own (scrollbars.ts): no styled
-  // track to inset, nothing to measure
-  if (sc.webkit && sc.mode === 'overlay') skip('the scrollbar thumb starts at or below the strip', 'overlay scrollbars here: the platform\'s own, not styled');
-  else if (sc.webkit) {
+  // the scrollbar starts below the strip: a classic one's track is inset (Chromium, WebKit: measured on a screenshot);
+  // where the bars are the workbench's own (overlay bars: macOS, iOS, headless WebKit; Firefox), its track starts there
+  const SEL = '.wb-panel:not(.wb-panel--hidden) [data-wb-scroll]';
+  const sc = await page.evaluate((s: string) => { const v = document.querySelector(s) as HTMLElement; v.scrollTop = 0;
+    const r = v.getBoundingClientRect(), st = document.querySelector('.wb-group .wb-strip')!.getBoundingClientRect();
+    return { right: r.right, top: r.top, bottom: r.bottom, sb: v.offsetWidth - v.clientWidth, strip: st.bottom }; }, SEL);
+  if (await ownBars(page)) {
+    const t = await ownBar(page, SEL);
+    check('the scrollbar (the workbench\'s own) starts at the strip\'s bottom (±1 px); the native one takes no room', Math.abs(t.top - sc.strip) <= 1 && t.native === 0, { ...t, strip: sc.strip });
+  } else {
     await page.evaluate(() => { for (const e of document.querySelectorAll('.wb-strip, .wb-crumbs')) (e as HTMLElement).style.visibility = 'hidden'; });
     const png = decodePng(await page.screenshot({ clip: { x: Math.floor(sc.right - sc.sb + 3), y: Math.floor(sc.top), width: Math.max(2, sc.sb - 6), height: 240 } }));
     await page.evaluate(() => { for (const e of document.querySelectorAll('.wb-strip, .wb-crumbs')) (e as HTMLElement).style.visibility = ''; });
@@ -70,8 +72,103 @@ group('glass strip: contrast over content, name above section, fallback', async 
     let first = -1;
     for (let y = 0; y < png.h && first < 0; y++) for (let x = 0; x < png.w; x++) if (Math.abs(luma(png.px, (y * png.w + x) * 4) - 255 * 0 - (luma(png.px, 0))) > 25) { first = y; break; }
     check('the scrollbar thumb starts at or below the strip (its track inset)', sc.sb >= 8 && first >= 0 && sc.top + first >= sc.strip - 1, { ...sc, first, bg });
-  } else check('Firefox: the scroller starts at or below the strip', sc.top >= sc.strip - 0.5, sc);
+  }
   check('no maximise button in the strip (the shortcut and the tab menu keep it)', await page.locator('[data-action="maximize"]').count() === 0);
+  await page.close();
+});
+
+// ── the workbench's own overlay scrollbar (overlay-scrollbar.ts): where the bars are overlay ones (headless WebKit, macOS,
+//    iOS) and in Firefox; Chromium's headless bars are classic, so the page is told they are overlay ones (as on macOS) ──
+group('own overlay scrollbar: below the header, follows the scroll, drags, pages, no layout while scrolling, not drawn when nothing scrolls, fades', async () => {
+  const page = await fresh();
+  await page.evaluate(() => { if (CSS.supports('selector(::-webkit-scrollbar)')) document.documentElement.dataset.wbScrollbars = 'overlay'; });
+  // a long list (no scroll handler of its own: a scroll lays out nothing of it)
+  await page.evaluate(() => (window as any).demo.wb.open({ view: 'list', state: { name: 'Long', items: Array.from({ length: 400 }, (_, i) => `Item ${i + 1}`) } }));
+  await idle(page);
+  const sel = await page.evaluate(() => { const v = [...document.querySelectorAll<HTMLElement>('.wb-panel:not(.wb-panel--hidden) .demo-list')].find((e) => e.querySelector('h2')?.textContent === 'Long')!; v.id = 'long-list'; return '#long-list'; });
+  // a programmatic scroll (a host's anchoring, a jump) does not bring the bar up
+  await page.evaluate((s: string) => { (document.querySelector(s) as HTMLElement).scrollTop = 300; }, sel);
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  check('a scroll without input does not bring the bar up', await page.evaluate((s: string) => !document.querySelector(s)!.nextElementSibling?.matches('.wb-sb--on'), sel));
+  await page.evaluate((s: string) => { (document.querySelector(s) as HTMLElement).scrollTop = 0; }, sel);
+  const t = await ownBar(page, sel);
+  const head = await page.evaluate((s: string) => document.querySelector(s)!.closest('.wb-group')!.querySelector('.wb-strip')!.getBoundingClientRect().bottom, sel);
+  check('the native bar takes no room (hidden)', t.native === 0, t);
+  check('a scroll by wheel brings it up; its track starts at the header\'s bottom (±1 px), ends at the view\'s, at its right edge', Math.abs(t.top - head) <= 1 && Math.abs(t.bottom - t.sc.bottom) <= 1 && Math.abs(t.right - t.sc.right) <= 1, { ...t, head });
+  check('presentational: aria-hidden, nothing in it focusable', await page.evaluate((s: string) => { const b = document.querySelector(s)!.nextElementSibling as HTMLElement; return b.getAttribute('aria-hidden') === 'true' && b.tabIndex < 0 && !b.querySelector('[tabindex]'); }, sel));
+  // the pointer over the track holds the bar; the thumb's size and place follow the scroll (programmatic: while shown)
+  await page.mouse.move((t.left + t.right) / 2, t.top + 4);
+  await page.waitForFunction((s: string) => document.querySelector(s)!.nextElementSibling!.matches('.wb-sb--hot'), sel);
+  const read = (f: number) => page.evaluate(async ([s, f]: [string, number]) => {
+    const v = document.querySelector(s) as HTMLElement; v.scrollTop = f * (v.scrollHeight - v.clientHeight);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const tr = v.nextElementSibling!.querySelector('.wb-sb-track--y')!.getBoundingClientRect(), th = v.nextElementSibling!.querySelector('.wb-sb-track--y .wb-sb-thumb')!.getBoundingClientRect();
+    return { track: tr.height, top: th.top - tr.top, size: th.height, view: v.clientHeight, content: v.scrollHeight, scroll: v.scrollTop };
+  }, [sel, f]);
+  const bad: unknown[] = [];
+  for (const f of [0, 0.25, 0.5, 0.8, 1]) {
+    const r = await read(f), e = thumbGeometry(r.track, r.view, r.content, r.scroll)!;
+    if (!e || Math.abs(r.top - e.offset) > 0.6 || Math.abs(r.size - e.size) > 0.6) bad.push({ f, r, e });
+  }
+  check('the thumb\'s size and place follow the scroll (0 … the end, ±0.6 px)', bad.length === 0, bad);
+  // a drag of the thumb moves the scroll by the thumb's travel
+  await read(0);
+  const th = await page.evaluate((s: string) => { const r = document.querySelector(s)!.nextElementSibling!.querySelector('.wb-sb-track--y .wb-sb-thumb')!.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, sel);
+  const k = await page.evaluate((s: string) => { const v = document.querySelector(s) as HTMLElement, tr = v.nextElementSibling!.querySelector('.wb-sb-track--y')!.getBoundingClientRect(), th = v.nextElementSibling!.querySelector('.wb-sb-track--y .wb-sb-thumb')!.getBoundingClientRect(); return (v.scrollHeight - v.clientHeight) / (tr.height - th.height); }, sel);
+  await page.mouse.move(th.x, th.y); await page.mouse.down(); await page.mouse.move(th.x, th.y + 80, { steps: 8 }); await page.mouse.up();
+  const dragged = await page.evaluate((s: string) => (document.querySelector(s) as HTMLElement).scrollTop, sel);
+  check('dragging the thumb 80 px scrolls by its travel (80 px × scroll per pixel)', Math.abs(dragged - 80 * k) <= k + 1, { dragged, want: 80 * k, k });
+  // a press below the thumb pages (a whole number of pages: one, or more if the press was held past the repeat's wait)
+  await read(0);
+  const pageStep = await page.evaluate((s: string) => { const v = document.querySelector(s) as HTMLElement, cs = getComputedStyle(v); return (v.clientHeight - (parseFloat(cs.scrollPaddingTop) || 0) - (parseFloat(cs.scrollPaddingBottom) || 0)) * 0.875; }, sel);
+  await page.mouse.move((t.left + t.right) / 2, t.bottom - 6); await page.mouse.down(); await page.mouse.up();
+  const paged = await page.evaluate((s: string) => (document.querySelector(s) as HTMLElement).scrollTop, sel);
+  check('a press on the track below the thumb pages down (by 87.5 % of the visible band)', paged >= pageStep - 1 && Math.abs(paged / pageStep - Math.round(paged / pageStep)) < 0.02, { paged, pageStep });
+  // held, it pages until the thumb reaches the press
+  await read(0);
+  const at = t.top + (t.bottom - t.top) * 0.6;
+  await page.mouse.move((t.left + t.right) / 2, at); await page.mouse.down();
+  const reached = await page.waitForFunction(([s, y]: [string, number]) => { const r = document.querySelector(s)!.nextElementSibling!.querySelector('.wb-sb-track--y .wb-sb-thumb')!.getBoundingClientRect(); return r.top <= y && r.bottom >= y; }, [sel, at], { timeout: 5000 }).then(() => true, () => false);
+  await page.evaluate(async () => { for (let i = 0; i < 12; i++) await new Promise((r) => requestAnimationFrame(r)); });     // (a few repeats' time: it stays where it reached)
+  const still = await page.evaluate(([s, y]: [string, number]) => { const r = document.querySelector(s)!.nextElementSibling!.querySelector('.wb-sb-track--y .wb-sb-thumb')!.getBoundingClientRect(); return r.top <= y && r.bottom >= y; }, [sel, at]);
+  await page.mouse.up();
+  check('held, the press pages until the thumb is under it, and stops there', reached && still, { reached, still });
+  // no layout while scrolling: the bar moves its thumb by transform (Chromium's layout counter)
+  if (BROWSER === 'chromium') {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Performance.enable');
+    const layouts = async () => (await cdp.send('Performance.getMetrics')).metrics.find((m: any) => m.name === 'LayoutCount').value;
+    await read(0);
+    const l0 = await layouts();
+    const moved = await page.evaluate(async (s: string) => {
+      const v = document.querySelector(s) as HTMLElement, th = v.nextElementSibling!.querySelector('.wb-sb-track--y .wb-sb-thumb') as HTMLElement, seen = new Set<string>();
+      for (let i = 0; i < 30; i++) { v.scrollTop += 37; await new Promise((r) => requestAnimationFrame(r)); seen.add(th.style.transform); }
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      return seen.size;
+    }, sel);
+    const l1 = await layouts();
+    check('30 frames of scrolling with the bar shown: the thumb moves every frame, no layout at all', moved >= 29 && l1 - l0 === 0, { moved, layouts: l1 - l0 });
+  } else skip('no layout while scrolling', 'the layout counter is Chromium\'s (CDP)');
+  // it fades out once the pointer leaves and nothing scrolls
+  const box = await page.locator(sel).boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const faded = await page.waitForFunction((s: string) => !document.querySelector(s)!.nextElementSibling!.matches('.wb-sb--on'), sel, { timeout: 5000 }).then(() => true, () => false);
+  check('the pointer gone and no scroll: it fades out', faded);
+  check('… with an opacity transition (none with reduced motion)', await page.evaluate((s: string) => parseFloat(getComputedStyle(document.querySelector(s)!.nextElementSibling!).transitionDuration) > 0, sel));
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  check('reduced motion: no fade', await page.evaluate((s: string) => getComputedStyle(document.querySelector(s)!.nextElementSibling!).transitionDuration.split(',').every((d) => parseFloat(d) === 0), sel));
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  // hovering near the right edge brings it up; content that stops scrolling takes it away
+  const edge = await page.evaluate((s: string) => { const r = document.querySelector(s)!.getBoundingClientRect(); return { x: r.right - 4, y: r.top + r.height / 2 }; }, sel);
+  await page.mouse.move(edge.x - 30, edge.y); await page.mouse.move(edge.x, edge.y, { steps: 3 });
+  const hovered = await page.waitForFunction((s: string) => document.querySelector(s)!.nextElementSibling!.matches('.wb-sb--on.wb-sb--hot'), sel, { timeout: 3000 }).then(() => true, () => false);
+  check('the pointer at the right edge brings it up (wider: hovered)', hovered);
+  await page.evaluate((s: string) => (window as any).demo.wb.setState(document.querySelector(s)!.closest<HTMLElement>('.wb-panel')!.dataset.panel, { items: ['Only one'] }), sel);
+  const gone = await page.waitForFunction((s: string) => !document.querySelector(s)!.nextElementSibling?.matches('.wb-sb--on'), sel, { timeout: 3000 }).then(() => true, () => false);
+  check('the content no longer scrolls: the bar is not drawn (though hovered)', gone);
+  await page.mouse.wheel(0, 40);
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  check('… and a wheel over a view that does not scroll brings nothing up', await page.evaluate(() => !document.querySelector('.wb-panel:not(.wb-panel--hidden) .wb-sb--on')));
   await page.close();
 });
 

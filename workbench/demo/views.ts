@@ -272,7 +272,7 @@ export const DEMO_CSS = `
 .demo-doc h1 { font-size: 24px; font-weight: 600; margin: 0 0 var(--ui-4); }
 .demo-doc h3 { font-size: 17px; margin: var(--ui-6) 0 var(--ui-2); }
 .demo-size { position: sticky; bottom: 0; text-align: right; padding: 2px var(--ui-2); color: var(--rfed-ink-3); font: var(--ui-text-xs)/1.4 var(--ui-mono); pointer-events: none; }
-.demo-list { position: absolute; inset: 0; overflow: hidden auto; padding: calc(var(--wb-inset-top, 0px) + var(--ui-3)) var(--ui-4) var(--ui-3); }
+.demo-list { position: absolute; inset: 0; overflow: hidden auto; padding: calc(var(--wb-inset-top, 0px) + var(--ui-3)) var(--ui-4) var(--ui-3); scroll-padding-top: var(--wb-inset-top, 0px); }
 .demo-list h2 { font-size: var(--ui-text-lg); margin: 0 0 var(--ui-2); }
 .demo-item { display: flex; align-items: center; gap: var(--ui-2); height: var(--ui-row); padding: 0 var(--ui-2); border-radius: var(--ui-r-sm); cursor: grab; user-select: none; touch-action: none; }
 .demo-item:hover { background: var(--rfed-hover); }

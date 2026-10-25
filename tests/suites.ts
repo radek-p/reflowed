@@ -77,7 +77,7 @@ export const SUITES: Suite[] = [
   S('bundle-cache', 'unit', 2, () => node('tests/test-bundle-cache.ts'), FAST),   // the TeX bundle's disk cache: cold, offline, damaged, two servers at once
   S('engine-node', 'unit', 40, () => node('tests/test-w1.ts', '--node'), { cold: true }),
   // ── the workbench (standalone): its own page, served from memory by its suite (no dev server, no port) ──
-  S('workbench-units', 'unit', 3, () => node('--test', ...['model', 'keys', 'arch', 'viewport', 'themes', 'progress', 'helpers', 'icons'].map((f) => `workbench/tests/${f}.test.ts`)), FAST),   // the units and the guards (model, keys, arch, viewport, themes, progress, helpers, icons: the one icon registry)
+  S('workbench-units', 'unit', 3, () => node('--test', ...['model', 'keys', 'arch', 'viewport', 'themes', 'progress', 'helpers', 'icons', 'overlay-scrollbar'].map((f) => `workbench/tests/${f}.test.ts`)), FAST),   // the units and the guards (model, keys, arch, viewport, themes, progress, helpers, icons: the one icon registry, overlay-scrollbar: the own bar's thumb)
   S('workbench', 'unit', 15, () => node('workbench/tests/e2e.ts')),   // the browser suite on the demo (ARIA, keys, drags, persistence)
   // ── the dev app ──
   S('dev-seed', 'dev', 5, (c) => node('tests/test-dev-seed.ts', `${c.dev}/`), { seedOnly: true }),

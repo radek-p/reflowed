@@ -25,8 +25,8 @@ group('one tab: no strip, the document fills the area with its breadcrumbs', asy
   await page.waitForFunction(() => !document.querySelector('.wb-strip--reveal'));
   const b2 = await geo();
   check('a second tab brings the strip back; the view starts under it', !b2.solo && await page.evaluate(() => { const p = document.querySelector('.wb-panel:not(.wb-panel--hidden)')!; const v = p.querySelector('.wb-view')!, sh = document.querySelector('.wb-strip')!.getBoundingClientRect();
-    // Chromium, WebKit: the view runs under the strip, padded; Firefox (no track inset): the view starts below it
-    return parseFloat(getComputedStyle(v).paddingTop) >= sh.height || v.getBoundingClientRect().top >= sh.bottom - 0.5; }), b2);
+    // the view runs under the strip, padded (every engine: Firefox too)
+    return parseFloat(getComputedStyle(v).paddingTop) >= sh.height && v.getBoundingClientRect().top <= sh.top + 0.5; }), b2);
   check('… and the panels are tabpanels again', await page.evaluate(() => [...document.querySelectorAll('.wb-panel')].every((p) => p.getAttribute('role') === 'tabpanel' && !!document.getElementById(p.getAttribute('aria-labelledby')!))));
   await page.keyboard.press('Control+Alt+w');
   await page.waitForFunction(() => getComputedStyle(document.querySelector('.wb-strip')!).display === 'none');

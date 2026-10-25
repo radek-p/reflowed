@@ -1,5 +1,5 @@
 // The workbench's browser suite, area "bar": the window bar: the tabs in it, the side status bar, the wordmark, the glass top bar, the fit. Run by tests/e2e.ts (--area bar).
-import { req, pw, argv, ONLY, HTML, JS, fails, check, skip, BROWSER, browser, fresh, oneLine, idle, groups, group, layout, tabsOf, labels, groupEl, center, drag, tabSel, stopSel, chord, activeId, events, evs, WB, REPO, decodePng, luma, KEYMAP, readFileSync, writeFileSync, existsSync, join, settled, narrowLook, narrowBad } from './harness.ts';
+import { req, pw, argv, ONLY, HTML, JS, fails, check, skip, BROWSER, browser, fresh, oneLine, idle, groups, group, layout, tabsOf, labels, groupEl, center, drag, tabSel, stopSel, chord, activeId, events, evs, WB, REPO, decodePng, luma, KEYMAP, readFileSync, writeFileSync, existsSync, join, settled, narrowLook, narrowBad, ownBars, ownBar } from './harness.ts';
 
 // ── the window bar (the editor's top bar): home, one group's tabs in it while they fit, the host's controls ──
 // The reference: the editor's top bar (scripts/app-ref.ts on the dev app): 44 px; the right-hand controls
@@ -512,16 +512,18 @@ group('glass top bar: 4.5:1 over any content, content under it (first line clear
         const sc = await page.evaluate(() => { const v = document.querySelector('.wb-panel:not(.wb-panel--hidden) [data-wb-scroll]') as HTMLElement; v.scrollTop = 0;
           const r = v.getBoundingClientRect(), strip = document.querySelector('.wb-groups .wb-strip:not([hidden])'), sb = strip && strip.getBoundingClientRect().height > 0 ? strip.getBoundingClientRect().bottom : 0;
           return { right: r.right, top: r.top, sb: v.offsetWidth - v.clientWidth, line: Math.max(document.querySelector('.wb-bar')!.getBoundingClientRect().bottom, sb), inbar: (window as any).demo.wb.inbar.peek(), webkit: CSS.supports('selector(::-webkit-scrollbar)'), mode: document.documentElement.dataset.wbScrollbars }; });
-        // overlay bars (macOS, iOS, headless WebKit on Linux) stay the platform's own (scrollbars.ts): no styled track to inset
-        if (sc.webkit && sc.mode === 'overlay') skip(`the scrollbar thumb starts at or below the ${row ? 'bar and the tab row' : 'top bar'}`, 'overlay scrollbars here: the platform\'s own, not styled');
-        else if (sc.webkit) {
+        // where the bars are the workbench's own (overlay bars: macOS, iOS, headless WebKit; Firefox): its track starts there
+        if (await ownBars(page)) {
+          const t = await ownBar(page, '.wb-panel:not(.wb-panel--hidden) [data-wb-scroll]');
+          check(`the scrollbar (the workbench's own) starts at the bottom of the ${row ? 'bar and the tab row' : 'top bar'} (±1 px)`, sc.inbar === !row && Math.abs(t.top - sc.line) <= 1 && t.native === 0, { ...sc, track: t });
+        } else {
           await page.evaluate(() => { for (const e of document.querySelectorAll('.wb-bar, .wb-strip')) (e as HTMLElement).style.visibility = 'hidden'; });
           const png = decodePng(await page.screenshot({ clip: { x: Math.floor(sc.right - sc.sb + 3), y: 0, width: Math.max(2, sc.sb - 6), height: 300 } }));
           await page.evaluate(() => { for (const e of document.querySelectorAll('.wb-bar, .wb-strip')) (e as HTMLElement).style.visibility = ''; });
           let first = -1;
           for (let y = 0; y < png.h && first < 0; y++) for (let x = 0; x < png.w; x++) if (Math.abs(luma(png.px, (y * png.w + x) * 4) - luma(png.px, 0)) > 25) { first = y; break; }
           check(`the scrollbar thumb starts at or below the ${row ? 'bar and the tab row' : 'top bar'}`, sc.inbar === !row && first >= 0 && first >= sc.line - 1, { ...sc, first });
-        } else check(`Firefox: the scroller starts at or below the ${row ? 'bar and the row' : 'bar'}`, sc.top >= sc.line - 0.5, sc);
+        }
       }
     }
     // the fallback: opaque, no blur

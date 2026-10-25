@@ -1,6 +1,7 @@
 // The workbench's components: groups placed absolutely from the layout's fractions (so a
 // change of the tree's shape never remounts a group, and panels never leave the page), tab strips, separators,
-// the tab drag (reorder, move, split by edge) and the tab context menu.
+// the tab drag (reorder, move, split by edge) and the tab context menu. The root carries the workbench's own overlay
+// scrollbars (overlay-scrollbar.ts: its listeners, for every scroller inside it).
 import { Component, type ComponentChildren } from 'preact';
 import { useLayoutEffect, useRef, useMemo, useCallback } from 'preact/hooks';
 import { html } from './html.ts';
@@ -12,6 +13,7 @@ import { groupStyle, separators, Separator, EPS } from './split.ts';
 import { WindowBar } from './bar.ts';
 import { TabStrip } from './strip.ts';
 import { subtitleOf, switcherOf } from './tab/info.ts';
+import { watchOverlayScrollbars } from './overlay-scrollbar.ts';
 import type { Box, Group } from './model.ts';
 
 // ── the workbench ──
@@ -50,6 +52,7 @@ export function Workbench({ wb, label = 'Workbench', bar = null, sideStatus = nu
     if (el) wb.attach(el, { park: park.current, bar: !!bar, tabMenu: (kind, tabId) => openTabMenuKind(wb, kind, tabId) });
   }, [!!bar]);
   useLayoutEffect(() => () => wb.detach(root.current ?? undefined), []);
+  useLayoutEffect(() => (root.current ? watchOverlayScrollbars(root.current) : undefined), []);     // the bars over its views
   useLayoutEffect(() => { wb.afterRender(); });
   const max = L.maximized;
   // (integrated) one tab in all: no strip; the view fills the area with its breadcrumbs as its header

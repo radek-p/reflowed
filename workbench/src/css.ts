@@ -521,21 +521,46 @@ html[data-wb-theme-type="hc"] .wb-status--error::after { background-image: repea
 .wb-panel:has(> .wb-crumbs) { --wb-head: calc(var(--wb-top, 0px) + var(--ui-h-md) + 1px); }
 .wb-side .wb-panel { --wb-head: 0px; }
 /* no room is reserved for a scrollbar: an overlay one (macOS, iOS) takes none, a classic one shrinks the box itself, the
-   same on every path (mount, split, move, restore). Where the bars are classic (scrollbars.ts measures it), they are
-   thin and start below the glass header: the track is inset by it (Chromium, WebKit). Overlay bars stay the platform's:
-   a styled ::-webkit-scrollbar is always a classic one, which took 12 px of every view on macOS and iOS.
-   They apply to the view and to a host's scrollers marked [data-wb-scroll] (no surprises in other content). */
-[data-wb-scrollbars="classic"] .wb-view::-webkit-scrollbar, [data-wb-scrollbars="classic"] .wb-panel [data-wb-scroll]::-webkit-scrollbar { width: 12px; height: 12px; }
-[data-wb-scrollbars="classic"] .wb-view::-webkit-scrollbar-thumb, [data-wb-scrollbars="classic"] .wb-panel [data-wb-scroll]::-webkit-scrollbar-thumb {
+   same on every path (mount, split, move, restore). The views run under the glass header, and a bar spanning a view
+   would run under it too. Where the bars are classic (scrollbars.ts measures it), they are thin and their track starts
+   below the header (a margin: Chromium, WebKit). Elsewhere (overlay bars, which a styled ::-webkit-scrollbar would turn
+   into classic ones, 12 px of every view on macOS and iOS; Firefox, which has no track margin) the native bar is hidden
+   and the workbench draws its own (overlay-scrollbar.ts: .wb-sb below), its track inside the scroller's scroll-padding.
+   Both apply to the views, the home panel and a host's scrollers marked [data-wb-scroll] (no surprises in other content). */
+.wb-home { --wb-head: var(--wb-top, 0px); }
+[data-wb-scrollbars="classic"] :is(.wb-view, .wb-home, .wb-panel [data-wb-scroll])::-webkit-scrollbar { width: 12px; height: 12px; }
+[data-wb-scrollbars="classic"] :is(.wb-view, .wb-home, .wb-panel [data-wb-scroll])::-webkit-scrollbar-thumb {
   border: 3px solid transparent; border-radius: var(--ui-r-pill); background: color-mix(in srgb, currentColor 24%, transparent) padding-box; }
-[data-wb-scrollbars="classic"] .wb-view::-webkit-scrollbar-thumb:hover, [data-wb-scrollbars="classic"] .wb-panel [data-wb-scroll]::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, currentColor 38%, transparent); }
-[data-wb-scrollbars="classic"] .wb-view::-webkit-scrollbar-track, [data-wb-scrollbars="classic"] .wb-panel [data-wb-scroll]::-webkit-scrollbar-track { margin-top: var(--wb-head); background: transparent; }
-[data-wb-scrollbars="classic"] .wb-view::-webkit-scrollbar-corner, [data-wb-scrollbars="classic"] .wb-panel [data-wb-scroll]::-webkit-scrollbar-corner { background: transparent; }
-/* Firefox has no track margin: there the view starts below the header (the content does not run under it) */
-@supports not selector(::-webkit-scrollbar) { .wb-group .wb-view { top: var(--wb-head); } .wb-group .wb-panel { --wb-inset-top: 0px; } }
+[data-wb-scrollbars="classic"] :is(.wb-view, .wb-home, .wb-panel [data-wb-scroll])::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, currentColor 38%, transparent); }
+[data-wb-scrollbars="classic"] :is(.wb-view, .wb-home, .wb-panel [data-wb-scroll])::-webkit-scrollbar-track { margin-top: var(--wb-head); background: transparent; }
+[data-wb-scrollbars="classic"] :is(.wb-view, .wb-home, .wb-panel [data-wb-scroll])::-webkit-scrollbar-corner { background: transparent; }
+[data-wb-scrollbars="overlay"] :is(.wb-view, .wb-home, .wb-panel [data-wb-scroll]) { scrollbar-width: none; }
+[data-wb-scrollbars="overlay"] :is(.wb-view, .wb-home, .wb-panel [data-wb-scroll])::-webkit-scrollbar { display: none; }
+@supports not selector(::-webkit-scrollbar) { :is(.wb-view, .wb-home, .wb-panel [data-wb-scroll]) { scrollbar-width: none; } }
+@supports selector(::-webkit-scrollbar) { [data-wb-scrollbars="classic"] .wb-sb { display: none; } }
+/* the workbench's own bar: over its scroller's box (the scroller's next sibling), never laid out with the view
+   (contain), its thumb moved by transform; shown while the user scrolls or the pointer is over its track, then it
+   fades as the platform's; wider and its track tinted while hovered or held. Presentational: it takes no focus. */
+.wb-root { --wb-sb-hit: 12px; --wb-sb-thumb: 6px; --wb-sb-thumb-hot: 9px; --wb-sb-edge: 2px; }
+.wb-sb { position: absolute; z-index: 2; contain: strict; pointer-events: none; color: var(--rfed-ink); opacity: 0; visibility: hidden;
+  transition: opacity var(--ui-slow) var(--ui-ease), visibility 0s linear var(--ui-slow); }
+.wb-sb.wb-sb--on { opacity: 1; visibility: visible; transition: opacity var(--ui-fast) var(--ui-ease-out); }
+.wb-sb-track { position: absolute; display: none; transition: background-color var(--ui-fast) var(--ui-ease); }
+.wb-sb-track.wb-sb-track--on { display: block; }
+.wb-sb--on .wb-sb-track { pointer-events: auto; }
+.wb-sb-thumb { position: absolute; border-radius: var(--ui-r-pill); background: color-mix(in srgb, currentColor 42%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--rfed-page) 55%, transparent); }
+.wb-sb-track--y .wb-sb-thumb { top: 0; right: var(--wb-sb-edge); width: var(--wb-sb-thumb); transition: width var(--ui-fast) var(--ui-ease), background-color var(--ui-fast) var(--ui-ease); }
+.wb-sb-track--x .wb-sb-thumb { left: 0; bottom: var(--wb-sb-edge); height: var(--wb-sb-thumb); transition: height var(--ui-fast) var(--ui-ease), background-color var(--ui-fast) var(--ui-ease); }
+.wb-sb:is(.wb-sb--hot, .wb-sb--held) .wb-sb-track { background: color-mix(in srgb, currentColor 6%, transparent); }
+.wb-sb:is(.wb-sb--hot, .wb-sb--held) .wb-sb-thumb { background-color: color-mix(in srgb, currentColor 56%, transparent); }
+.wb-sb:is(.wb-sb--hot, .wb-sb--held) .wb-sb-track--y .wb-sb-thumb { width: var(--wb-sb-thumb-hot); }
+.wb-sb:is(.wb-sb--hot, .wb-sb--held) .wb-sb-track--x .wb-sb-thumb { height: var(--wb-sb-thumb-hot); }
+@media (prefers-reduced-motion: reduce) { .wb-sb, .wb-sb.wb-sb--on, .wb-sb-track, .wb-sb-track--y .wb-sb-thumb, .wb-sb-track--x .wb-sb-thumb { transition: none; } }
+@media (forced-colors: active) { .wb-sb-thumb { background: CanvasText; box-shadow: none; } }
 .wb-panel--hidden { content-visibility: hidden; visibility: hidden; }
 .wb-view { position: absolute; inset: 0; overflow: auto; padding-top: var(--wb-inset-top); scroll-padding-top: var(--wb-inset-top); }
-.wb-home { position: absolute; inset: 0; overflow: auto; padding-top: var(--wb-top, 0px); }
+.wb-home { position: absolute; inset: 0; overflow: auto; padding-top: var(--wb-top, 0px); scroll-padding-top: var(--wb-top, 0px); }
 .wb-missing { padding: var(--ui-6); color: var(--rfed-ink-3); }
 
 /* the drop zone preview while a tab is dragged over a body */

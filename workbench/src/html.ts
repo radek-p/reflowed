@@ -1,6 +1,6 @@
 // htm bound to Preact, and the styles: the base colours before a theme (themes.ts), the kit's CSS and ours. The editor's
 // kit core still supplies the metrics (--ui-text-*, --ui-r-*, the motion and the shadows: not theme tokens). With the
-// styles, the platform's kind of scrollbars (scrollbars.ts), which css.ts styles only where they are classic.
+// styles, the platform's kind of scrollbars (scrollbars.ts): css.ts styles classic ones, elsewhere the workbench draws its own (overlay-scrollbar.ts).
 import { h, render } from 'preact';
 import htm from 'htm';
 import '../../app/src/design/ui/core.js';

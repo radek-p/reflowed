@@ -17,6 +17,7 @@ tabs, each tab a registered view (`view` + `state`), the whole layout plain JSON
 | `src/drag.ts` | the pointer session, the ghost (top layer), content drags (spring-loading, auto-scroll) |
 | `src/keys.ts` | the keymap (the table below), chords, the browser-reserved and AltGr lists |
 | `src/sides.ts` | the sidebars: tool-window panels left and right |
+| `src/scrollbars.ts`, `src/overlay-scrollbar.ts` | the platform's kind of scrollbars (classic: styled by `css.ts`, their track below the glass header); where they are overlay ones (macOS, iOS) and in Firefox, the workbench's own overlay bar over every view, the home panel and a host's `[data-wb-scroll]` scroller: its track inside the scroller's scroll-padding (below the header), shown while scrolling or hovered, draggable, presentational; scrolling stays native |
 | `src/viewport.ts` | `ownViewport()`: the page never scrolls (Safari). A host puts `VIEWPORT_CSS` in its page's head as `<style id="wb-viewport-css">` (clipped from the first frame, before any script; the demo's server fills it: `scripts/bundle.ts` `demoHtml()`); `ownViewport()` then adopts it and only adds the guard |
 | `src/shortcuts.ts` | the Keyboard shortcuts view (a built-in view type, generated from the keymap) |
 | `src/crumbs.ts` | the breadcrumbs bar of document tabs |
@@ -25,11 +26,11 @@ tabs, each tab a registered view (`view` + `state`), the whole layout plain JSON
 | `src/css.ts`, `src/html.ts` | CSS on the kit's tokens, htm + styles |
 | `demo/` | the demo page and its fake views (home, document, list, note) |
 | `scripts/` | `serve.ts` (the demo, bundled per request), `bundle.ts`, `shots.ts`, `scenario.ts`, `hybrid.ts`, `round4.ts` (screenshots for review), `blur-bench.ts` (glass stability), `keys-table.ts` (the table below) |
-| `tests/` | `model.test.ts`, `keys.test.ts`, `arch.test.ts` (one TabStrip for both hosts) (node:test), `e2e.ts` (Playwright on the demo, its areas in `tests/e2e/`: store, keys, layout, sides, tabs, bar, chips, looks, status; `--area`, `--browser chromium\|firefox\|webkit`) |
+| `tests/` | `model.test.ts`, `keys.test.ts`, `arch.test.ts` (one TabStrip for both hosts), `overlay-scrollbar.test.ts` (the own bar's thumb) (node:test), `e2e.ts` (Playwright on the demo, its areas in `tests/e2e/`: store, keys, layout, sides, tabs, bar, chips, looks, status; `--area`, `--browser chromium\|firefox\|webkit`) |
 
 ```
 node workbench/scripts/serve.ts 8159      # the demo: http://localhost:8159/
-node --test workbench/tests/model.test.ts workbench/tests/keys.test.ts workbench/tests/arch.test.ts workbench/tests/viewport.test.ts workbench/tests/themes.test.ts   # units + guards
+node --test workbench/tests/model.test.ts workbench/tests/keys.test.ts workbench/tests/arch.test.ts workbench/tests/viewport.test.ts workbench/tests/themes.test.ts workbench/tests/overlay-scrollbar.test.ts   # units + guards
 node workbench/scripts/smoke.ts             # every demo page loads, no page error (before each commit)
 node workbench/tests/e2e.ts [--area keys,bar] [--only <regex>] # the browser suite (by area: tests/e2e/<area>.ts)
 node workbench/scripts/shots.ts              # screenshots → test-results/workbench/

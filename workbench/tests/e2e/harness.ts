@@ -108,6 +108,22 @@ export const events = (page: any) => page.evaluate(() => {
 });
 export const evs = (page: any, k: string) => page.evaluate((k: string) => (window as any).__ev.filter((e: any) => e.k === k), k);
 
+/** The bars are the workbench's own here (overlay-scrollbar.ts): overlay ones measured (headless WebKit), or Firefox. */
+export const ownBars = (page: any): Promise<boolean> => page.evaluate(() => document.documentElement.dataset.wbScrollbars === 'overlay' || !CSS.supports('selector(::-webkit-scrollbar)'));
+/** Bring up the own bar of the scroller `sel` as the user does (a wheel over it) and read its vertical track's box, the
+ *  scroller's, and the room a native bar takes from the scroller (0: hidden). */
+export async function ownBar(page: any, sel: string) {
+  const b = await page.locator(sel).first().boundingBox();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await page.mouse.wheel(0, 3);
+  await page.waitForFunction((s: string) => document.querySelector(s)?.nextElementSibling?.matches('.wb-sb.wb-sb--on'), sel, { timeout: 5000 }).catch(async () => {
+    throw new Error(`no bar came up on ${sel}: ${JSON.stringify(await page.evaluate((s: string) => { const v = document.querySelector(s) as HTMLElement; return { cls: v.className, top: v.scrollTop, h: v.scrollHeight - v.clientHeight, next: v.nextElementSibling?.className ?? null }; }, sel))}`);
+  });
+  return page.evaluate((s: string) => {
+    const sc = document.querySelector(s) as HTMLElement, t = sc.nextElementSibling!.querySelector('.wb-sb-track--y')!.getBoundingClientRect(), r = sc.getBoundingClientRect();
+    return { top: t.top, bottom: t.bottom, left: t.left, right: t.right, sc: { top: r.top, bottom: r.bottom, right: r.right }, native: sc.offsetWidth - sc.clientWidth };
+  }, sel);
+}
 export const settled = async (page: any) => { await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))); return page.waitForFunction(() => !document.querySelector('.wb-moving, .wb-side--sliding') && document.getAnimations().filter((a: any) => !(a instanceof CSSTransition)).length === 0); };
 export const narrowLook = (page: any) => page.evaluate(() => [...document.querySelectorAll('[data-tab]')].filter((t) => t.getBoundingClientRect().width > 0).map((t) => {
   const lab = t.querySelector('.wb-tab-label') as HTMLElement, box = (t.querySelector('.wb-tab-text, .wb-tab-line') ?? lab) as HTMLElement;
