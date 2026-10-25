@@ -8,8 +8,10 @@
 // themselves. When the label sits inside a long block (an equation in a
 // proof), the body is scrolled so the label's anchor is in view.
 //
-//   const card = createCard({ numberingState, sourceOf(blockId), renderOf(blockId), onGo(label), onAction(id, unit), onClose(unit) })
+//   const card = createCard({ numberingState, sourceOf(blockId), renderOf(blockId), onGo(label), onAction(id, unit), onClose(unit), doc, viewer })
 //     renderOf: the block's typeset element in the card's editor (its container's), the copy's source
+//     doc: the document the card is drawn in (default: this page's); viewer(): the viewer's host that mounts the copy
+//     (default: this page's window.reflowtex.host)
 //   card.open(unit, anchorRects, { targets: [{ label, info, blockId }], focus, editable })    a reference
 //   card.openCite(unit, anchorRects, { entries, focus, hasList, editable })                  a citation
 //   card.openLink(unit, anchorRects, { href, focus, editable })                              a link: its address, Open link
@@ -70,9 +72,9 @@ function Card({ v, onGo, onAction, bodyRef }) {
   </div>`;
 }
 
-export function createCard({ numberingState, sourceOf, renderOf, onGo, onAction, onClose }) {
-  ensureStyles();
-  const host = document.createElement('div');
+export function createCard({ numberingState, sourceOf, renderOf, onGo, onAction, onClose, doc = document, viewer = () => window.reflowtex?.host }) {
+  ensureStyles(doc);
+  const host = doc.createElement('div');
   host.className = 'rn-card-host';
   host.style.display = 'contents';
   const bodyRef = { current: null };
@@ -89,7 +91,7 @@ export function createCard({ numberingState, sourceOf, renderOf, onGo, onAction,
   function begin(u) {
     unit = u;
     unmount();
-    if (!host.isConnected) document.body.append(host);
+    if (!host.isConnected) doc.body.append(host);
     if (!layer) layer = pushLayer({ el, kind: 'card', anchor, toggle: true, onDismiss: () => { was = unit; close(); }, returnFocus: () => was?.els?.[0] ?? null });
   }
 
@@ -134,7 +136,7 @@ export function createCard({ numberingState, sourceOf, renderOf, onGo, onAction,
   function openLink(u, rect, { href, focus = false, editable = true }) {
     ++token;
     begin(u);
-    const ok = !!openable(href, document.baseURI);
+    const ok = !!openable(href, doc.baseURI);
     v = { open: true, kind: 'link', title: linkTitle(href), keys: '', go: [], source: null, entries: null, address: href,
       empty: ok ? null : 'The editor does not open this kind of address.',
       actions: ok ? [{ id: 'open-link', text: 'Open link' }] : [],
@@ -151,19 +153,20 @@ export function createCard({ numberingState, sourceOf, renderOf, onGo, onAction,
 
   async function fill(tg, t) {
     const src = renderOf(tg.blockId);
-    if (!src?.dataset.nodelistB64 || !window.reflowtex?.host) {
+    const viewerHost = viewer();
+    if (!src?.dataset.nodelistB64 || !viewerHost) {
       v = { ...v, source: sourceOf?.(tg.blockId) ?? '' };   // from its host, not the test surface
       draw();
       return;
     }
     // the viewer's island: a copy of the block's typeset result, mounted by the viewer
-    const copy = document.createElement('div');
+    const copy = doc.createElement('div');
     copy.className = 'latex-block';
     copy.dataset.nodelistB64 = src.dataset.nodelistB64;
     if (src.dataset.colorMap) copy.dataset.colorMap = src.dataset.colorMap;
     body().append(copy);
     let block = null;
-    try { block = await window.reflowtex.host.mount(copy); } catch (e) { console.warn('refnav card:', e.message); }
+    try { block = await viewerHost.mount(copy); } catch (e) { console.warn('refnav card:', e.message); }
     if (t !== token) { try { block?.destroy(); } catch { /* */ } copy.remove(); return; }
     mounted = { block };
     if (block) copyNumbers(block, tg.blockId);

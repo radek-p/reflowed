@@ -1,4 +1,4 @@
-// the CSS of reference navigation, injected once (no stylesheet for the
+// the CSS of reference navigation, injected once per document (no stylesheet for the
 // builds to carry). On the kit's tokens.
 const CSS = String.raw`
 .latex-block svg .rn-ref { cursor: pointer; }
@@ -67,12 +67,10 @@ html.dark .latex-block svg rect.latex-mark[data-mark~="rn-hot"] { fill: color-mi
 }
 `;
 
-let done = false;
-export function installStyle() {
-  if (done) return;
-  done = true;
-  const s = document.createElement('style');
+export function installStyle(doc = document) {
+  if (doc.getElementById('rtx-refnav-style')) return;
+  const s = doc.createElement('style');
   s.id = 'rtx-refnav-style';
   s.textContent = CSS;
-  document.head.append(s);
+  doc.head.append(s);
 }

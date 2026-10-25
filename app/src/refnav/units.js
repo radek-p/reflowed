@@ -173,15 +173,14 @@ function neutralise(g) {
 // adding one repaints the block's drawn lines (the glyph elements are kept).
 export const HOT_MARK = 'rn-hot';
 let hotMark = null;
-/** Mark the unit (null: none); returns the mark or null (a viewer without live marks). */
-export function markUnit(u) {
+/** Mark the unit (null: none) with the viewer's host; returns the mark or null (a viewer without live marks). */
+export function markUnit(u, host = window.reflowtex?.host) {
   try { if (hotMark?.live) hotMark.remove(); } catch { /* gone */ }
   hotMark = null;
-  const host = window.reflowtex?.host;
   if (!u || !host?.addMark || !host?.rangesOf) return null;
   const first = u.els[0], last = u.els[u.els.length - 1];
   if (!first?.isConnected || !last?.isConnected) return null;
-  const r = document.createRange();
+  const r = first.ownerDocument.createRange();
   r.setStart(first.firstChild ?? first, 0);
   r.setEnd(last.firstChild ?? last, last.firstChild ? (last.firstChild.textContent ?? '').length : last.childNodes.length);
   const ranges = host.rangesOf(r);
