@@ -19,7 +19,11 @@ export const FAR = 1.5;                 // farther than this many pane heights: 
 const GLIDE_MS = 260;
 
 export const scrollOf = (P) => (P.scroller ? P.scroller.scrollTop : scrollY);
-export const paneHeight = (P) => (P.scroller ? P.scroller.clientHeight : Math.max(200, innerHeight - (P.top?.() ?? 0)));
+// the height the reader sees: a pane's top is under the workbench's glass strip (its scroll-padding-top, two lines with two
+// groups), so a step of the whole clientHeight scrolled lines past that were never read, and a far jump came to more
+// than one seen height before its target
+export const paneHeight = (P) => (P.scroller ? P.scroller.clientHeight - (parseFloat(getComputedStyle(P.scroller).scrollPaddingTop) || 0)
+  : Math.max(200, innerHeight - (P.top?.() ?? 0)));
 const maxScroll = (P) => (P.scroller ? P.scroller.scrollHeight - P.scroller.clientHeight : document.documentElement.scrollHeight - innerHeight);
 const setScroll = (P, y) => {
   const top = Math.max(0, Math.min(y, maxScroll(P)));

@@ -3,10 +3,11 @@
 //
 //   node tests/test-far.ts dev [http://localhost:8150/] | file [dist/….html]
 //
-// For the long test document (the intro repeated) and the intro, in the window and in pane B of the split view:
+// For the long test document (the intro repeated) and the intro, in pane A alone and in pane B of the split (a pane's
+// height: what is seen of it, below the glass strip):
 //   - the outline's jump from the top to the last section: the blocks that came into view on the way are at most two
 //     pane heights' worth (the target's neighbourhood), no long task (> 50 ms), the heading lands under the pane's top
-//     as before; the last stretch moves towards the target (one way); Back returns to the top the same way
+//     (or as high as the pane's end lets it); the last stretch moves towards the target (one way); Back returns to the top the same way
 //   - End and Home, five times each, with the focus on the page: the same bound, the bottom / the top reached
 //   - one PageDown: one step, of which at most a third of the pane animates (the rest jumps at once)
 //   - PageDown held (five presses in a row): one step each, no long task
@@ -121,10 +122,11 @@ for (const doc of docsHere(['long', 'intro'])) {
     // the outline's jump to the last section, from the top
     const last = await page.evaluate(() => { const o = (window as any).editorAPI.outline().filter((x: any) => !x.special && x.level === 1); return o[o.length - 1]?.id; });
     const r = await measure(sel, () => onEvent('nav:jumped', () => page.evaluate(([i, pp]: string[]) => (window as any).editorAPI.nav().goTo(i, { pane: pp }), [last, P[p]])));
-    const land = await page.evaluate(([s, i]: string[]) => { const sc = document.querySelector(s) as HTMLElement; const el = (sc ?? document).querySelector(`.blk[data-id="${i}"]`)!; const top = sc.getBoundingClientRect().top + parseFloat(getComputedStyle(sc).scrollPaddingTop || '0'); return el.getBoundingClientRect().top - top; }, [sel, last]);
+    // (the last section of a short ending cannot come to the top: the pane's end is as far as it scrolls, the heading in view there)
+    const { land, atEnd, seenH } = await page.evaluate(([s, i]: string[]) => { const sc = document.querySelector(s) as HTMLElement; const el = sc.querySelector(`.blk[data-id="${i}"]`)!; const pad = parseFloat(getComputedStyle(sc).scrollPaddingTop || '0'); const top = sc.getBoundingClientRect().top + pad; return { land: el.getBoundingClientRect().top - top, atEnd: sc.scrollTop >= sc.scrollHeight - sc.clientHeight - 1, seenH: sc.clientHeight - pad }; }, [sel, last]);
     check(`${tag}: a jump to the last section passes no blocks on the way (${Math.round(r.seenPx)} px of blocks seen, pane ${Math.round(r.paneH)} px; ${r.paints} paints)`, bound(r), { seen: r.seen, seenPx: Math.round(r.seenPx) });
     gate(check, `${tag}: … no long task on the way (a first arrival: at most one, ≤ ${L(100)})`, firstArrivalOk(r.long), r.long.map(Math.round));
-    check(`${tag}: … the heading lands under the pane's top (0–24 px)`, land >= -1 && land <= 24, { land });
+    check(`${tag}: … the heading lands under the pane's top (0–24 px), or as high as the pane's end lets it, in view`, land >= -1 && (land <= 24 || (atEnd && land < seenH - 24)), { land, atEnd, seenH });
     const anim = r.ys.slice(r.ys.findIndex((y: number, i: number) => i > 0 && Math.abs(y - r.ys[i - 1]) > 200) + 1);
     check(`${tag}: … the last stretch moves towards the target, one way`, oneWay(anim) <= 1 && anim.length > 3, { back: oneWay(anim), frames: anim.length });
     const b = await measure(sel, () => onEvent('nav:back', () => page.evaluate(() => (window as any).editorAPI.nav().back())));
