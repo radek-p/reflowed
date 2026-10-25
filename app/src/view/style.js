@@ -70,6 +70,10 @@ html.dark .blk-render .latex-block image { opacity: 0.88; }
    column (on <body>, view/index.js) or of a pane's height (--pane-h, panes/pane.ts: a strip switching to two lines)
    restyles the blocks' boxes, not their glyphs (4,300 of the 5,000 elements of a 30-block article) */
 svg { --col: initial; --rtx-free: initial; --rtx-view-zoom: initial; --pane-h: initial; }
+/* the pane's height is read by the editing block's source only: it stops at every other block (their boxes, controls
+   and icons were restyled at each switch of the pane's strip between one line and two: 2 x 15 ms mid-drag of the split
+   in a 236-block pane) */
+.blk:not(.editing) { --pane-h: initial; }
 html.rtx-width-anim .rtx-editor:not(.rtx-wb) [data-part="page"] { transition: max-width 0.22s cubic-bezier(0.2, 0, 0, 1); }
 html[data-no-handles] .gutter { display: none; }
 

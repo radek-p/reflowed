@@ -83,7 +83,7 @@ export function createWidths({ panes, relayout, laidAt = null, state = null, red
   let shown = 1;                     // the blocks in view at the last survey: an idle slice re-breaks no more than that
   const st = { rebroken: 0, lazy: 0, ghosts: 0, frames: [], slices: [], pins: [] };
   const cost = new WeakMap();        // viewer element -> its last re-break, ms (a drag leaves the heavy ones to its end)
-  let nextH = 0;                     // the frame after a slice: one slice a frame at most
+  let nextH = 0;                     // the frame after a slice or a settle's last step: one batch of re-breaks a frame
   const ios = new Map();             // pane -> IntersectionObserver (a viewport ahead of its box)
   const keep = (a, n) => { if (a.length > n) a.splice(0, a.length - n); };
   const tall = new Map();            // render -> pane: re-broken out of view, its old height kept until the last slice
@@ -313,8 +313,8 @@ export function createWidths({ panes, relayout, laidAt = null, state = null, red
         if (vis.length && !disposed) { requestAnimationFrame(step); return; }
         held--;
         countShown();
-        schedule();
-        res();
+        nextFrameSchedule();                  // the lazy slices from the next frame on (in this frame's idle time, a slice
+        res();                                // doubled the re-breaks of the frame that re-broke the blocks in view)
       };
       step();
     });
@@ -353,8 +353,9 @@ export function createWidths({ panes, relayout, laidAt = null, state = null, red
     for (const p of touched) p.keeper?.sync?.();
     st.slices.push({ n, ms: Math.round(now() - t0) });
     keep(st.slices, 400);
-    nextH = requestAnimationFrame(() => { nextH = 0; schedule(); });
+    nextFrameSchedule();
   }
+  function nextFrameSchedule() { if (!nextH && !disposed) nextH = requestAnimationFrame(() => { nextH = 0; schedule(); }); }
   // nothing pinned or held tall any more: the observers go too (each held its pane and the blocks it watched: a pane
   // closed after its change kept its detached blocks alive until the next pin); the next change makes them again
   function done() {

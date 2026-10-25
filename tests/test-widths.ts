@@ -5,16 +5,21 @@
 //     a pane hidden (split closed from pane B), the sidebar in one pane at a narrow window (off, on);
 //   - each: no long task (> 50 ms) from the action until its work is done; per frame, the blocks the viewer laid out
 //     again (not new views) at most the blocks in view; the reading point (the first block starting below each pane's
-//     top) within 1 px of where it was; afterwards nothing pinned, no old lines left, every block at a fresh layout's
-//     height for its width (laid out again from scratch: equal) and laid out at its element's width;
-//   - the narrowing sidebar: the text clipped with a soft edge during the motion; the old lines cross-fade (ghosts);
+//     top) within 1 px of where it was, measured from the pane's visible top (below its tab strip); afterwards nothing
+//     pinned, no old lines left, every block at a fresh layout's height for its width (laid out again from scratch:
+//     equal) and laid out at its element's width;
+//   - a motion of the workbench (the sidebar sliding, the split dragged: resizestart .. resizeend, the hosts locked at
+//     their widths): no block laid out again during it, the reading point within 1 px in each of its frames; then each
+//     block re-broken at most once, with no cross-fade;
+//   - a narrower column picked in View: the text clipped with a soft edge during the motion; the old lines cross-fade
+//     (ghosts);
 //   - the end of a side column's slide (one pane, a narrow window): no long task from the workbench's resizeend until
 //     its work is done (the column applied, then the re-break, in tasks of their own), and no column variables on
 //     <body> (they restyled the page outside the panes at every slide's end);
 //   - a column width picked in View (its eased motion), narrower and back;
 //   - reduced motion: no motion, no cross-fade, each block re-broken at most once.
 // Waits on the governor's and the viewer's idle promises and frames, never on fixed times. Long tasks are counted in the
-// main thread's CPU time (tests/qa/lib/work.ts); --timing-strict counts them by the clock, and gates the drag's frame budget.
+// main thread's CPU time (tests/qa/lib/work.ts); --timing-strict counts them by the clock.
 //
 //   node tests/test-widths.ts [http://localhost:8153/] [--only <regex>] [--docs long,intro]
 // Results: test-results/widths/results.json.
@@ -25,7 +30,7 @@ import { docsHere, seedQuery } from './qa/lib/samples.ts';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resultsDir } from './qa/lib/results.ts';
-import { traceWork, timed, TIMING_STRICT, calibrate, calibrateAfter, budget, lim, gate } from './qa/lib/work.ts';
+import { traceWork, TIMING_STRICT, calibrate, calibrateAfter, budget, lim, gate } from './qa/lib/work.ts';
 
 const HERE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(resultsDir(HERE), 'widths');
@@ -100,12 +105,22 @@ const RECORDER = () => {
         lw.set(el, now); cur.add(el); if (e.detail?.quick) quick++;
       };
       document.addEventListener('reflowtex:layout', on, true);
+      // a motion of the workbench (resizestart .. resizeend): the blocks laid out again meanwhile, its frames, and the
+      // reading points' most drift in those frames (each pane's, against its box)
+      const a0 = w.__wt.anchors();
+      const mo = { started: 0, ended: 0, layouts: 0, frames: 0, drift: 0 };
+      const wb = w.editorAPI.workbench();
+      const offs = [wb.on('resizestart', () => { mo.started++; }), wb.on('resizeend', () => { mo.ended++; })];
       let over = 0, ghosts = 0, anims = 0, prev = Infinity;
       // the layouts counted here were made since the last frame's look, against the blocks in view then (a block
       // re-broken narrower grows: fewer are in view after)
       const f = () => {
         if (stop) return;
         const els = [...cur]; cur = new Set();
+        if (mo.started > mo.ended) {
+          mo.frames++; mo.layouts += els.length;
+          for (const [p, a] of Object.entries(a0) as [string, { id: string; y: number }][]) { const y = w.__wt.yOf(p, a.id); if (y != null) mo.drift = Math.max(mo.drift, Math.abs(y - a.y)); }
+        }
         let inView = 0;
         for (const el of document.querySelectorAll('.blk-render > .latex-block:not(.rtx-w-ghost)')) { const r = el.getBoundingClientRect(), b = boxOf(paneOf(el)); if (r.height > 0 && r.bottom > b.top && r.top < b.bottom) inView++; }
         out.push({ layouts: els.length, inView: Math.max(inView, prev === Infinity ? inView : prev) });
@@ -116,10 +131,11 @@ const RECORDER = () => {
         requestAnimationFrame(f);
       };
       requestAnimationFrame(f);
-      w.__wtStop = () => { stop = true; po.disconnect(); document.removeEventListener('reflowtex:layout', on, true); return { frames: out, long: lt, quick, over, ghosts, anims }; };
+      w.__wtStop = () => { stop = true; po.disconnect(); document.removeEventListener('reflowtex:layout', on, true); for (const off of offs) off(); return { frames: out, long: lt, quick, over, ghosts, anims, motion: { ...mo, drift: Math.round(mo.drift * 10) / 10 } }; };
     },
     stop: () => w.__wtStop(),
-    /** each pane's reading point: the first block in the flow that starts at or below the pane's top, and its y */
+    /** each pane's reading point: the first block in the flow that starts at or below the pane's top, and its y from
+     *  that top (the visible area's: a second tab strip, the split's, moves the pane's top down, not the text in it) */
     anchors() {
       const out: Record<string, { id: string; y: number }> = {};
       for (const p of panesNow()) {
@@ -127,7 +143,7 @@ const RECORDER = () => {
         for (const el of p.querySelector('.blocks')!.children as any) {
           if (el.offsetParent === null || getComputedStyle(el).position === 'absolute') continue;
           const r = el.getBoundingClientRect();
-          if (r.top >= b.top - 0.5) { out[p.dataset.pane ?? p.id] = { id: el.dataset.id, y: r.top }; break; }
+          if (r.top >= b.top - 0.5) { out[p.dataset.pane ?? p.id] = { id: el.dataset.id, y: r.top - b.top }; break; }
         }
       }
       return out;
@@ -135,7 +151,7 @@ const RECORDER = () => {
     yOf(pane: string, id: string) {
       const p = document.querySelector(`main.rtx-pane[data-pane="${pane}"]`);
       const el = p?.querySelector(`.blocks > .blk[data-id="${CSS.escape(id)}"]`);
-      return el ? el.getBoundingClientRect().top : null;
+      return el ? el.getBoundingClientRect().top - boxOf(p as HTMLElement).top : null;
     },
     /** after the change: nothing pinned, no old lines left; each block laid out at its element's width; its height
      *  that of a layout from scratch (the viewer's relayout) */
@@ -174,14 +190,14 @@ const sidebarBtn = (page: any) => page.evaluate(() => (window as any).editorAPI.
 /** one width change: recorded from the action until its work is done; the checks */
 // Long tasks: none over 50 ms, with two allowances:
 //   - switch: the task that switches the layout itself (split on, split off, a pane hidden): the browser restyles and
-//     lays out the panes at once; at most two tasks, ≤ 150 ms (split on: the switch, then pane B's shells in a task of
-//     their own, `split-tasks`);
+//     lays out the panes at once; at most two tasks, ≤ 150 ms (split on: pane B comes with its shells, its views
+//     later, `split-tasks`);
 //   - heavy: a block whose own re-break is over the budget (e.g. a large figure at 1600 px: 30–45 ms of the viewer's
 //     layout and paint, not divisible from here): its frame ≤ 100 ms, one per such block in view.
 const SWITCH_MS = 150, HEAVY_MS = 100;
 // the limits in CPU time are scaled by the host's factor (calibrate); the clock's, with --timing-strict, are not
 const LIM = (ms: number) => (TIMING_STRICT ? ms : budget(ms)), L = (ms: number) => (TIMING_STRICT ? `${ms} ms` : lim(ms));
-async function measure(page: any, tag: string, act: () => Promise<unknown>, { reduced = false, narrowing = false, anchorPanes = null as string[] | null, switching = false } = {}) {
+async function measure(page: any, tag: string, act: () => Promise<unknown>, { reduced = false, narrowing = false, locked = false, anchorPanes = null as string[] | null, switching = false } = {}) {
   await calibrate(page);                                       // the factor before the window (re-measured after 30 s)
   await settled(page); await idle(page); await frames(page, 3);
   const a0 = await page.evaluate(() => (window as any).__wt.anchors());
@@ -212,7 +228,12 @@ async function measure(page: any, tag: string, act: () => Promise<unknown>, { re
   const fin = await page.evaluate(() => (window as any).__wt.final());
   check(`${tag}: then every block at a fresh layout for its width (${fin.blocks} blocks), nothing pinned or left over`, fin.bad === 0 && fin.pinnedLeft === 0 && fin.ghostsLeft === 0, fin);
   if (reduced) check(`${tag} (reduced motion): no motion, no cross-fade, each block re-broken at most once`, r.ghosts === 0 && ws.ghosts === 0 && ws.rebroken <= (await page.evaluate(() => document.querySelectorAll('.blk-render > .latex-block').length)), { ghosts: ws.ghosts, anims: r.anims, rebroken: ws.rebroken });
-  else if (narrowing) check(`${tag}: the narrowing text clipped with a soft edge during the motion, then cross-faded (ghosts ${ws.ghosts})`, r.over > 0 && ws.ghosts > 0, { over: r.over, ghosts: ws.ghosts });
+  else if (locked) {
+    const blocks = await page.evaluate(() => document.querySelectorAll('.blk-render > .latex-block').length);
+    const m = r.motion;
+    check(`${tag}: the lines kept during the motion (${m.frames} frames: none laid out again, the reading point within 1 px in each, ${m.drift} px), then re-broken once at its end, no cross-fade`,
+      m.started > 0 && m.ended === m.started && m.frames > 0 && m.layouts === 0 && m.drift <= 1 && ws.ghosts === 0 && ws.rebroken <= blocks, { motion: m, ghosts: ws.ghosts, rebroken: ws.rebroken, blocks });
+  } else if (narrowing) check(`${tag}: the narrowing text clipped with a soft edge during the motion, then cross-faded (ghosts ${ws.ghosts})`, r.over > 0 && ws.ghosts > 0, { over: r.over, ghosts: ws.ghosts });
   return { r, ws, drift };
 }
 
@@ -257,24 +278,17 @@ for (const doc of DOCS) {
     await scrollMid(page); await frames(page, 3);
     await measure(page, `${doc}: split on`, () => splitOn(page), { narrowing: false, anchorPanes: [PA], switching: true });
     await scrollMid(page); await frames(page, 3);
-    await measure(page, `${doc}: sidebar off (split)`, () => sidebarBtn(page));
-    await measure(page, `${doc}: sidebar on (split)`, () => sidebarBtn(page), { narrowing: true });
+    await measure(page, `${doc}: sidebar off (split)`, () => sidebarBtn(page), { locked: true });
+    await measure(page, `${doc}: sidebar on (split)`, () => sidebarBtn(page), { locked: true });
     // the split dragged across its whole range, one pointer step a frame, and back to the middle
     // the workbench's splitter between the two groups
     const d = await page.evaluate(() => { const r = document.querySelector('.wb-groups .wb-sep')!.getBoundingClientRect(); const s = document.querySelector('.wb-groups')!.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 300, left: s.left, right: s.right }; });
-    const drag = await measure(page, `${doc}: the split dragged across its range`, async () => {
+    await measure(page, `${doc}: the split dragged across its range`, async () => {
       await page.mouse.move(d.x, d.y); await page.mouse.down();
       let x = d.x;
       for (const t of [d.left + 200, d.right - 200, d.x]) { const n = Math.ceil(Math.abs(t - x) / 16); for (let k = 1; k <= n; k++) { await page.mouse.move(x + ((t - x) * k) / n, d.y); await frames(page, 1); } x = t; }
       await page.mouse.up();
-    });
-    const range = await page.evaluate((b: string) => Math.round(document.querySelector(`main.rtx-pane[data-pane="${b}"]`)!.getBoundingClientRect().width), PB);
-    // the budget is 8 ms: a frame starts no block after it, so one block's layout may run past it
-    const dms = drag.ws.frames.filter((f: any) => !f.settle).map((f: any) => f.ms);
-    // the frames' re-break times are the governor's own clock (performance.now): reported, gating with --timing-strict;
-    // the work gate is that it spread the work over the frames (and measure's per-frame layouts ≤ the blocks in view)
-    timed(check, `${doc}: the drag re-broke within its frame budget (max ${Math.max(0, ...dms)} ms of re-breaks a frame; ${drag.ws.frames.filter((f: any) => f.left).length} frames left some for the next)`,
-      dms.length > 20, { frames: dms.length, width: range }, dms.length > 20 && dms.every((ms: number) => ms <= 33), { max: Math.max(0, ...dms), frames: dms.length });
+    }, { locked: true });
     await measure(page, `${doc}: split off (pane B closed)`, () => closePane(page, paneSel(PB)), { anchorPanes: [PA], switching: true });
     // a pane hidden: the split again, then pane A closed (pane B's place stays, in the pane that is left)
     await splitOn(page); await settled(page); await idle(page);
@@ -290,9 +304,9 @@ for (const doc of DOCS) {
     const { ctx, page } = await open(doc, { width: 1000 });
     await scrollMid(page); await frames(page, 3);
     const opened = await page.evaluate(() => !(window as any).editorAPI.workbench().sides.peek().left.collapsed);
-    if (opened) await measure(page, `${doc}: sidebar off (one pane, 1000 px)`, () => sidebarBtn(page));
-    await measure(page, `${doc}: sidebar on (one pane, 1000 px)`, () => sidebarBtn(page), { narrowing: true });
-    if (!opened) await measure(page, `${doc}: sidebar off (one pane, 1000 px)`, () => sidebarBtn(page));
+    if (opened) await measure(page, `${doc}: sidebar off (one pane, 1000 px)`, () => sidebarBtn(page), { locked: true });
+    await measure(page, `${doc}: sidebar on (one pane, 1000 px)`, () => sidebarBtn(page), { locked: true });
+    if (!opened) await measure(page, `${doc}: sidebar off (one pane, 1000 px)`, () => sidebarBtn(page), { locked: true });
     // the slide's end alone, both ways (at this width the sidebar changes the column: 'paper' fitted to the pane)
     const shownNow = () => page.evaluate(() => !(window as any).editorAPI.workbench().sides.peek().left.collapsed);
     for (let k = 0; k < 2; k++) await slideEnd(page, `${doc}: the end of the sidebar's slide, ${(await shownNow()) ? 'off' : 'on'} (one pane, 1000 px)`);
@@ -308,24 +322,28 @@ for (const doc of DOCS) {
     await measure(page, `${doc}: the column back (${w0})`, () => pick(w0));
     await ctx.close();
   }
-  // ── split on in two tasks: the switch, then pane B's shells in a task of their own (behind its fade-in) ──
+  // ── split on: pane B comes with its blocks' shells; its views come later, those in view first (pane A's views
+  //    made all at once in the switch's task were one 600 ms task for a 30-block document: panes/lazy-views.js) ──
   if (run(`${doc} split-tasks`)) {
     const { ctx, page } = await open(doc);
     await scrollMid(page); await frames(page, 3);
     const r = await page.evaluate(async () => {
-      const panes0 = new Set([...document.querySelectorAll('main.rtx-pane')]);
-      const paneB = () => [...document.querySelectorAll('main.rtx-pane')].find((m) => !panes0.has(m)) ?? null;
-      const n = () => paneB()?.querySelectorAll('.blocks > .blk').length ?? 0;
+      const panes0 = [...document.querySelectorAll('main.rtx-pane')];
+      const paneB = () => [...document.querySelectorAll('main.rtx-pane')].find((m) => !panes0.includes(m)) ?? null;
+      const count = (p: Element | null) => ({ shells: p?.querySelectorAll('.blocks > .blk').length ?? 0, views: p?.querySelectorAll('.blk-render > .latex-block').length ?? 0 });
+      // pane A's blocks in view: the views pane B makes first
+      const A = panes0[0] as HTMLElement, box = A.getBoundingClientRect();
+      const seen = [...A.querySelectorAll('.blocks > .blk')].filter((el) => { const q = el.getBoundingClientRect(); return q.height > 0 && q.bottom > box.top && q.top < box.bottom; }).length;
+      const a0 = count(A);
       (window as any).editorAPI.workbench().run('splitRight');
-      const inClick = n(), shown = !!paneB();
       await new Promise((res) => requestAnimationFrame(() => res(null)));
-      const firstFrame = n();
+      const first = count(paneB());
       const a = (window as any).editorAPI;
       for (let k = 0; k < 3; k++) { await a.widths().idle(); await a.lazyViews().idle(); }
-      return { inClick, paneB: shown, firstFrame, after: n(), blocks: document.querySelectorAll('[data-part="page"] .blocks > .blk').length };
+      return { blocks: a0.shells, views: a0.views, seen, first, after: count(paneB()) };
     });
-    check(`${doc}: split on: pane B shown in the switch's task, its shells made in a later task (${r.inClick} in the click, ${r.firstFrame} at the first frame, ${r.after} after)`,
-      r.paneB && r.inClick === 0 && r.firstFrame === 0 && r.after === r.blocks && r.after > 20, r);
+    check(`${doc}: split on: pane B with its ${r.first.shells} shells at the first frame, ${r.first.views} views (≤ ${r.seen} in view), then all ${r.after.views}`,
+      r.blocks > 20 && r.first.shells === r.blocks && r.first.views <= r.seen && r.after.shells === r.blocks && r.after.views === r.views, r);
     await settled(page);
     const fin = await page.evaluate(() => (window as any).__wt.final());
     check(`${doc}: … then every block of both panes at a fresh layout (${fin.blocks})`, fin.bad === 0 && fin.pinnedLeft === 0 && fin.ghostsLeft === 0, fin);
