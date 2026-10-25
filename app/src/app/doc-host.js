@@ -5,9 +5,11 @@
 //
 //   const h = docHost(editor, pane)     editor: createDocEditor's result; pane: the pane id acted in (null: its focused)
 //   h.doc() · h.blocks() · h.block(id) · h.preamble() · h.refsState() · h.numbering() · h.nav() · h.backendId()
+//   h.readOnly()                        the document cannot be edited here (app/read-only.js)
 //   h.edit(id, caret?)                  the block's editor opened in that pane (command block.edit)
 //   h.setSource(id, source)             one undo step (command block.setSource)
 //   h.recompileAll()                    every block typeset again (command doc.recompileAll)
+import { isReadOnly } from './read-only.js';
 
 /** @param {any} editor @param {string | null} [pane] */
 export function docHost(editor, pane = null) {
@@ -24,6 +26,7 @@ export function docHost(editor, pane = null) {
     numbering: () => editor.session.refs.numbering?.() ?? null,
     nav: () => editor.nav ?? null,
     backendId: () => editor.backendId?.() ?? null,
+    readOnly: () => isReadOnly(doc()),
     /** @param {string} id @param {number | null} [caret] */
     edit: (id, caret = null) => editor.run('block.edit', { id, caret, pane }),
     /** @param {string} id @param {string} source */

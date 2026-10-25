@@ -1,5 +1,5 @@
 // The gallery: the editor's own widgets apart from a document, from their real components with fixture data —
-// note chips (every kind) and the note popover, the find bar (every count state), the citation and reference cards,
+// note chips (every kind) and the note popover, the find bar (every count state), the citation, reference and link cards,
 // a block's error rows and the live error note (the code popover's chrome) — and the sheets' content (Document
 // settings in each tab, the title form: its conversion offer and the form) in a pane container instead of the modal
 // Sheet (a view's content is apart from its container: design/ui/views.ts FrameContext).
@@ -13,6 +13,7 @@ import { authorColour } from '../notes/colours.js';
 import { installStyle as installNoteStyle } from '../notes/style.js';
 import { mountFindBar } from '../chrome/find-bar.js';
 import { CardContent, cardTitle } from '../refnav/card.js';
+import { linkTitle } from '../refnav/rule.ts';
 import { installStyle as installRefNavStyle } from '../refnav/style.js';
 import { ErrorRows, LiveNote } from '../edit/panel.js';
 import { SettingsPanel } from '../settings/sheet.js';
@@ -105,7 +106,7 @@ const CITE_ENTRIES: Entry[] = [
   { key: 'MO25', entry: { label: 'MO25', authors: ['Jan Doe', 'A. Author'], title: 'Morphisms, once more (a made-up reference)', venue: 'arXiv', year: '2025', fields: { url: 'https://arxiv.org/abs/2401.00001' } } },
   { key: 'Arr09', entry: null },
 ];
-interface CardView { open: boolean; kind: 'ref' | 'cite'; title: string; keys: string; go: { label: string; text: string }[]; actions: { id: string; text: string }[]; entries: Entry[] | null; source: string | null; empty: string | null; hint: string }
+interface CardView { open: boolean; kind: 'ref' | 'cite' | 'link'; title: string; keys: string; go: { label: string; text: string }[]; actions: { id: string; text: string }[]; entries: Entry[] | null; source: string | null; address?: string | null; empty: string | null; hint: string }
 const CARDS: { label: string; v: CardView }[] = [
   { label: 'a citation: its entries, one not in the bibliography', v: { open: true, kind: 'cite', title: 'Citation [Obj23, MO25, Arr09]', keys: '', go: [], source: null, empty: null, entries: CITE_ENTRIES,
     actions: [{ id: 'show-refs', text: 'Show in References' }, { id: 'goto-list', text: 'Go to the reference list' }], hint: '⌘-click: the reference list · click to edit' } },
@@ -114,6 +115,8 @@ const CARDS: { label: string; v: CardView }[] = [
     source: '\\begin{theorem}\\label{thm:main}\nFor a locally small category $\\mathcal{C}$, the Yoneda embedding\nof $\\mathcal{C}$ into its presheaves is full and faithful.\n\\end{theorem}' } },
   { label: 'an undefined reference', v: { open: true, kind: 'ref', title: cardTitle(null), keys: 'lem:gone', entries: null, actions: [], go: [], source: null,
     empty: 'No \\label{lem:gone} in the document.', hint: 'Click to edit the reference' } },
+  { label: 'a link (\\url, \\href): its address', v: { open: true, kind: 'link', title: linkTitle('https://example.org/notes/yoneda'), keys: '', entries: null, go: [], source: null,
+    address: 'https://example.org/notes/yoneda', actions: [{ id: 'open-link', text: 'Open link' }], empty: null, hint: '⌘-click to open · click to edit' } },
 ];
 function RefCard({ v }: { v: CardView }) {
   return html`<div class="rn-card gal-static gal-card" role="dialog" aria-label=${v.title} data-kind=${v.kind}>
@@ -132,7 +135,7 @@ export function WidgetsSection({ g }: { g: Gallery }) {
     <${Group} title="The find bar" g="find" note="chrome/find-bar.js: its count states and options (Match case, Whole words, Regular expression).">
       <div class="gal-stack">${FINDS.map((s) => html`<${Cell} label=${s.label} wide><${FindBar} s=${s} /><//>`)}</div>
     <//>
-    <${Group} title="The reference card" g="card" note="refnav/card.js: what a hover or the keyboard opens on a reference or a citation.">
+    <${Group} title="The reference card" g="card" note="refnav/card.js: what a hover or the keyboard opens on a reference, a citation or a link.">
       <div class="gal-cells gal-cells--top">${CARDS.map((c) => html`<${Cell} label=${c.label}><${RefCard} v=${c.v} /><//>`)}</div>
     <//>
     <${Group} title="A block's errors" g="errors" note="edit/panel.js: the error rows under a block, and the live note in the code popover (the preview shows the last version that compiled).">

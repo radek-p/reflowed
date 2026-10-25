@@ -1,4 +1,4 @@
-// the preview card of a reference (Preact on the kit since the migration).
+// the preview card of a unit (index.js: a reference, a citation, a link; Preact on the kit).
 //
 // Shows what the reference points at by mounting the target block's own
 // typeset result again (its nodelist, as the app mounted it: no compile) in
@@ -8,19 +8,25 @@
 // themselves. When the label sits inside a long block (an equation in a
 // proof), the body is scrolled so the label's anchor is in view.
 //
-//   const card = createCard({ numberingState, sourceOf(blockId), renderOf(blockId), onGo(label), onClose(unit) })
+//   const card = createCard({ numberingState, sourceOf(blockId), renderOf(blockId), onGo(label), onAction(id, unit), onClose(unit) })
 //     renderOf: the block's typeset element in the card's editor (its container's), the copy's source
-//   card.open(unit, anchorRects, { targets: [{ label, info, blockId }], focus })
+//   card.open(unit, anchorRects, { targets: [{ label, info, blockId }], focus, editable })    a reference
+//   card.openCite(unit, anchorRects, { entries, focus, hasList, editable })                  a citation
+//   card.openLink(unit, anchorRects, { href, focus, editable })                              a link: its address, Open link
 //   card.close(); card.el; card.isOpen(); card.unit
+//     editable: a click on the unit edits (the hint says so; a read-only document's card leaves it out)
+//     actions: onAction(id, unit) with 'show-refs', 'goto-list' (a citation), 'open-link' (a link)
 // The card is a Preact component drawn synchronously (it is measured to be placed); the typeset copy in its
-// body is the viewer's island (host.mount), as in the document. Hooks kept: #rn-card.rn-card, .rn-title,
-// .rn-key, .rn-body, .rn-go[data-label], .rn-hint, .rn-empty, .rn-source.
+// body is the viewer's island (host.mount), as in the document. Hooks kept: #rn-card.rn-card[data-kind], .rn-title,
+// .rn-key, .rn-body, .rn-go[data-label], .rn-act.rn-<action id>, .rn-hint, .rn-empty, .rn-source, .rn-address.
 // While open the card is a layer of the kit's one overlay layer (design/ui/layers.js): its place in the
-// stacking order, Escape (the focus back on the reference when it was in the card) and a press outside close it.
+// stacking order, Escape (the focus back on the unit when it was in the card) and a press outside close it; a
+// press on its own unit is not outside (the click on the unit decides: index.js).
 import { html, render, ensureStyles, Button } from '../design/ui/index.js';
 import { pushLayer } from '../design/ui/layers.js';
 import { viewBox } from '../design/ui/view-box.ts';
 import { shortcutLabel } from '../../../workbench/src/keys.ts';
+import { cardHint, openable, linkTitle } from './rule.ts';
 
 const MAX_H = 240;
 
@@ -39,11 +45,12 @@ function Entry({ e }) {
   </li>`;
 }
 
-/** the card's CONTENT, apart from its container: a reference's target typeset, or a citation's entries,
- *  and their actions. The container (the floating card here) only places it. */
+/** the card's CONTENT, apart from its container: a reference's target typeset, a citation's entries, or a
+ *  link's address, and their actions. The container (the floating card here) only places it. */
 export function CardContent({ v, onGo, onAction, bodyRef }) {
   return html`<div class="rn-head"><span class="rn-title" id="rn-card-title">${v.title}</span><code class="rn-key">${v.keys}</code></div>
-    <div class=${`rn-body${v.kind === 'cite' ? ' rn-cite' : ''}`} ref=${bodyRef}>
+    <div class=${`rn-body${v.kind === 'ref' ? '' : ` rn-${v.kind}`}`} ref=${bodyRef}>
+      ${v.address != null ? html`<p class="rn-address">${v.address}</p>` : null}
       ${v.empty ? html`<p class="rn-empty">${v.empty}</p>` : null}
       ${v.source != null ? html`<pre class="rn-source">${v.source}</pre>` : null}
       ${v.entries?.length ? html`<ul class="rn-entries" aria-label="Bibliography entries">${v.entries.map((e) => html`<${Entry} key=${e.key} e=${e} />`)}</ul>` : null}
@@ -69,12 +76,22 @@ export function createCard({ numberingState, sourceOf, renderOf, onGo, onAction,
   host.className = 'rn-card-host';
   host.style.display = 'contents';
   const bodyRef = { current: null };
-  let v = { open: false, kind: 'ref', title: '', keys: '', go: [], actions: [], entries: null, hint: '', empty: null, source: null };
+  let v = { open: false, kind: 'ref', title: '', keys: '', go: [], actions: [], entries: null, hint: '', empty: null, source: null, address: null };
   const draw = () => render(html`<${Card} v=${v} onGo=${onGo} onAction=${(id) => onAction?.(id, unit)} bodyRef=${bodyRef} />`, host);
   draw();
   const el = host.firstElementChild;
   const body = () => bodyRef.current;
   let mounted = null, unit = null, token = 0, layer = null, was = null;
+  const mod = shortcutLabel('mod');
+  // a press on the open card's own unit is not a press outside it (the layer's anchor: the unit's glyphs)
+  const anchor = { contains: (n) => !!n && !!unit?.els?.some((g) => g === n || g.contains(n)) };
+  /** the card shown for unit u: in the page, a layer while open */
+  function begin(u) {
+    unit = u;
+    unmount();
+    if (!host.isConnected) document.body.append(host);
+    if (!layer) layer = pushLayer({ el, kind: 'card', anchor, toggle: true, onDismiss: () => { was = unit; close(); }, returnFocus: () => was?.els?.[0] ?? null });
+  }
 
   function unmount() {
     if (mounted) { try { mounted.block?.destroy(); } catch { /* gone */ } mounted = null; }
@@ -83,19 +100,16 @@ export function createCard({ numberingState, sourceOf, renderOf, onGo, onAction,
     body().scrollTop = 0;
   }
 
-  async function open(u, rect, { targets, focus = false }) {
+  async function open(u, rect, { targets, focus = false, editable = true }) {
     const t = ++token;
-    unit = u;
-    unmount();
-    if (!host.isConnected) document.body.append(host);
-    if (!layer) layer = pushLayer({ el, kind: 'card', onDismiss: () => { was = unit; close(); }, returnFocus: () => was?.els?.[0] ?? null });
+    begin(u);
     const first = targets[0];
     const name = first?.info ? cardTitle(first.info) : 'Undefined reference';
     const go = targets.slice(0, 4).filter((tg) => tg.blockId).map((tg) => ({ label: tg.label, text: targets.length > 1 ? `Go to ${cardTitle(tg.info)}` : 'Go to' }));
     v = { open: true, kind: 'ref', actions: [], entries: null, title: targets.length > 1 ? `${name} and ${targets.length - 1} more` : name, keys: u.labels.join(', '), go,
-      hint: go.length ? `${shortcutLabel('mod')}-click to jump · click to edit` : 'Click to edit the reference',
+      hint: cardHint({ go: go.length ? ' to jump' : null, editable, noun: 'reference', mod }),
       empty: first?.blockId ? null : first?.info ? 'This label is not in a block of the document.' : `No \\label{${u.labels[0] ?? ''}} in the document.`,
-      source: null };
+      source: null, address: null };
     draw();
     place(rect, u.els?.[0] ?? null);
     if (first?.blockId) await fill(first, t);
@@ -105,17 +119,31 @@ export function createCard({ numberingState, sourceOf, renderOf, onGo, onAction,
   }
 
   /** a citation: its entries (refsState().bib), "Show in References" and "Go to the reference list" */
-  function openCite(u, rect, { entries, focus = false, hasList = true }) {
+  function openCite(u, rect, { entries, focus = false, hasList = true, editable = true }) {
     ++token;
-    unit = u;
-    unmount();
-    if (!host.isConnected) document.body.append(host);
-    if (!layer) layer = pushLayer({ el, kind: 'card', onDismiss: () => { was = unit; close(); }, returnFocus: () => was?.els?.[0] ?? null });
+    begin(u);
     const known = entries.filter((e) => e.entry);
-    v = { open: true, kind: 'cite', title: `Citation ${u.text.replace(/\s+/g, ' ').trim()}`, keys: '', go: [], source: null,
+    v = { open: true, kind: 'cite', title: `Citation ${u.text.replace(/\s+/g, ' ').trim()}`, keys: '', go: [], source: null, address: null,
       empty: entries.length ? null : 'No keys in this citation.', entries,
       actions: [{ id: 'show-refs', text: 'Show in References' }, ...(hasList ? [{ id: 'goto-list', text: 'Go to the reference list' }] : [])],
-      hint: known.length && hasList ? `${shortcutLabel('mod')}-click: the reference list · click to edit` : 'Click to edit the citation' };
+      hint: cardHint({ go: known.length && hasList ? ': the reference list' : null, editable, noun: 'citation', mod }) };
+    shown(rect, u, focus);
+  }
+
+  /** a link: its address and "Open link" (a new tab), when it is an address a browser opens (rule.ts openable) */
+  function openLink(u, rect, { href, focus = false, editable = true }) {
+    ++token;
+    begin(u);
+    const ok = !!openable(href, document.baseURI);
+    v = { open: true, kind: 'link', title: linkTitle(href), keys: '', go: [], source: null, entries: null, address: href,
+      empty: ok ? null : 'The editor does not open this kind of address.',
+      actions: ok ? [{ id: 'open-link', text: 'Open link' }] : [],
+      hint: cardHint({ go: ok ? ' to open' : null, editable, noun: 'link', mod }) };
+    shown(rect, u, focus);
+  }
+
+  /** drawn, placed next to the unit; the focus on its first action when asked */
+  function shown(rect, u, focus) {
     draw();
     place(rect, u.els?.[0] ?? null);
     if (focus) (el.querySelector('.rn-act') ?? el).focus();
@@ -194,14 +222,14 @@ export function createCard({ numberingState, sourceOf, renderOf, onGo, onAction,
     if (!v.open) return;
     token++;
     layer?.remove(); layer = null;
-    v = { ...v, open: false, source: null, empty: null, entries: null };
+    v = { ...v, open: false, source: null, empty: null, entries: null, address: null };
     draw();
     unmount();
     const u = unit; unit = null;
     onClose?.(u);
   }
 
-  return { el, open, openCite, close, isOpen: () => v.open, get kind() { return v.kind; }, get unit() { return unit; } };
+  return { el, open, openCite, openLink, close, isOpen: () => v.open, get kind() { return v.kind; }, get unit() { return unit; } };
 }
 
 /** "Lemma 3.2", "Section 2 (Preliminaries)", "Equation (4)". */

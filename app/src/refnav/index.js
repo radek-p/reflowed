@@ -2,25 +2,30 @@
 //
 //   installRefNav({ api, numberingState, root }) -> refnav
 //     root the editor's container (app/editor-root.ts): its blocks, its state; one refnav per editor
-//     api             { forPane(pane) -> that pane's document host (app/doc-host.js: refsState, numbering, nav, edit, blocks), bibpane() } (main.js: the workspace's)
+//     api             { forPane(pane) -> that pane's document host (app/doc-host.js: refsState, numbering, nav, edit, blocks, readOnly), bibpane() } (main.js: the workspace's)
 //     numberingState  rtx:refs's numberingState (numbers for the card's copy)
 //
-// A reference (\ref, \eqref, \cref, \Cref, \autoref: brackets, name and number)
-// is one unit (units.js), resolved by label through refsState():
-//   click              edit, as for any glyph: the block's source opens with the
-//                      caret in the reference's key (edit layout applies)
-//   hover 300 ms, or   a card with the target typeset (card.js), its number,
-//   keyboard focus     Go to, and the ⌘/Ctrl-click hint; Enter/Space opens it
-//                      at once (focus on Go to), Esc closes it
-//   ⌘/Ctrl-click       go to the target: scrolled into view, a short pulse
-//   Back pill          after any jump; returns to where you were (a stack);
+// A unit (units.js) is a reference (\ref, \eqref, \cref, \Cref, \autoref: brackets, name and number; resolved by
+// label through refsState()), a citation (\cite, \citep, …: rtx-numbering's slot "rtxk:<keys>") or an external
+// link (\url, \href). Every unit follows one rule (rule.ts clickAction), in every pane and every block kind:
+//   click              edit, as for any glyph: the block's source opens with the caret in
+//                      the unit (a reference's or citation's key, a link's address); in a
+//                      read-only document the click shows the card instead
+//   hover 300 ms, or   the unit's card (card.js); Enter/Space opens it at once (focus on
+//   keyboard focus     its first button), Esc closes it
+//   ⌘/Ctrl-click,      the unit's navigation: a reference goes to its target (scrolled into
+//   ⌘/Ctrl+Enter       view, a short pulse), a citation to the reference list, a link opens
+//                      its address in a new tab
+//   in a card          a unit in a card's typeset copy follows its navigation on a click
+// The cards: a reference's shows the target typeset, its number and Go to; a citation's each key's entry
+// (refsState().bib: authors, title, venue, year, the DOI as a link) with "Show in References" (the References pane
+// on those entries) and "Go to the reference list" (the bibliography block); a link's its address and "Open link"
+// (a new tab, no opener; only web, mail, ftp and tel addresses, a relative one against the page: rule.ts
+// openable). Each says what ⌘/Ctrl-click does, and that a click edits where it does. The card's own links and buttons are navigation: they stay clickable.
+//   Back pill          after any go-to; returns to where you were (a stack);
 //                      also Alt+← and ⌘/Ctrl+[ outside a text field. It goes
 //                      once you are back or have scrolled two screens away.
-// External links (\url, \href) open in a new tab.
-// A citation (\cite, \citep, \citet, \parencite, …: rtx-numbering's slot "rtxk:<keys>") is a unit too: its
-// card shows each key's entry (refsState().bib: authors, title, venue, year, the DOI as a link) with "Show in
-// References" (the References pane on those entries) and "Go to the reference list" (the bibliography block);
-// ⌘/Ctrl-click goes to the reference list. Every go-to and Back go through editorAPI.nav() (nav/navigate.js):
+// Every go-to and Back go through editorAPI.nav() (nav/navigate.js):
 // in the unit's own pane, leaving a section focus the target is outside of; Back focuses it again.
 //
 // The test surface: refnav.units(), refnav.jump(label), refnav.back(),
@@ -29,6 +34,8 @@
 import { createCard, cardTitle } from './card.js';
 import { scanRender, unitOf, unitsIn, unitRects, markUnit, markedUnit, REF_SLOT } from './units.js';
 import { installStyle } from './style.js';
+import { clickAction, openable } from './rule.ts';
+import { linkCaret } from '../tex/links.ts';
 import { html, render, Button } from '../design/ui/index.js';
 import { pushLayer } from '../design/ui/layers.js';
 import { page, onChange } from '../app/page-state.ts';
@@ -55,6 +62,8 @@ export function installRefNav({ api, numberingState, root } = {}) {
   /** the document's bibliography block (\bibliography, \printbibliography, a thebibliography) */
   const bibBlock = () => A().blocks?.().find((b) => b.kind === 'bibliography' || /\\(printbibliography|bibliography\s*\{)|\\begin\{thebibliography\}/.test(b.source)) ?? null;
   const entriesOf = (u) => { use(u); const bib = st()?.bib ?? {}; return u.labels.map((key) => ({ key, entry: bib[key] ?? null })); };
+  /** a click on unit u may edit its block: not in a card, not in a read-only document */
+  const editable = (u) => { use(u); return !u.inCard && !A().readOnly?.(); };
 
   // ── finding units: every rendered block, again after the viewer paints ─────
   const dirty = new Set();
@@ -65,6 +74,14 @@ export function installRefNav({ api, numberingState, root } = {}) {
     dirty.clear();
   };
   const markDirty = (r) => { if (!r) return; dirty.add(r); if (!raf) raf = requestAnimationFrame(flush); };
+  /** the units under an event's target as they are now: its render scanned at once when the viewer repainted it
+   *  since the last scan (a press in that frame meets units, never the viewer's own links) */
+  const fresh = (t) => {
+    const r = t?.closest?.('.blk-render, .rn-body');
+    if (!r || !dirty.has(r)) return;
+    dirty.delete(r);
+    scanRender(r, { inCard: r.classList.contains('rn-body') });
+  };
   const mo = new MutationObserver((muts) => {
     for (const m of muts) {
       const t = m.target.nodeType === 1 ? m.target : m.target.parentElement;
@@ -91,11 +108,12 @@ export function installRefNav({ api, numberingState, root } = {}) {
   };
   const blockEl = (id) => root.$(`.blk[data-id="${CSS.escape(id)}"]`);
 
-  /** Where the reference is in its block's source: the caret goes into its first key. */
+  /** Where the unit is in its block's source: the caret goes into its first key, or a link's address. */
   function caretOf(u) {
     use(u);
     const s = st();
     const src = A().blocks?.().find((b) => b.id === u.blockId)?.source ?? '';
+    if (u.kind === 'link') return linkCaret(src, u.href, u.index);
     const uses = u.kind === 'cite' ? (s?.cites ?? []).filter((r) => r.blockId === u.blockId && r.keys.length === u.labels.length && r.keys.every((k) => u.labels.includes(k.trim())))
       : (s?.refs ?? []).filter((r) => r.blockId === u.blockId && (CMD_KIND[r.cmd] ?? 'ref') === u.kind
       && r.keys.length === u.labels.length && r.keys.every((k) => u.labels.includes(k.trim())));
@@ -113,7 +131,8 @@ export function installRefNav({ api, numberingState, root } = {}) {
     sourceOf: (id) => A().blocks?.().find((b) => b.id === id)?.source ?? '',   // the card's text without a typeset copy
     onGo: (label) => { const from = card.unit; card.close(); jump(label, { from }); },
     onAction: (id, u) => {
-      if (id === 'show-refs') { card.close(); Promise.resolve(api.bibpane?.()?.reveal?.(u.labels)).then((ok) => { if (!ok) nav()?.say('The References pane could not show this entry.'); }); }
+      if (id === 'open-link') { card.close(); openLink(u); }
+      else if (id === 'show-refs') { card.close(); Promise.resolve(api.bibpane?.()?.reveal?.(u.labels)).then((ok) => { if (!ok) nav()?.say('The References pane could not show this entry.'); }); }
       else if (id === 'goto-list') { card.close(); gotoList(u); }
     },
     onClose: () => {
@@ -137,8 +156,10 @@ export function installRefNav({ api, numberingState, root } = {}) {
     clearTimeout(openTimer); clearTimeout(closeTimer);
     if (!u?.els[0]?.isConnected) return;
     const rects = unitRects(u);
-    if (u.kind === 'cite') card.openCite(u, rects, { entries: entriesOf(u), focus, hasList: !!bibBlock() });
-    else await card.open(u, rects, { targets: targetsOf(u), focus });
+    const edits = editable(u);
+    if (u.kind === 'cite') card.openCite(u, rects, { entries: entriesOf(u), focus, hasList: !!bibBlock(), editable: edits });
+    else if (u.kind === 'link') card.openLink(u, rects, { href: u.href, focus, editable: edits });
+    else await card.open(u, rects, { targets: targetsOf(u), focus, editable: edits });
     if (!same(card.unit, u)) return;
     describer = u.els[0];
     describer.setAttribute('aria-describedby', 'rn-card');
@@ -153,6 +174,7 @@ export function installRefNav({ api, numberingState, root } = {}) {
     if (e.pointerType === 'touch') return;
     if (!mine(e.target)) { if (hot && !hot.els[0].matches(':focus')) setHot(null); clearTimeout(openTimer); if (card.isOpen() && !card.el.contains(document.activeElement)) closeSoon(); return; }
     if (card.el.contains(e.target)) { clearTimeout(closeTimer); return; }
+    fresh(e.target);
     const u = unitOf(e.target);
     if (u) {
       clearTimeout(closeTimer);
@@ -164,6 +186,7 @@ export function installRefNav({ api, numberingState, root } = {}) {
     if (card.isOpen() && !card.el.contains(document.activeElement)) closeSoon();
   }, true);
   root.listen(root.doc, 'focusin', (e) => {
+    if (mine(e.target)) fresh(e.target);
     const u = mine(e.target) ? unitOf(e.target) : null;
     if (u) { setHot(u); clearTimeout(closeTimer); clearTimeout(openTimer); if (!same(card.unit, u)) openTimer = setTimeout(() => openCard(u), HOVER_MS); return; }
     if (card.el.contains(e.target)) { clearTimeout(closeTimer); return; }
@@ -172,21 +195,17 @@ export function installRefNav({ api, numberingState, root } = {}) {
 
   // ── clicks and keys: before the viewer's and the app's own handlers ───────
   const stop = (e) => { e.preventDefault(); e.stopImmediatePropagation(); };
+  // one rule for every unit (rule.ts clickAction): edit, its card (a read-only document), or its navigation
   root.listen(root.doc, 'click', (e) => {
     if (!mine(e.target)) return;
-    const ext = e.target?.closest?.('[data-link-href]');
-    if (ext && !ext.dataset.linkHref.startsWith('#') && ext.closest('.blk-render, .rn-body')) {
-      stop(e);
-      window.open(ext.dataset.linkHref, '_blank', 'noopener');
-      return;
-    }
+    fresh(e.target);
     const u = unitOf(e.target);
     if (!u) return;
     stop(e);
-    use(u);
-    if (u.kind === 'cite' && (e.metaKey || e.ctrlKey || u.inCard)) { card.close(); gotoList(u); return; }
-    const t = targetsOf(u).find((x) => x.blockId);
-    if (e.metaKey || e.ctrlKey || u.inCard) { card.close(); if (t) jump(t.label, { from: u }); else nav()?.say(`No \\label{${u.labels[0] ?? ''}} in the document to go to.`); return; }
+    clearTimeout(openTimer);                // the hover's or the press's focus card: the click decides now
+    const act = clickAction({ mod: e.metaKey || e.ctrlKey, inCard: u.inCard, editable: editable(u) });
+    if (act === 'go') { follow(u); return; }
+    if (act === 'card') { if (!same(card.unit, u) || !card.isOpen()) openCard(u); return; }
     card.close();
     const caret = caretOf(u);
     A().edit(u.blockId, caret ?? undefined);
@@ -199,7 +218,7 @@ export function installRefNav({ api, numberingState, root } = {}) {
     if (u && (e.key === 'Enter' || e.key === ' ')) {
       stop(e);
       use(u);
-      if (e.metaKey || e.ctrlKey) { if (u.kind === 'cite') { gotoList(u); return; } const t = targetsOf(u).find((x) => x.blockId); if (t) jump(t.label, { from: u }); else nav()?.say(`No \\label{${u.labels[0] ?? ''}} in the document to go to.`); return; }
+      if (e.metaKey || e.ctrlKey) { follow(u); return; }
       openCard(u, { focus: true });
       return;
     }
@@ -211,6 +230,25 @@ export function installRefNav({ api, numberingState, root } = {}) {
   card.el.addEventListener('pointerenter', () => clearTimeout(closeTimer));
   card.el.addEventListener('focusout', (e) => { if (!card.el.contains(e.relatedTarget) && !same(unitOf(e.relatedTarget), card.unit)) closeSoon(); });
   root.listen(window, 'scroll', () => { if (card.isOpen() && !card.el.matches(':hover') && !card.el.contains(document.activeElement)) card.close(); }, { passive: true });
+
+  /** a unit's own navigation (⌘/Ctrl-click, a click in a card): a reference's target, a citation's list, a link's address */
+  function follow(u) {
+    use(u);
+    card.close();
+    if (u.kind === 'cite') return gotoList(u);
+    if (u.kind === 'link') return openLink(u);
+    const t = targetsOf(u).find((x) => x.blockId);
+    if (t) return jump(t.label, { from: u });
+    nav()?.say(`No \\label{${u.labels[0] ?? ''}} in the document to go to.`);
+    return false;
+  }
+  /** a link's address in a new tab, without an opener; an address the editor does not open is said, not followed */
+  function openLink(u) {
+    const href = openable(u.href ?? '', document.baseURI);
+    if (!href) { use(u); nav()?.say('The editor does not open this kind of address.'); return false; }
+    window.open(href, '_blank', 'noopener');
+    return true;
+  }
 
   // ── jumping and coming back: through the navigator (nav/navigate.js), in the unit's own pane ──────────────
   let landed = null;                       // where a go-to arrived: { pane, y } (two screens away from it, Back goes)
@@ -311,9 +349,9 @@ export function installRefNav({ api, numberingState, root } = {}) {
   const stack = { get length() { return nav()?.history().length ?? 0; } };
 
   return {
-    /** every unit found, for tests: { id, blockId, labels, kind, text, target, link } */
+    /** every unit found, for tests: { id, blockId, labels, kind, text, index, hadLink, href, targets, connected } */
     units: () => root.$$('.blk-render').flatMap((r) => unitsIn(r)).map((u) => ({
-      id: u.id, blockId: u.blockId, labels: u.labels, kind: u.kind, text: u.text, index: u.index, hadLink: u.hadLink,
+      id: u.id, blockId: u.blockId, labels: u.labels, kind: u.kind, text: u.text, index: u.index, hadLink: u.hadLink, href: u.href ?? null,
       targets: targetsOf(u).map((t) => t.blockId), connected: u.els.every((g) => g.isConnected),
     })),
     rescan: () => { for (const r of root.$$('.blk-render')) scanRender(r); },

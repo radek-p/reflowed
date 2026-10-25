@@ -15,8 +15,11 @@
 // latex-link class and the viewer's role/tabindex come off, so the viewer
 // neither lights the brackets alone nor follows the link; the unit carries its
 // own `rn-ref` class, and its first glyph the tab stop and the name.
-// External links (data-link-href not starting with '#') are left to the page;
-// index.js opens them in a new tab.
+// An external link (\url, \href: data-link-href not starting with '#') is a
+// unit too, of kind 'link': the glyphs of one hyperref link (one data-link key),
+// its label its address (unit.href), neutralised the same way (the address kept
+// as data-rn-href), so neither the viewer nor the page follows it; index.js
+// treats it as any unit. Action links (data-link-action) are not units.
 
 // rtxk: a citation (rtx-numbering.sty prints every cite command inside a marker slot named by its keys)
 export const REF_SLOT = /^rtx[racCk]:/;
@@ -27,6 +30,8 @@ export const slotKind = (name) => ({ rtxr: 'ref', rtxa: 'autoref', rtxc: 'cref',
 
 /** the text a link glyph may have to belong to a slot's reference: brackets, punctuation, space */
 const DECOR = /^[\s()[\]{}⟨⟩.,;:~  -]*$/;
+/** a unit's name for a screen reader, by kind */
+const NOUN = { cite: 'Citation', link: 'Link' };
 const units = new WeakMap();          // glyph element -> its unit
 const byRender = new WeakMap();       // .blk-render / card body -> its units
 
@@ -46,11 +51,22 @@ const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x))
  */
 export function scanRender(root, { blockId = root.closest?.('.blk')?.dataset.id ?? null, inCard = false } = {}) {
   const list = [];
+  const links = new Map();            // an external link's data-link key -> its unit (its glyphs may be apart)
   let cur = null, gap = [];
   const glyphs = root.querySelectorAll('tspan');
   for (const g of glyphs) {
     const slot = g.dataset.slot;
     const isSlot = !!slot && REF_SLOT.test(slot);
+    const ext = isSlot ? null : externalHref(g);
+    if (ext) {
+      cur = null; gap = [];
+      const key = g.dataset.link ?? g.dataset.rnLink ?? ext;
+      let u = links.get(key);
+      if (!u) { u = { id: '', blockId, inCard, labels: [ext], href: ext, slot: null, kind: 'link', linkKey: key, els: [], hadLink: true }; list.push(u); links.set(key, u); }
+      neutralise(g);
+      u.els.push(g);
+      continue;
+    }
     // a tie inside a slot's text ("Lemma~1.1": the viewer draws the words apart, the space between
     // them is not the slot's): kept aside, and part of the unit when the same slot goes on after it
     if (!isSlot && cur?.slot && !g.dataset.linkLabel && !g.dataset.rnLabel && !(g.textContent ?? '').trim()) { gap.push(g); continue; }
@@ -76,7 +92,7 @@ export function scanRender(root, { blockId = root.closest?.('.blk')?.dataset.id 
     cur.els.push(g);
   }
   // hit areas of neutralised links (the viewer's rects over a link's spaces) go inert too
-  for (const r of root.querySelectorAll('rect.latex-link-hit[data-link-href^="#"]')) neutralise(r);
+  for (const r of root.querySelectorAll('rect.latex-link-hit[data-link-href]')) neutralise(r);
   // A reference with a slot is its slot's glyphs plus only the link glyphs that
   // decorate it (\eqref's brackets): hyperref's link can cover far more, e.g. a run-in
   // `\paragraph*{…}` heading set at the start of the paragraph that begins with
@@ -101,7 +117,7 @@ export function scanRender(root, { blockId = root.closest?.('.blk')?.dataset.id 
   for (const g of glyphs) {
     if (inUnit.has(g) || !units.has(g) && !g.classList.contains('rn-ref')) continue;
     units.delete(g);
-    g.classList.remove('rn-ref', 'rn-hot', 'rn-flash');
+    g.classList.remove('rn-ref', 'rn-link', 'rn-hot', 'rn-flash');
     if (g.dataset.rnFirst !== undefined) { g.removeAttribute('tabindex'); g.removeAttribute('role'); g.removeAttribute('aria-haspopup'); g.removeAttribute('aria-describedby'); g.removeAttribute('aria-expanded'); g.removeAttribute('aria-label'); delete g.dataset.rnFirst; }
   }
   for (const u of list) {
@@ -113,12 +129,13 @@ export function scanRender(root, { blockId = root.closest?.('.blk')?.dataset.id 
     u.els.forEach((g, i) => {
       units.set(g, u);
       g.classList.add('rn-ref');
+      g.classList.toggle('rn-link', u.kind === 'link');
       if (i === 0) {
         g.setAttribute('tabindex', '0');
         g.setAttribute('role', 'link');
         g.setAttribute('aria-haspopup', 'dialog');
         // the whole unit's name for a screen reader (the first glyph alone may be a bracket)
-        g.setAttribute('aria-label', `${u.kind === 'cite' ? 'Citation' : 'Reference'} ${u.text.replace(/\s+/g, ' ').trim()}`);
+        g.setAttribute('aria-label', `${NOUN[u.kind] ?? 'Reference'} ${u.text.replace(/\s+/g, ' ').trim()}`);
         g.dataset.rnFirst = '';
       } else if (g.dataset.rnFirst !== undefined || g.getAttribute('role') === 'link') {
         g.removeAttribute('tabindex'); g.removeAttribute('role'); g.removeAttribute('aria-haspopup'); g.removeAttribute('aria-label'); delete g.dataset.rnFirst;
@@ -129,9 +146,17 @@ export function scanRender(root, { blockId = root.closest?.('.blk')?.dataset.id 
   return list;
 }
 
-/** Take hyperref's link off a glyph (it keeps its label for the unit). */
+/** An external link's address on a glyph: the viewer's, or the one kept when it was neutralised. */
+function externalHref(g) {
+  const h = g.dataset.linkHref;
+  if (h != null) return h.startsWith('#') ? null : h;
+  return g.dataset.rnHref ?? null;
+}
+
+/** Take hyperref's link off a glyph (it keeps its label, an external link its address, for the unit). */
 function neutralise(g) {
   if (g.dataset.linkLabel) g.dataset.rnLabel = g.dataset.linkLabel;
+  if (g.dataset.linkHref && !g.dataset.linkHref.startsWith('#')) g.dataset.rnHref = g.dataset.linkHref;
   if (g.dataset.link) g.dataset.rnLink = g.dataset.link;
   delete g.dataset.link; delete g.dataset.linkHref; delete g.dataset.linkLabel;
   g.classList.remove('latex-link', 'latex-link-hover', 'latex-link-active');

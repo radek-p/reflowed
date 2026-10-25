@@ -105,8 +105,10 @@ await step('units', async () => {
   check('every reference in the document is a unit (\\Cref, \\cref, \\eqref)', units.length >= st.refs.length * 0.95, { units: units.length, refs: st.refs.length, kinds });
   const dead = await page.evaluate(() => [...document.querySelectorAll('.blk-render [data-link-href^="#"], .blk-render [data-link-label]')].length);
   check('no hyperref links left on internal references (no dead half-links)', dead === 0, { dead });
-  const unresolvedLinks = units.filter((u) => u.hadLink && !u.targets.some(Boolean));
+  const unresolvedLinks = units.filter((u) => u.hadLink && u.kind !== 'link' && !u.targets.some(Boolean));
   check('every former link unit resolves to a block by label', unresolvedLinks.length === 0, unresolvedLinks.slice(0, 3));
+  const live = await page.evaluate(() => document.querySelectorAll('.blk-render [data-link-href]:not([data-link-action])').length);
+  check('no link in the document is left for the viewer to follow (external links are units too)', live === 0, { live });
   const eq = units.filter((u) => u.kind === 'ref' && u.hadLink && /^\(.*\)$/.test(u.text));
   check('\\eqref: brackets and number are one unit', eq.length > 0 && eq.every((u) => u.text.length >= 3), eq.slice(0, 2).map((u) => u.text));
   lemmaRef = units.find((u) => u.kind === 'Cref' && u.labels.length === 1 && /^thm:/.test(u.labels[0]) && u.targets[0] && u.targets[0] !== u.blockId);
@@ -303,21 +305,116 @@ if (!SMOKE) {
     await idle();
   });
 
-  await step('external link', async () => {
+  // a click edits for every unit; nothing opens a page or leaves the editor on a plain click
+  await page.evaluate(() => { const w = window as any; const o = window.open.bind(window); w.__opens = []; window.open = (...a: any[]) => { w.__opens.push(String(a[0])); return o(...a); }; });
+  const opens = () => page.evaluate(() => (window as any).__opens.slice() as string[]);
+  const clickEdits = async (name: string, u: any, range: () => Promise<{ from: number; to: number } | null>, i: number | 'last' = 0) => {
+    await page.mouse.move(5, 450);
+    const n0 = (await opens()).length, pages0 = ctx.pages().length, url0 = page.url();
+    const c = await centre(u, i);
+    await page.mouse.click(c.x, c.y);
+    await page.waitForFunction(() => !!(window as any).editorAPI.caret(), null, { timeout: 10000 });
+    const car = await page.evaluate(() => (window as any).editorAPI.caret());
+    const r = await range();
+    check(`a plain click on ${name} opens the source with the caret in it`, car?.id === u.blockId && !!r && car.offset >= r.from && car.offset <= r.to, { car, r, glyph: c.text });
+    check(`… and opens no page (${name})`, (await opens()).length === n0 && ctx.pages().length === pages0 && page.url() === url0, { opens: await opens(), pages: ctx.pages().length, url: page.url() });
+    await page.evaluate(() => (window as any).editorAPI.leave());
+    await idle();
+  };
+  const sourceOf = (id: string) => page.evaluate((i: string) => (window as any).editorAPI.blocks().find((b: any) => b.id === i)?.source ?? '', id);
+
+  await step('click edits: a citation and a \\ref', async () => {
+    units = await rn('units');
+    const cite = units.find((u) => u.kind === 'cite' && u.connected && u.labels.length === 1);
+    const ref = units.find((u) => u.kind === 'ref' && u.labels[0] === 'sec:maths' && u.connected);
+    check('a citation and a \\ref found', !!cite && !!ref, { cite: cite?.text, ref: ref?.text });
+    if (!cite || !ref) return;
+    await clickEdits('a citation', cite, async () => {
+      const c = await page.evaluate((u: any) => { const cs = (window as any).editorAPI.refsState().cites.filter((x: any) => x.blockId === u.blockId && x.keys.join() === u.labels.join()); return cs[u.index] ?? cs[0] ?? null; }, cite);
+      return c && { from: c.offset, to: c.offset + c.length };
+    });
+    await clickEdits('a \\ref', ref, async () => {
+      const r = await page.evaluate((u: any) => { const rs = (window as any).editorAPI.refsState().refs.filter((x: any) => x.blockId === u.blockId && x.cmd === 'ref' && x.keys.join() === u.labels.join()); return rs[u.index] ?? rs[0] ?? null; }, ref);
+      return r && { from: r.offset, to: r.offset + r.length };
+    });
+  });
+
+  await step('external links (\\url, \\href)', async () => {
     await ctx.route('https://example.org/**', (r: any) => r.fulfill({ status: 200, contentType: 'text/html', body: '<title>ok</title>ok' }));
     const n = (await page.evaluate(() => (window as any).editorAPI.blocks().length)) as number;
-    const id = await page.evaluate((i: number) => (window as any).editorAPI.insert(i, 'paragraph', 'See \\url{https://example.org/w10} for more.'), 8);
+    const id = await page.evaluate((i: number) => (window as any).editorAPI.insert(i, 'paragraph', 'See \\url{https://example.org/w10} and \\href{https://example.org/w10-notes}{the notes on sums} for more.'), 8);
     await idle();
     await page.evaluate((i: string) => document.querySelector(`.blk[data-id="${i}"]`)?.scrollIntoView({ block: 'center' }), id);
     await idle();
     await frames();
-    const r = await page.evaluate((i: string) => { const g = document.querySelector(`.blk[data-id="${i}"] [data-link-href^="http"]`); if (!g) return null; const b = g.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2, href: (g as any).dataset.linkHref }; }, id);
-    if (!r) { check('\\url is a link', false, 'no external link glyph drawn'); return; }
-    const [popup] = await Promise.all([ctx.waitForEvent('page', { timeout: 10000 }), page.mouse.click(r.x, r.y)]);
+    const links = (await rn('units')).filter((u: any) => u.blockId === id && u.kind === 'link');
+    const url = links.find((u: any) => u.href === 'https://example.org/w10'), href = links.find((u: any) => u.href === 'https://example.org/w10-notes');
+    check('\\url and \\href are link units (one each, with their addresses)', links.length === 2 && !!url && !!href && /thenotesonsums/.test(href.text.replace(/\s+/g, '')), links.map((u: any) => [u.href, u.text]));
+    if (!url || !href) return;
+    const live = await page.evaluate((i: string) => document.querySelectorAll(`.blk[data-id="${i}"] [data-link-href]`).length, id);
+    check('the links are neutralised (no data-link-href left for the viewer to follow)', live === 0, { live });
+    const src = await sourceOf(id);
+    const argOf = (a: string) => async () => { const at = src.indexOf(`{${a}}`); return at < 0 ? null : { from: at + 1, to: at + 1 + a.length }; };
+    await clickEdits('a \\url', url, argOf('https://example.org/w10'));
+    await clickEdits('an \\href (its text)', href, argOf('https://example.org/w10-notes'), 'last');
+    {
+      // a space inside the \href's text is no link the viewer follows: a click there edits too
+      await page.mouse.move(5, 450);
+      const gap = await page.evaluate((u: any) => {
+        const els = (window as any).editorAPI.refnav().elements(u.id) as Element[];
+        for (let k = 0; k + 1 < els.length; k++) {
+          const a = els[k].getBoundingClientRect(), b = els[k + 1].getBoundingClientRect();
+          if (Math.abs(a.top - b.top) < 2 && b.left - a.right > 2) return { x: (a.right + b.left) / 2, y: (a.top + a.bottom) / 2 };
+        }
+        return null;
+      }, href);
+      if (!gap) check('a space inside the \\href is drawn', false, 'no gap found');
+      else {
+        const n0 = (await opens()).length;
+        await page.mouse.click(gap.x, gap.y);
+        await page.waitForFunction(() => !!(window as any).editorAPI.caret(), null, { timeout: 10000 });
+        const car = await page.evaluate(() => (window as any).editorAPI.caret());
+        check('a click on a space inside a link edits its block and opens no page', car?.id === id && (await opens()).length === n0 && ctx.pages().length === 1, { car, gap });
+        await page.evaluate(() => (window as any).editorAPI.leave());
+        await idle();
+      }
+    }
+
+    // hover: the card with the address and Open link, the ⌘/Ctrl-click hint
+    await page.mouse.move(5, 450);
+    const c = await centre(href, 1);
+    const ev: any = await onEvent('refnav:card', () => page.mouse.move(c.x, c.y), 'd.open');
+    await frames();
+    const k = await page.evaluate(() => { const el = document.querySelector('#rn-card') as HTMLElement; return { kind: el.dataset.kind, title: el.querySelector('.rn-title')?.textContent, address: el.querySelector('.rn-address')?.textContent, open: el.querySelector('.rn-open-link')?.textContent, hint: el.querySelector('.rn-hint')?.textContent, cls: el.querySelector('.rn-open-link')?.className ?? '' }; });
+    check('hover shows the link card: its address and Open link', ev.open && k.kind === 'link' && k.address === 'https://example.org/w10-notes' && k.open === 'Open link' && /ui-btn/.test(k.cls), k);
+    check('the link card says what ⌘/Ctrl-click and a click do', /-click to open · click to edit$/.test(k.hint ?? '') && k.title === 'Link to example.org', k);
+    await shot('08-link-card');
+    const [popup] = await Promise.all([ctx.waitForEvent('page', { timeout: 10000 }), page.click('#rn-card .rn-open-link')]);
     await popup.waitForLoadState().catch(() => {});
-    const still = await page.evaluate(() => location.hash);
-    check('\\url opens in a new tab (the editor stays)', /example\.org\/w10/.test(popup.url()) && /#\/doc\//.test(still), { popup: popup.url(), hash: still });
+    const hash = await page.evaluate(() => location.hash);
+    const opener = await popup.evaluate(() => window.opener === null).catch(() => null);
+    check('Open link opens the address in a new tab, without an opener (the editor stays)', /example\.org\/w10-notes$/.test(popup.url()) && /#\/doc\//.test(hash) && opener === true, { popup: popup.url(), hash, opener });
     await popup.close();
+    const closed = await page.evaluate(() => (document.querySelector('#rn-card') as HTMLElement).hidden);
+    check('the card closes after Open link', closed);
+
+    // ⌘/Ctrl-click opens the link
+    await page.mouse.move(5, 450);
+    const d = await centre(url);
+    const [p2] = await Promise.all([ctx.waitForEvent('page', { timeout: 10000 }), (async () => { await page.keyboard.down(MOD); await page.mouse.click(d.x, d.y); await page.keyboard.up(MOD); })()]);
+    await p2.waitForLoadState().catch(() => {});
+    const editing = await page.evaluate(() => (window as any).editorAPI.caret());
+    check('⌘/Ctrl-click on a \\url opens it in a new tab (and does not edit)', /example\.org\/w10$/.test(p2.url()) && !editing, { popup: p2.url(), editing });
+    await p2.close();
+
+    // the keyboard: Enter opens the card with the focus on Open link; Esc closes it, back on the link
+    await page.evaluate((u: any) => (window as any).editorAPI.refnav().elements(u.id)[0].focus(), url);
+    const e2: any = await onEvent('refnav:card', () => page.keyboard.press('Enter'), 'd.open');
+    const onOpen = await page.evaluate(() => document.activeElement?.classList.contains('rn-open-link'));
+    check('Enter on a link opens its card with the focus on Open link', e2.open && onOpen, { onOpen });
+    await page.keyboard.press('Escape');
+    const back = await page.evaluate(() => ({ open: !(document.querySelector('.rn-card') as HTMLElement).hidden, link: (document.activeElement as any)?.getAttribute?.('aria-label') ?? '' }));
+    check('Esc closes it and the focus is back on the link', !back.open && /^Link /.test(back.link), back);
     await page.evaluate((i: string) => (window as any).editorAPI.remove(i), id);
     await idle();
     check('(the inserted block removed)', (await page.evaluate(() => (window as any).editorAPI.blocks().length)) === n);

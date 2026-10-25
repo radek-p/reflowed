@@ -222,7 +222,8 @@ export function createDocEditor(ctx) {
   // ── Blocks in the panes (../panes/) ─────────────────────────────
   // Each block has one STATE here (ui: its result, decor, live fields) and one VIEW per pane (panes/block-view.js),
   // all made, painted and given results the same way (panes/blocks.js). No pane's element is the block's.
-  const INTERACTIVE = 'a, button, [role="button"], [tabindex], .latex-link, [data-link], .latex-action, .latex-stream[data-kind="hint"]';
+  // (a reference, a citation or a link is refnav's unit: refnav/index.js decides its click before this does)
+  const INTERACTIVE = 'a, button, [role="button"], [tabindex], .latex-action, .latex-stream[data-kind="hint"]';
   /** what a view does on a click, a focus, its + and focus icon, its handle: the same in every pane */
   const viewOn = {
     click(e, v) {

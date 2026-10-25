@@ -3,6 +3,7 @@
 // outside-press rule and one focus return, instead of a handler and an exclusion list per module.
 //
 //   const l = pushLayer({ el, kind, anchor, toggle, onDismiss(reason), returnFocus })   an element already in the page
+//     anchor  what opened it: an element, or anything with contains(node) (a reference's glyphs)
 //   l.remove() · l.contains(node) · l.el
 //   openLayer(make, { kind, … })    a fresh host on <body> for make(close); with `kind` it is pushed as a layer
 //   owns(node)                      a press on `node` belongs to a layer, to a foreign floating box (CodeMirror's

@@ -2,6 +2,8 @@
 // builds to carry). On the kit's tokens.
 const CSS = String.raw`
 .latex-block svg .rn-ref { cursor: pointer; }
+/* a link keeps the page's link colour (app.css .latex-link: the class the unit took off) */
+.latex-block svg .rn-ref.rn-link { fill: var(--latex-link, #2f6fb3) !important; }
 .latex-block svg .rn-ref.rn-hot { fill: var(--latex-link-hover, var(--ui-accent)) !important; }
 .latex-block svg .rn-ref:focus { outline: none; }
 /* the hovered reference's live mark (units.js markUnit): the viewer's band on each of its lines */
@@ -26,6 +28,9 @@ html.dark .latex-block svg rect.latex-mark[data-mark~="rn-hot"] { fill: color-mi
   mask-image: linear-gradient(to bottom, transparent, #000 36px, #000 calc(100% - 44px), transparent); }
 .rn-body .rn-empty { margin: var(--ui-1) 0 var(--ui-2); color: var(--ui-ink-3); }
 .rn-body .rn-source { margin: var(--ui-1) 0 var(--ui-2); font: var(--ui-text-sm)/1.45 var(--ui-mono); white-space: pre-wrap; color: var(--ui-ink); }
+/* a link's address */
+.rn-body.rn-link { background: none; padding: var(--ui-1) var(--ui-3) var(--ui-2); }
+.rn-address { margin: 0; font: var(--ui-text-sm)/1.45 var(--ui-mono); color: var(--ui-ink); overflow-wrap: anywhere; user-select: text; }
 /* a citation's entries */
 .rn-body.rn-cite { background: none; max-height: 280px; overflow: auto; padding: var(--ui-1) var(--ui-3) var(--ui-2); }
 .rn-entries { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--ui-2); }
