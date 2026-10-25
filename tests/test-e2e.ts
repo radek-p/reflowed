@@ -171,9 +171,9 @@ await step('open intro → typeset', async () => {
 await step('defaults open with 0 compiles', async () => {
   const others = defaults.filter((d) => d.id !== introId);
   // as many as the page carries: a build names its default documents (--seeds=…), the
-  // dev server serves both
+  // dev server serves the intro
   const carried: number | null = await page.evaluate(() => ((globalThis as any).__rtxSeeds ? Object.keys((globalThis as any).__rtxSeeds).length : null));
-  check('a first open shows the default documents', defaults.length >= (carried ?? 2) && defaults.length >= 1, `${defaults.map((d) => d.title).join(' | ')} (${carried ?? 'dev: 2'} carried)`);
+  check('a first open shows the default documents', defaults.length >= (carried ?? 1) && defaults.length >= 1, `${defaults.map((d) => d.title).join(' | ')} (${carried ?? 'dev: 1'} carried)`);
   for (const d of others) {
     const c0 = await compiledNow();
     await openDoc(d.id);
