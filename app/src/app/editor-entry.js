@@ -102,6 +102,17 @@ const canScroll = ViewPlugin.fromClass(class {
   }
 });
 
+const MAC = /Mac|iPhone|iPad|iPod/.test(globalThis.navigator?.platform ?? '');
+/** 'undo' (Mod-z), 'redo' (Mod-Shift-z, Mod-y), or null: by the event's key, case aside, and Shift */
+function historyKey(e) {
+  if (e.altKey || (MAC ? !e.metaKey || e.ctrlKey : !e.ctrlKey || e.metaKey)) return null;
+  // the letter typed; on a layout whose letters are not Latin (Cyrillic, Greek), the key where z or y is
+  const k = /^[a-z]$/i.test(e.key) ? e.key.toLowerCase() : e.code === 'KeyZ' ? 'z' : e.code === 'KeyY' ? 'y' : '';
+  if (k === 'z') return e.shiftKey ? 'redo' : 'undo';
+  if (k === 'y' && !e.shiftKey) return 'redo';
+  return null;
+}
+
 export function createEditor(parent, { doc = '', onChange = () => {}, onKey = () => false, placeholder = '',
   complete = null, hover = null, goto = null, onSelect = null, carry = null } = {}) {
   const ask = (name) => (view) => onKey(name, view) === true;
@@ -149,6 +160,15 @@ export function createEditor(parent, { doc = '', onChange = () => {}, onKey = ()
     // Escape: closes an open completion list, else leaves the block (a list
     // still pending – the ~100 ms after a keystroke – does not count)
     Prec.highest(keymap.of([{ key: 'Escape', run: (v) => (completionStatus(v.state) === 'active' ? closeCompletion(v) : ask('escape')(v)) }])),
+    // undo and redo: the document's one history (edit/undo.js), asked of the host by the key event itself. A
+    // keymap's Mod-z also matched Ctrl-Shift-z whenever the key came as a lowercase 'z' with Shift held (as Chromium
+    // on Linux reports it), so redo ran undo
+    Prec.highest(EditorView.domEventHandlers({ keydown: (e, view) => {
+      const name = historyKey(e);
+      if (!name || !ask(name)(view)) return false;
+      e.preventDefault();
+      return true;
+    } })),
     keymap.of([
       { key: 'Mod-Enter', run: ask('mod-enter') },
       { key: 'Shift-Enter', run: ask('shift-enter') },
@@ -160,9 +180,6 @@ export function createEditor(parent, { doc = '', onChange = () => {}, onKey = ()
       { key: 'Alt-ArrowDown', run: ask('alt-down') },
       { key: 'F12', run: (v) => { const k = keyAt(v.state, sel(v).head); return !!(k && goto?.(k)); } },
       indentWithTab,
-      { key: 'Mod-z', run: ask('undo'), preventDefault: true },          // the document's one history (edit/undo.js)
-      { key: 'Mod-Shift-z', run: ask('redo'), preventDefault: true },
-      { key: 'Mod-y', run: ask('redo'), preventDefault: true },
       ...defaultKeymap,
     ]),
     EditorView.updateListener.of((u) => { if (u.docChanged) onChange(u.state.doc.toString(), u); if (onSelect && (u.selectionSet || u.docChanged)) onSelect(u.state.selection.main, u); }),   // onSelect: the caret in the live result (u: the update)

@@ -1,6 +1,7 @@
 // The block source editor (app/src/app/editor-entry.js createEditor) in another document: made in a frame's body,
 // it lives in that document, and its own caret-line band (view/caret-line.js) is made by that document, and its keys reach the host as
-// its header says: undo and redo (Mod-z, Mod-Shift-z, Mod-y) are asked of onKey. Headless Chromium, the module
+// its header says: undo and redo (Mod-z, Mod-Shift-z, Mod-y) are asked of onKey, once each, for the right one (on
+// Linux, Ctrl-Shift-z with the key as a lowercase 'z' was taken for undo). Headless Chromium, the module
 // bundled into the page (esbuild), no app.
 //
 //   node tests/test-editor-frame.ts
@@ -51,6 +52,31 @@ await frame.locator('.cm-content').click();
 for (const k of ['Meta+z', 'Meta+Shift+z', 'Meta+y', 'Control+z', 'Control+Shift+z', 'Control+y']) await page.keyboard.press(k);
 const keys: string[] = await page.evaluate(() => (window as any).keys);
 check('undo and redo are asked of onKey (Mod-z, Mod-Shift-z, Mod-y)', keys.filter((k) => k === 'undo').length >= 1 && keys.filter((k) => k === 'redo').length >= 2, keys);
+// on Linux and Windows (Mod is Ctrl): each key asks onKey once, for its own command only
+{
+  const pg = await browser.newPage({ viewport: { width: 900, height: 600 } });
+  pg.on('pageerror', (e: Error) => check('no page error', false, e.message));
+  await pg.addInitScript(() => { Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'Linux x86_64' }); });
+  await pg.goto('about:blank');
+  await pg.setContent('<!doctype html><html><head><meta charset="utf-8"></head><body><div id="host"></div></body></html>');
+  await pg.addScriptTag({ content: out.outputFiles[0].text });
+  await pg.evaluate(() => {
+    const w = window as any;
+    w.keys = [] as string[];
+    w.ed = w.createEditor(document.getElementById('host'), { doc: 'abc', onKey: (name: string) => { w.keys.push(name); return name === 'undo' || name === 'redo'; } });
+    w.ed.view.focus();
+  });
+  const asked: Record<string, string[]> = {};
+  for (const k of ['Control+z', 'Control+Shift+z', 'Control+Shift+Z', 'Control+y']) {
+    await pg.evaluate(() => { (window as any).keys = []; });
+    await pg.keyboard.press(k);
+    asked[k] = await pg.evaluate(() => (window as any).keys);
+  }
+  const text = await pg.evaluate(() => (window as any).ed.text);
+  check('Ctrl: z asks undo; Shift-z and y ask redo, once each and nothing else', JSON.stringify(asked) === JSON.stringify({ 'Control+z': ['undo'], 'Control+Shift+z': ['redo'], 'Control+Shift+Z': ['redo'], 'Control+y': ['redo'] }), asked);
+  check('and the text is untouched (no undo of the browser\'s or CodeMirror\'s own)', text === 'abc', text);
+  await pg.close();
+}
 await browser.close();
 console.log(`\n${n - failed}/${n} passed`);
 process.exit(failed ? 1 : 0);
