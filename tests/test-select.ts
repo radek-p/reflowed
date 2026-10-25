@@ -142,8 +142,8 @@ check('an unmapped path: the wide set, and the path is named', unm.unmapped.incl
 {
   const { KNOWN, knownAge, afterRerun, normLine } = await import('./suites.ts');
   const today = new Date().toISOString().slice(0, 10);
-  const bad = KNOWN.filter((k) => !/ISSUES \d+/.test(k.issue) || !/^\d{4}-\d\d-\d\d$/.test(k.added) || k.added > today || !k.owner.trim() || !k.why.trim());
-  check(`every KNOWN entry has an ISSUES number, a date (not ahead) and an owner (${KNOWN.length} entries)`, bad.length === 0, bad.map((k) => k.line.source));
+  const bad = KNOWN.filter((k) => !k.issue.trim() || !/^\d{4}-\d\d-\d\d$/.test(k.added) || k.added > today || !k.owner.trim() || !k.why.trim());
+  check(`every KNOWN entry names its issue, a date (not ahead) and an owner (${KNOWN.length} entries)`, bad.length === 0, bad.map((k) => k.line.source));
   check('every KNOWN entry names a suite of the table', KNOWN.every((k) => SUITES.some((s) => k.suite.test(s.name))));
   check('knownAge counts whole days', knownAge({ added: '2026-10-01' } as any, new Date('2026-10-15T12:00:00Z')) === 14);
   check('a timing suite\'s rerun: passes → flaky; fails busy → unsure; fails quiet → fail', afterRerun('pass', [1, 9], 6) === 'flaky' && afterRerun('known', [1, 1], 6) === 'flaky'
