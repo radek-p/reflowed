@@ -2,8 +2,8 @@
 //  hovering or focusing a block's drag handle marks the block it moves (the selection's background, softer, in
 //       light, dark and sepia); leave or blur removes it; a container marks all its paragraphs; both panes; no layout change.
 //  the top bar does not change while the page scrolls: a 3 s wheel scroll through the long test document (the intro repeated) changes no class or
-//       style in the bar, and nothing in it but the crumbs moves (the save state used to follow the section name); the
-//       bar is its own compositor layer.
+//       style in the bar, and nothing in it but the crumbs moves (its buttons keep their place: a save state beside the
+//       section name used to follow it; the save state is now on the tab); the bar is its own compositor layer.
 //
 //   node tests/test-chrome.ts [http://localhost:8152/] [--only 133|132]
 import { createRequire } from 'node:module';
@@ -171,7 +171,8 @@ if (!ONLY || ONLY === '132') {
     return { changes: w.__styleChanges, places: Object.fromEntries(Object.entries(w.__places).map(([k, v]: any) => [k, [...v]])), sections: [...w.__sections], y: scrollY }; });
   check('the scroll passed several sections (the crumbs changed)', r.sections.length >= 3, { steps, sections: r.sections });
   check('no class or style change in the top bar during the scroll (beyond the first)', r.changes.length <= 1, r.changes);
-  check('the save state and the buttons keep their place', Object.values(r.places).every((v: any) => v.length === 1) && Object.keys(r.places).length >= 3, r.places);
+  // (the bar has no save state: it is on the tab, tests/test-mobile-chrome.ts; the bar's own places are its two buttons)
+  check('the buttons keep their place', Object.values(r.places).every((v: any) => v.length === 1) && ['btn-view', 'btn-doc-menu'].every((k) => k in r.places), r.places);
   const bar = layers.filter((l) => l.backendNodeId === node.backendNodeId);
   check('the top bar is its own compositor layer', bar.length === 1, { layers: layers.length, bar: bar.length });
   await ctx.close();
