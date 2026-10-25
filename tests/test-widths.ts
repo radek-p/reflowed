@@ -16,7 +16,8 @@
 //   - the end of a side column's slide (one pane, a narrow window): no long task from the workbench's resizeend until
 //     its work is done (the column applied, then the re-break, in tasks of their own), and no column variables on
 //     <body> (they restyled the page outside the panes at every slide's end);
-//   - a column width picked in View (its eased motion), narrower and back;
+//   - a column width picked in View (its eased motion), narrower and back; narrower once more with the blocks in view
+//     re-broken in one task (?wstep), as a fast machine does them;
 //   - reduced motion: no motion, no cross-fade, each block re-broken at most once.
 // Waits on the governor's and the viewer's idle promises and frames, never on fixed times. Long tasks are counted in the
 // main thread's CPU time (tests/qa/lib/work.ts); --timing-strict counts them by the clock.
@@ -51,14 +52,14 @@ function check(name: string, ok: boolean, detail: unknown = '') {
 const browser = await chromium.launch();
 const problems: string[] = [];
 
-async function open(doc: string, { width = 1440, height = 900, reduced = false, advanced = false } = {}) {
+async function open(doc: string, { width = 1440, height = 900, reduced = false, advanced = false, query = '' } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height }, reducedMotion: reduced ? 'reduce' : 'no-preference' });
   // the justification switch is an advanced feature: its value is the default while the switch is off
   if (advanced) await ctx.addInitScript(() => { try { localStorage.setItem('rtx-editor.advanced', '1'); } catch { /* */ } });
   const page = await ctx.newPage();
   page.on('pageerror', (e: any) => problems.push(`pageerror: ${e.message}`));
   page.setDefaultTimeout(240000);
-  await page.goto(`${BASE}?engine&${seedQuery(doc)}store=memory#/doc/${doc}`);
+  await page.goto(`${BASE}?engine&${seedQuery(doc)}${query}store=memory#/doc/${doc}`);
   await page.waitForFunction(() => (window as any).editorAPI?.whenIdle && document.querySelectorAll('[data-part="page"] .blocks > .blk').length > 20);
   await page.evaluate(() => (window as any).editorAPI.whenIdle());
   PA = idOf(await paneA(page)); PB = '';
@@ -198,7 +199,7 @@ const sidebarBtn = (page: any) => page.evaluate(() => (window as any).editorAPI.
 const SWITCH_MS = 150, HEAVY_MS = 100;
 // the limits in CPU time are scaled by the host's factor (calibrate); the clock's, with --timing-strict, are not
 const LIM = (ms: number) => (TIMING_STRICT ? ms : budget(ms)), L = (ms: number) => (TIMING_STRICT ? `${ms} ms` : lim(ms));
-async function measure(page: any, tag: string, act: () => Promise<unknown>, { reduced = false, narrowing = false, locked = false, anchorPanes = null as string[] | null, switching = false } = {}) {
+async function measure(page: any, tag: string, act: () => Promise<unknown>, { reduced = false, narrowing = false, locked = false, anchorPanes = null as string[] | null, switching = false, timed = true } = {}) {
   await calibrate(page);                                       // the factor before the window (re-measured after 30 s)
   await settled(page); await idle(page); await frames(page, 3);
   const a0 = await page.evaluate(() => (window as any).__wt.anchors());
@@ -222,7 +223,7 @@ async function measure(page: any, tag: string, act: () => Promise<unknown>, { re
   const allowed: string[] = [];
   if (switching) { const k = rest.filter((d: number) => d <= LIM(SWITCH_MS)).slice(0, 2); if (k.length) allowed.push(`switch ${k.join('/')}`); for (const d of k) rest.splice(rest.indexOf(d), 1); }
   if (heavyN) { const k = rest.filter((d: number) => d <= LIM(HEAVY_MS)).slice(0, heavyN); if (k.length) allowed.push(`heavy ${k.join('/')}`); for (const d of k) rest.splice(rest.indexOf(d), 1); }
-  gate(check, `${tag}: no long task (> ${L(LONG_MS)})${allowed.length ? ` (allowance: ${allowed.join(', ')})` : ''}`, rest.length === 0, { long: r.long, rebreakMs, sliceMs: Math.max(0, ...ws.slices.map((f: any) => f.ms)) });
+  if (timed) gate(check, `${tag}: no long task (> ${L(LONG_MS)})${allowed.length ? ` (allowance: ${allowed.join(', ')})` : ''}`, rest.length === 0, { long: r.long, rebreakMs, sliceMs: Math.max(0, ...ws.slices.map((f: any) => f.ms)) });
   check(`${tag}: per frame, the blocks laid out again ≤ the blocks in view (max ${Math.max(0, ...r.frames.map((f: any) => f.layouts))}; the viewer's own resize path ${r.quick})`,
     over.length === 0 && r.quick === 0, { over: over.slice(0, 5), frames: r.frames.length, quick: r.quick });
   if (panes.length) check(`${tag}: the reading point within 1 px (${JSON.stringify(drift)})`, Object.values(drift).length > 0 && Object.values(drift).every((d) => d != null && Math.abs(d) <= 1), { drift, a0 });
@@ -322,6 +323,13 @@ for (const doc of DOCS) {
     await measure(page, `${doc}: a narrow column picked`, () => pick('narrow'), { narrowing: true });
     await measure(page, `${doc}: the column back (${w0})`, () => pick(w0));
     await ctx.close();
+    // the blocks in view re-broken in one task (?wstep: as a fast machine does them): the panes' keepers put the page
+    // back only in a microtask after them, so the idle slices must not take their size from the page as that task left it
+    // (no long-task check: one task for every block in view is this case's premise, not the product's budget)
+    const one = await open(doc, { query: 'wstep=1000&' });
+    await scrollMid(one.page); await frames(one.page, 3);
+    await measure(one.page, `${doc}: a narrow column picked, the blocks in view in one task`, () => one.page.evaluate(() => (window as any).editorAPI.view().set({ width: 'narrow' }, { animate: true })), { narrowing: true, timed: false });
+    await one.ctx.close();
   }
   // ── split on: pane B comes with its blocks' shells; its views come later, those in view first (pane A's views
   //    made all at once in the switch's task were one 600 ms task for a 30-block document: panes/lazy-views.js) ──

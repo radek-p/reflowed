@@ -65,6 +65,8 @@ const QUIET_FRAMES = 2, QUIET_MS = 120;   // a window resize is over when no res
                                      // and this long (a frame dropped under load is not a pause: no re-break mid-drag)
 const SKIP = !/[?&]wskip=0/.test(location.search);   // (dev: ?wskip=0 compares without the skipping)
 const FAR = Number(/[?&]wfar=([\d.]+)/.exec(location.search)?.[1] ?? 1);   // (dev) how many views away a block is far
+const STEP_MS = Number(/[?&]wstep=([\d.]+)/.exec(location.search)?.[1] ?? BUDGET_MS);   // (dev) a settle's budget a frame (tests: the
+                                     // blocks in view in one task, as a fast machine does them)
 const SEL = ':scope > .blk:not(.rtx-fit) > .blk-main > .blk-render:not([hidden]) > .latex-block:not(.incoming):not(.rtx-w-ghost)';
 const now = () => performance.now();
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
@@ -80,7 +82,6 @@ export function createWidths({ panes, relayout, laidAt = null, state = null, red
   let idleH = 0, dragging = false, raf = 0, waiters = [], disposed = false, moving = 0, held = 0;   // held: transitions and settles not done yet
   let gen = 0;                       // changes begun: a settle stops when a newer one begins
   let holds = 0;                     // motions of the widths under way (hold, release)
-  let shown = 1;                     // the blocks in view at the last survey: an idle slice re-breaks no more than that
   const st = { rebroken: 0, lazy: 0, ghosts: 0, frames: [], slices: [], pins: [] };
   const cost = new WeakMap();        // viewer element -> its last re-break, ms (a drag leaves the heavy ones to its end)
   let nextH = 0;                     // the frame after a slice or a settle's last step: one batch of re-breaks a frame
@@ -245,18 +246,15 @@ export function createWidths({ panes, relayout, laidAt = null, state = null, red
    *  in its pane's box and wider than its column; the gone ones dropped */
   function survey() {
     const out = [];
-    let vis = 0;
     for (const [el, rec] of [...pinned]) {
       if (!el.isConnected || !rec.render.isConnected) { unpin(el, rec); continue; }
       const r = rec.render.getBoundingClientRect(), b = rec.pane.box();
       const want = r.width / rec.zoom;
-      vis += r.height > 0 && r.bottom > b.top && r.top < b.bottom ? 1 : 0;
       // the same: let go as it is (a width the viewer laid out at itself: within the half px its clientWidth rounds)
       const same = !rec.force && (!rec.held || Math.abs(want - rec.px) < (rec.cached ? 0.45 : 0.05));
       out.push({ el, rec, want, same, vis: r.height > 0 && r.bottom > b.top && r.top < b.bottom,
         d: Math.abs(r.top - b.top), over: rec.held && rec.px > want + 0.5, top: el.offsetTop, left: el.offsetLeft });
     }
-    if (out.length) shown = Math.max(1, vis);
     return out;
   }
   /** the soft edge where a pinned block is wider than its column now (a narrowing pane) */
@@ -300,7 +298,7 @@ export function createWidths({ panes, relayout, laidAt = null, state = null, red
         const t0 = now();
         const touched = new Set();
         let n = 0;
-        while (vis.length && (!n || now() - t0 < BUDGET_MS)) {
+        while (vis.length && (!n || now() - t0 < STEP_MS)) {
           const x = vis.shift();
           if (!pinned.has(x.el) || !x.el.isConnected) continue;
           const g = fading ? ghost(x) : null;
@@ -312,7 +310,6 @@ export function createWidths({ panes, relayout, laidAt = null, state = null, red
         keep(st.frames, 600);
         if (vis.length && !disposed) { requestAnimationFrame(step); return; }
         held--;
-        countShown();
         nextFrameSchedule();                  // the lazy slices from the next frame on (in this frame's idle time, a slice
         res();                                // doubled the re-breaks of the frame that re-broke the blocks in view)
       };
@@ -340,6 +337,9 @@ export function createWidths({ panes, relayout, laidAt = null, state = null, red
     const t0 = now();
     const budget = Math.min(BUDGET_MS, Math.max(2, deadline?.timeRemaining?.() ?? BUDGET_MS));
     const order = [...pinned].sort((a, b) => b[1].near - a[1].near);
+    // no more than the blocks in view now, counted here: at a settle's end the keepers had not put the page back yet
+    // (their hold is a microtask), and the viewer's own slices change heights after it
+    const shown = countShown();
     // the heights first (one read pass: as many as the slice can take), then the re-breaks: one out of view keeps its
     // height (its render's) until the last slice
     const hs = order.slice(0, shown).map(([, rec]) => (tall.has(rec.render) ? 0 : rec.render.getBoundingClientRect().height));
@@ -364,17 +364,18 @@ export function createWidths({ panes, relayout, laidAt = null, state = null, red
     ios.clear();
     for (const fn of waiters.splice(0)) fn();
   }
-  /** the typeset blocks in view in every pane now (after the re-breaks: a narrower column holds fewer) */
+  /** the typeset blocks in view in every pane now (after the re-breaks: a narrower column holds fewer), at least 1; a
+   *  block in view as survey() has it: its render's box in the pane's (a render held at its old height clips its block) */
   function countShown() {
     let n = 0;
     for (const p of panes()) {
       const b = p.box();
       for (const el of p.view.container?.querySelectorAll(':scope > .blk > .blk-main > .blk-render > .latex-block:not(.rtx-w-ghost)') ?? []) {
-        const r = el.getBoundingClientRect();
+        const r = el.parentElement.getBoundingClientRect();
         if (r.height > 0 && r.bottom > b.top && r.top < b.bottom) n++;
       }
     }
-    shown = Math.max(1, n);
+    return Math.max(1, n);
   }
 
   // ── a live drag: the blocks in view, the reader's place first, within the frame's budget ──
