@@ -102,9 +102,10 @@ export function createBibPane({ h }) {
     const line = (sig) => (sig ? `%rtxbib:${sig}` : '');                 // nothing while unchanged: the keys (and seed cache) stay
     if (block.kind === 'bibliography' || PRINTS_BIB.test(block.source)) return line(bibSignature(d.bib));
     if (!block.source.includes('cite')) return '';
-    const keys = [...new Set(scanCites(block.source).flatMap((c) => c.keys))];
+    const cites = scanCites(block.source);
+    if (cites.some((c) => c.all)) return line(bibSignature(d.bib));      // \nocite{*}: every entry
+    const keys = [...new Set(cites.flatMap((c) => c.keys))];
     if (!keys.length) return '';
-    if (keys.includes('*')) return line(bibSignature(d.bib));
     return line(citeSignature(d.bib, keys));
   }
   /** Entries refs does not know (a bibtex document's \bibitem's in doc.bib, a .bib), for autocomplete and problems. */

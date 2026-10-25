@@ -26,5 +26,15 @@ const both = (a: string[], b: string[]) => a.join() === b.join();
 check('cites: texscan = refs/scan', both((scanCites(src) as { cmd: string }[]).map((c) => c.cmd), s.cites.map((c) => c.cmd)), [scanCites(src), s.cites]);
 check('refs: texscan = refs/scan', both((scanRefs(src) as { cmd: string }[]).map((c) => c.cmd), s.refs.map((c) => c.cmd)), [scanRefs(src), s.refs]);
 
+// \nocite{*} cites every entry (BibTeX's and biber's rule): `*` is never a key (the editor marked it "not in the
+// bibliography"); `all` says it was there (the References pane's citation context). The same keys as refs/scan.ts
+type Cite = { keys: string[]; all: boolean };
+const star = scanCites('\\nocite{*}') as Cite[], starA = scanCites('\\nocite{ * , a}') as Cite[], plain = scanCites('\\cite{a,b}') as Cite[];
+check('scanCites: \\nocite{*} has no key, and cites every entry', star.length === 1 && star[0].keys.length === 0 && star[0].all === true, star);
+check('scanCites: \\nocite{*,a} has the key a, and cites every entry', starA[0]?.keys.join() === 'a' && starA[0].all === true, starA);
+check('scanCites: \\cite{a,b} does not cite every entry', plain[0]?.keys.join() === 'a,b' && plain[0].all === false, plain);
+const keysSrc = '\\nocite{*} \\nocite{*,a} \\cite[p.~2]{b, c}';
+check('cite keys: texscan = refs/scan', both((scanCites(keysSrc) as Cite[]).map((c) => c.keys.join()), scanSource(keysSrc).cites.map((c) => c.keys.join())), [scanCites(keysSrc), scanSource(keysSrc).cites]);
+
 console.log(`\n${n - bad}/${n} checks passed`);
 process.exit(bad ? 1 : 0);

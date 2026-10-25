@@ -232,7 +232,7 @@ export function createPanels(c: PanelsContext) {
       ${e.title ? html`<div class="hc-body">${`${e.title}${e.venue ? `. ${e.venue}` : ''}${e.year ? `, ${e.year}` : ''}.`}</div>` : null}
       <div class="hc-foot">${k.key}</div>`;
   }
-  interface Ref { offset: number; length: number }
+  interface Ref { offset: number; length: number; keys: string[] }
   function marksFor(_blockId: string, text: string) {
     const s = source();
     const labels = labelsOf(s);
@@ -243,10 +243,12 @@ export function createPanels(c: PanelsContext) {
       const seg = text.slice(r.offset, r.offset + r.length);
       const open = seg.lastIndexOf('{', seg.lastIndexOf('}'));
       let at = r.offset + open + 1;
-      return seg.slice(open + 1, seg.lastIndexOf('}')).split(',').map((part) => { const lead = part.length - part.trimStart().length; const k = { key: part.trim(), from: at + lead, to: at + lead + part.trim().length }; at += part.length + 1; return k; });
+      // where each key the scan found stands (the scan's rule: a citation's `*` is every entry, never a key)
+      return seg.slice(open + 1, seg.lastIndexOf('}')).split(',').map((part) => { const lead = part.length - part.trimStart().length; const k = { key: part.trim(), from: at + lead, to: at + lead + part.trim().length }; at += part.length + 1; return k; })
+        .filter((k) => r.keys.includes(k.key));
     };
-    for (const r of scanRefs(text) as Ref[]) for (const k of keysIn(r)) if (k.key && !labels[k.key]) out.push({ from: k.from, to: k.to, cls: 'cm-bad-ref', title: `No label ${k.key}` });
-    if (checkCites) for (const r of scanCites(text) as Ref[]) for (const k of keysIn(r)) if (k.key && !bib[k.key]) out.push({ from: k.from, to: k.to, cls: 'cm-bad-ref', title: `${k.key} is not in the bibliography` });
+    for (const r of scanRefs(text) as Ref[]) for (const k of keysIn(r)) if (!labels[k.key]) out.push({ from: k.from, to: k.to, cls: 'cm-bad-ref', title: `No label ${k.key}` });
+    if (checkCites) for (const r of scanCites(text) as Ref[]) for (const k of keysIn(r)) if (!bib[k.key]) out.push({ from: k.from, to: k.to, cls: 'cm-bad-ref', title: `${k.key} is not in the bibliography` });
     return out;
   }
 

@@ -5,7 +5,7 @@
 // source as given (UTF-16).
 
 import { blankComments } from './lex.ts';
-import { HEADINGS, REF_NAMES, CITE_NAMES } from '../refs/scan.ts';
+import { HEADINGS, REF_NAMES, CITE_NAMES, citeKeys } from '../refs/scan.ts';
 /** The source with every comment replaced by spaces (offsets kept). The rule: tex/lex.ts. */
 export { blankComments };
 
@@ -133,20 +133,23 @@ const REFNAMES = { section: 'Section', subsection: 'Section', subsubsection: 'Se
 export const REF_CMDS = REF_NAMES;
 export const CITE_CMDS = CITE_NAMES;
 
-function scanKeyed(src, cmds, maxOpt) {
+// cite: a citation's keys by refs/scan.ts's rule (citeKeys: `*` is every entry, never a key; `all` says it was there)
+function scanKeyed(src, cmds, maxOpt, cite = false) {
   const s = blankComments(src), out = [];
   const re = new RegExp(`\\\\(${cmds.join('|')})\\*?(?![a-zA-Z])`, 'g');
   let m;
   while ((m = re.exec(s))) {
     const a = readArgs(s, re.lastIndex, { opt: maxOpt, req: m[1].endsWith('range') ? 2 : 1 });
     if (!a.reqs.length) continue;
+    if (cite) { const { keys, all } = citeKeys(a.reqs.join(',')); out.push({ cmd: m[1], keys, all, offset: m.index, length: a.end - m.index }); continue; }
     const keys = a.reqs.flatMap((r) => r.split(',')).map((k) => k.trim()).filter(Boolean);
     out.push({ cmd: m[1], keys, offset: m.index, length: a.end - m.index });
   }
   return out;
 }
 export const scanRefs = (src) => scanKeyed(src, REF_CMDS, 0);
-export const scanCites = (src) => scanKeyed(src, CITE_CMDS, 2);
+/** citations: { cmd, keys, all (\nocite{*}: every entry), offset, length } */
+export const scanCites = (src) => scanKeyed(src, CITE_CMDS, 2, true);
 
 /** \bibitem[label]{key} text  (a thebibliography block). */
 export function scanBibitems(src) {

@@ -70,6 +70,12 @@ function optArg(s: string, i: number): string | null {
 export const HEADINGS = ['part', 'chapter', 'section', 'subsection', 'subsubsection', 'paragraph', 'subparagraph'];
 export const REF_NAMES = ['ref', 'eqref', 'autoref', 'Autoref', 'cref', 'Cref', 'pageref', 'nameref', 'crefrange', 'Crefrange', 'labelcref', 'cpageref', 'Cpageref', 'vref', 'Vref'];
 export const CITE_NAMES = ['[a-zA-Z]*cite[a-zA-Z]*', 'nocite'];
+/** A citation's keys from its argument ("a, b"): `*` (\nocite{*}) is every entry of the bibliography (BibTeX's and
+ *  biber's rule), never a key; `all` says it was there (tex/texscan.js reads citations by this rule too). */
+export function citeKeys(arg: string): { keys: string[]; all: boolean } {
+  const parts = arg.split(',').map((x) => x.trim()).filter(Boolean);
+  return { keys: parts.filter((k) => k !== '*'), all: parts.includes('*') };
+}
 const REF_CMDS = new RegExp(`\\\\(${REF_NAMES.join('|')})\\*?(?=\\s*[{[])`, 'g');
 const CITE_CMDS = new RegExp(`\\\\(${CITE_NAMES.join('|')})\\*?(?=\\s*[{[])`, 'g');
 const NOT_THEOREM = new Set(['equation', 'equation*', 'align', 'align*', 'gather', 'gather*', 'multline', 'multline*', 'itemize',
@@ -123,7 +129,7 @@ export function scanSource(source: string): SourceScan {
   while ((m = CITE_CMDS.exec(s))) {
     const a = argAfter(s, m.index + m[0].length);
     if (!a) continue;
-    const keys = a[0].split(',').map((x) => x.trim()).filter((k) => k && k !== '*');
+    const { keys } = citeKeys(a[0]);
     out.cites.push({ cmd: m[1], keys, offset: m.index, length: a[1] - m.index });
   }
   const head = new RegExp(`\\\\(${HEADINGS.join('|')})(\\*?)(?=\\s*[{[])`, 'g');
