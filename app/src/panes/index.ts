@@ -38,7 +38,7 @@ import { createDocumentView } from '../docview/document-view.js';
 import { mountSplitChrome } from '../docview/split-chrome.js';
 import { createPane } from './pane.ts';
 import { createWidths } from './widths.js';
-import { relayout, laidAt } from '../view/viewer-bridge.js';
+import { relayout, laidAt } from '../view/viewer-host.ts';
 import { lineAnchor } from '../view/line-anchor.ts';
 import { mountViewPane } from './view-pane.js';
 import type { EditorRoot } from '../app/editor-root.ts';

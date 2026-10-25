@@ -97,7 +97,7 @@ export function clearLayout(el) {
 // brace or `$` between, dimmer; else hidden: a caret in a command name
 // (`\tex|tbf`) marks nothing rather than guess. Height: the font's
 // ascender to descender (0.75 / 0.25 of its size) at the glyph used.
-import { laidCount, laidKind, segmentSvg } from './viewer-bridge.js';
+import { blockOf, layoutGeneration, spToPx } from './viewer-host.ts';
 import { screenCTM } from './screen-ctm.ts';
 import { drawnGlyphs, sourcePositionFor, toSourceOffset } from '../../../engine/api/src/sourcemap.ts';
 import { guardedBlockGlyphOffsets, guardedLocate } from '../../../engine/api/src/sourcemap-guard.ts';
@@ -106,7 +106,7 @@ import { definitionSpans } from '../tex/definitions.ts';
 import { shownBlock } from './shown.ts';
 import { visibleBox } from '../../../workbench/src/viewport.ts';
 
-const glyphCache = new WeakMap();        // latex-block element -> { compiled, paints, glyphs, method }
+const glyphCache = new WeakMap();        // latex-block element -> { compiled, gen, glyphs, method }
 // a segment's screen matrix, read once per burst of glyph boxes (a click's hit test, a caret mark): the
 // boxes of one call are read with nothing laid out between them (one getScreenCTM per glyph was ~8 ms of a click
 // on a long paragraph). Cleared at the start of each such call and after it (a microtask).
@@ -123,32 +123,32 @@ const ALNUM = /[\p{L}\p{N}]/u;
 const letters = (s) => [...s.normalize('NFKD')].filter((c) => ALNUM.test(c)).map((c) => c.toLowerCase());
 
 /** each drawn glyph: { off, line, box() -> { left, right, top, bottom } in client px } */
-function exactGlyphs(el, st, ins, sm, compiled) {
-  const drawn = drawnGlyphs(ins, el);
-  const { glyphs: offs } = guardedBlockGlyphOffsets(sm, st.doc, drawn, compiled, { file: sm.file, firstLine: sm.firstLine ?? 1 });
-  const size = new Map((st.doc.fonts ?? []).map((f) => [f.id, (f.size_sp || 655360) * ins.spToPx]));
-  const gm = st.doc.glyph_metrics ?? [];
+function exactGlyphs(el, blk, sm, compiled) {
+  const doc = blk.document, segs = blk.segments(), sp = spToPx();
+  const drawn = drawnGlyphs(segs);
+  const { glyphs: offs } = guardedBlockGlyphOffsets(sm, doc, drawn, compiled, { file: sm.file, firstLine: sm.firstLine ?? 1 });
+  const size = new Map((doc.fonts ?? []).map((f) => [f.id, (f.size_sp || 655360) * sp]));
+  const gm = doc.glyph_metrics ?? [];
   const boxes = [];
-  const nLaid = laidCount(el);                              // through view/viewer-bridge.js
-  for (let i = 0; i < nLaid; i++) {
+  for (let i = 0; i < segs.length; i++) {
     let line = -1;
     // maths: a display, or between TeX's math nodes on a line (the capture keeps them)
-    const display = laidKind(el, i) === 'display';
+    const display = segs[i].kind === 'display';
     let inMath = false;
-    ins.replay(el, i, {
+    segs[i].walk({
       line(j) { line = j; },
       node(n, x, y, adv) {
         if (n.type === 'math') { inMath = !inMath; return; }
         if (n.type !== 'glyph') return;
         const m = gm[(n.metrics || 0) - 1] ?? {};
         boxes.push({ math: display,   // glyph boxes in displays only; inline maths selects with its line (inMath kept for later)
-         inline: inMath, ch: String.fromCodePoint(n.char || 32), seg: i, line: `${i}:${line}`, x, y, adv: Math.max(adv, 0.5), s: size.get(n.font) ?? 10 * 65536 * ins.spToPx,
-          h: (n.height ?? m.height ?? 0) * ins.spToPx, d: (n.depth ?? m.depth ?? 0) * ins.spToPx });
+         inline: inMath, ch: String.fromCodePoint(n.char || 32), seg: i, line: `${i}:${line}`, x, y, adv: Math.max(adv, 0.5), s: size.get(n.font) ?? 10 * 65536 * sp,
+          h: (n.height ?? m.height ?? 0) * sp, d: (n.depth ?? m.depth ?? 0) * sp });
       },
     });
   }
   const map = (b, x0, y0, x1, y1) => {
-    const m = b && ctmOf(segmentSvg(el, b.seg));
+    const m = b && ctmOf(segs[b.seg]?.svg);
     if (!m) return null;
     // the affine map by hand (two DOMPoints per glyph were most of a long paragraph's hit test)
     const ax = m.a * x0 + m.c * y0 + m.e, ay = m.b * x0 + m.d * y0 + m.f, bx = m.a * x1 + m.c * y1 + m.e, by = m.b * x1 + m.d * y1 + m.f;
@@ -158,7 +158,7 @@ function exactGlyphs(el, st, ins, sm, compiled) {
   const via = new Map();
   offs.forEach((off, k) => {
     if (off >= 0) return;
-    const at = guardedLocate(sm, st.doc, drawn[k]);
+    const at = guardedLocate(sm, doc, drawn[k]);
     const p = at && sourcePositionFor(sm, at);
     if (!p || !p.viaMacro || (sm.file && p.file !== sm.file)) return;
     const m = toSourceOffset(p, compiled, sm.firstLine ?? 1);
@@ -295,12 +295,10 @@ export function caretPlace(glyphs, compiled, c) {
 export function markCaret(renderEl, result, compiled, text, caret, sel = null) {
   freshBoxes();
   const clear = () => renderEl.querySelectorAll('.rtx-caret-bar, .rtx-sel-band, .rtx-line-band').forEach((m) => m.remove());
-  const ins = window.reflowtex?.inspect;
   const el = shownBlock(renderEl);
-  if (!ins || !el || caret == null || compiled == null) { clear(); return null; }
-  const st = ins.state(el);
-  if (!st?.doc) { clear(); return null; }
-  const c = mapFor(el, st, ins, result, compiled);
+  const blk = blockOf(el);
+  if (!blk || caret == null || compiled == null) { clear(); return null; }
+  const c = mapFor(el, blk, result, compiled);
   const p = caretPlace(c.glyphs, compiled, carryCaret(compiled, text, caret));
   clear();
   const base = renderEl.getBoundingClientRect();
@@ -508,15 +506,17 @@ export function floatIfLarge(u, room = visibleBox().bottom) {
 }
 
 /** The caret map of a block element for the source it was compiled from (cached per render and paint). */
-function mapFor(el, st, ins, result, compiled) {
+function mapFor(el, blk, result, compiled) {
   const sm = result?.sourcemap;
   let c = glyphCache.get(el);
-  if (!c || c.compiled !== compiled || c.paints !== ins.paints) {
+  // made again when the block was laid out again or drew more of its lines (its 'layout' event)
+  const gen = layoutGeneration(el);
+  if (!c || c.compiled !== compiled || c.gen !== gen) {
     const method = sm?.items ? 'engine' : 'fuzzy';
     let glyphs = [];
-    try { glyphs = method === 'engine' ? exactGlyphs(el, st, ins, sm, compiled) : fuzzyGlyphs(el, compiled); } catch (e) { console.warn('caret map:', e.message); }
-    c = { compiled, paints: ins.paints, glyphs, method, sm: sm ? { file: sm.file, firstLine: sm.firstLine, files: sm.files } : null,
-      raw: () => { const d = drawnGlyphs(ins, el).slice(0, 12); return d.map((n) => { const at = guardedLocate(sm, st.doc, n); const p = at && sourcePositionFor(sm, at); return p ? `${String.fromCodePoint(n.char || 32)}:${p.file}:${p.line}:${p.column}${p.viaMacro ? 'v' : ''}` : `${String.fromCodePoint(n.char || 32)}:-`; }); } };
+    try { glyphs = method === 'engine' ? exactGlyphs(el, blk, sm, compiled) : fuzzyGlyphs(el, compiled); } catch (e) { console.warn('caret map:', e.message); }
+    c = { compiled, gen, glyphs, method, sm: sm ? { file: sm.file, firstLine: sm.firstLine, files: sm.files } : null,
+      raw: () => { const d = drawnGlyphs(blk.segments()).slice(0, 12); return d.map((n) => { const at = guardedLocate(sm, blk.document, n); const p = at && sourcePositionFor(sm, at); return p ? `${String.fromCodePoint(n.char || 32)}:${p.file}:${p.line}:${p.column}${p.viaMacro ? 'v' : ''}` : `${String.fromCodePoint(n.char || 32)}:-`; }); } };
     glyphCache.set(el, c);
   }
   return c;
@@ -560,23 +560,19 @@ function spanOf(g, compiled) {
 /** the caret map of a render made ahead (in idle time, when the pointer comes over a block): the click that
  *  opens the editor then finds it cached (a long paragraph's map is tens of ms of the open's task otherwise) */
 export function warmMap(renderEl, result, compiled) {
-  const ins = window.reflowtex?.inspect;
   const el = shownBlock(renderEl);
-  if (!ins || !el || compiled == null) return false;
-  const st = ins.state(el);
-  if (!st?.doc) return false;
-  mapFor(el, st, ins, result, compiled);
+  const blk = blockOf(el);
+  if (!blk || compiled == null) return false;
+  mapFor(el, blk, result, compiled);
   return true;
 }
 
 export function offsetAt(renderEl, result, compiled, text, x, y) {
   freshBoxes();
-  const ins = window.reflowtex?.inspect;
   const el = shownBlock(renderEl);
-  if (!ins || !el || compiled == null) return null;
-  const st = ins.state(el);
-  if (!st?.doc) return null;
-  const { glyphs, method } = mapFor(el, st, ins, result, compiled);
+  const blk = blockOf(el);
+  if (!blk || compiled == null) return null;
+  const { glyphs, method } = mapFor(el, blk, result, compiled);
   // only on the engine's map: the fuzzy one (a backend without a sourcemap) has no lines to rely on, and
   // app/source-position.js's click paths are better there
   if (method !== 'engine') return null;

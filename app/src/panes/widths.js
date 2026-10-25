@@ -20,7 +20,7 @@
 //     slice lets them all go in one write (one change of the scroll height, one correction by the panes' anchor keepers,
 //     perf/anchor.js); one the reader comes near (it enters the observer's margin) goes at once.
 //
-// A re-break is the viewer's own layout at the element's new width (view/viewer-bridge.js relayout), run at once in
+// A re-break is the viewer's own layout at the element's new width (view/viewer-host.ts relayout: Block.relayout), run at once in
 // our task, so its ResizeObserver then finds nothing to do. The width a block would have is read from its render
 // (the column: never pinned), so finding which blocks changed costs one layout read, no writes. Fitted blocks
 // are never pinned: their editor lays them out. A block being edited is held like the others (its lines, and so its

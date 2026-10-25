@@ -20,7 +20,7 @@ import { signal } from '@preact/signals';
 import { createPopover } from './popover.ts';
 import { mountViewButton } from './view-button.js';
 import { installBlink } from './blink.js';
-import { inspect, relayout, sourceWidthPt } from './viewer-bridge.js';
+import { blockEls, relayout, sourceWidthPt } from './viewer-host.ts';
 import { registerColourMap } from './colour-maps.js';
 import { createTextwidth } from './textwidth.js';
 import { decide, applyLayout, clearLayout, markCaret, slide, caretMap, keepCaretInView, updateFades, offsetAt, floatIfLarge, clearMirrors, pulse, warmMap } from './edit-layout.js';
@@ -183,7 +183,7 @@ export async function installView() {
     // through panes/widths.js (set by main.js): the blocks in view first within a frame's budget, the rest
     // in idle time; before the editor is made, every block at once (none is shown yet)
     if (restyle) { restyle(); return; }
-    for (const el of inspect()?.blocks?.() ?? []) relayout(el);   // view/viewer-bridge.js
+    for (const el of blockEls()) relayout(el);
   }
 
   // a width picked with its motion: the blocks keep their lines while the column eases, then those in view are
@@ -289,7 +289,7 @@ export async function installView() {
   const btnNow = () => here()?.b.el ?? null;
   // the width motion and the restyle: the editor worked in's panes (none attached: at once)
   widthTransition = (change) => { const w = here()?.widths?.(); return w ? w.transition(change, { animate: true }) : change(); };
-  restyle = () => { const w = here()?.widths?.(); if (w) w.restyle(); else for (const el of inspect()?.blocks?.() ?? []) relayout(el); };
+  restyle = () => { const w = here()?.widths?.(); if (w) w.restyle(); else for (const el of blockEls()) relayout(el); };
 
   const view = {
     get settings() { return { ...s }; },

@@ -33,7 +33,7 @@ import { docHost } from './doc-host.js';
 import { createLayout } from '../panes/layout.js';
 import { createWidths } from '../panes/widths.js';
 import { createPerf } from '../perf/index.js';
-import { relayout, laidAt } from '../view/viewer-bridge.js';
+import { relayout, laidAt } from '../view/viewer-host.ts';
 import { createBibPane } from '../bibpane/index.js';
 import { installRefNav } from '../refnav/index.js';
 import { installControls, controlsChanged } from '../docview/controls.js';

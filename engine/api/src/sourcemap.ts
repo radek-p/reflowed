@@ -118,8 +118,8 @@ export function nodesForSourcePosition(map: SourceMap, file: string, line: numbe
 }
 
 /** Viewer side: the address of a node object in the viewer's decoded
- *  document (reflowtex.inspect.state(blockEl).doc; the node a click hit,
- *  e.g. from inspect.replay's sink.node), or null. */
+ *  document (the viewer's Block.document; the node a click hit, e.g. from
+ *  Segment.walk's sink.node), or null. */
 // through one index per document, made by one walk (it walked the whole tree per glyph: a block's caret map
 // was quadratic, 3.5 s of main thread on a wheel pass down the former sample paper). A node the index lacks (the document
 // changed since) makes it again, at most once per task.
@@ -176,7 +176,7 @@ export function glyphIndex(doc: J): Map<J, GlyphAddress> {
 /** The legacy shape a block editor asks for (contracts.d.ts sourceMap):
  *  `{ glyphs: [source offset | -1, …] }`, one entry per glyph in the order
  *  given – which is the viewer's drawing order: pass the node objects as the
- *  viewer draws them (inspect.replay's sink.node, glyph nodes only) and the
+ *  viewer draws them (Segment.walk's sink.node, glyph nodes only) and the
  *  viewer document they belong to. Offsets are into `blockText`, the block's
  *  own source, which sits at `firstLine` of the compiled file `file`. */
 export function blockGlyphOffsets(map: SourceMap, doc: J, drawn: J[], blockText: string,
@@ -193,14 +193,13 @@ export function blockGlyphOffsets(map: SourceMap, doc: J, drawn: J[], blockText:
 }
 
 /** The glyph nodes of a block in the order the viewer draws them (its
- *  segments in order, each line by line, as reflowtex.inspect.replay reports
- *  them) – the order the legacy `sourceMap.glyphs` expects. `inspect` is the
- *  viewer's window.reflowtex.inspect, `el` the block element. Segments not
- *  laid out yet (far below the fold) are skipped. */
-export function drawnGlyphs(inspect: J, el: J): J[] {
+ *  segments in order, each line by line, as the viewer's Segment.walk gives
+ *  them: the host API's Block.segments()) – the order the legacy
+ *  `sourceMap.glyphs` expects. Segments not laid out yet (far below the
+ *  fold) are skipped. */
+export function drawnGlyphs(segments: readonly { walk(sink: { node?(n: J): void }): boolean }[]): J[] {
   const out: J[] = [];
-  const laid = inspect.state(el)?.cache?.layout?.laid ?? [];
-  for (let i = 0; i < laid.length; i++) inspect.replay(el, i, { node(n: J) { if (n.type === 'glyph') out.push(n); } });
+  for (const sg of segments) sg.walk({ node(n: J) { if (n.type === 'glyph') out.push(n); } });
   return out;
 }
 

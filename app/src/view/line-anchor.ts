@@ -2,7 +2,7 @@
 // is in too, so holding a block's top lets the line being read move by up to the block's change (the top of the view
 // inside a long paragraph: 24 px, the caret's line in an editor below: 72 px, measured). The line is held instead: the
 // caret's line of a block being edited when it is in view, else the first line of the document below the reading top.
-// A typeset line is known by one of its glyph nodes (the viewer re-breaks the same nodes: inspect.replay finds the line
+// A typeset line is known by one of its glyph nodes (the viewer re-breaks the same nodes: Block.segments, walk, finds the line
 // holding it at any width); an editor's by its caret.
 //
 //   lineAnchor.pick(list, top, bottom) -> { el, mark } | null   el: list's child holding the line; null: none (a block
@@ -11,21 +11,18 @@
 import { EditorView } from '@codemirror/view';
 import { screenCTM } from './screen-ctm.ts';
 import { shownBlock } from './shown.ts';
-import { laidCount, segmentSvg, replay } from './viewer-bridge.js';   // the viewer's state read there only
+import { segmentsOf, type ViewerNode as Node } from './viewer-host.ts';
 
-interface Node { type: string }
-interface Line { nodes: Node[] }
 export type LineMark = { kind: 'text'; blk: HTMLElement; node: Node } | { kind: 'caret'; view: EditorView };
 
 /** each line of blk's shown typeset block: its nodes and its baseline's client y */
-function linesOf(blk: HTMLElement): { nodes: Node[]; y: number }[] {
+function linesOf(blk: HTMLElement): { nodes: readonly Node[]; y: number }[] {
   const lb = shownBlock(blk.querySelector('.blk-render') ?? blk);
-  const out: { nodes: Node[]; y: number }[] = [];
+  const out: { nodes: readonly Node[]; y: number }[] = [];
   if (!lb) return out;
-  const n: number = laidCount(lb);
-  for (let i = 0; i < n; i++) {
-    const M = screenCTM(segmentSvg(lb, i));
-    if (M) replay(lb, i, { line: (_j: number, line: Line, _x: number, by: number) => { out.push({ nodes: line.nodes, y: M.d * by + M.f }); } });
+  for (const sg of segmentsOf(lb)) {
+    const M = screenCTM(sg.svg);
+    if (M) sg.walk({ line: (_j, nodes, _x, by) => { out.push({ nodes, y: M.d * by + M.f }); } });
   }
   return out;
 }

@@ -35,10 +35,10 @@
 // engine  result.sourcemap (contracts.d.ts BlockSourceMap: engine-api's
 //         sourcemap.ts sidecar + where the block sits in the compiled file).
 //         The glyph node under the pointer comes from the viewer's
-//         inspect.replay, its address from locateGlyph on the viewer's
+//         Block.segments' walk, its address from locateGlyph on the viewer's
 //         decoded document, its position from the map. A glyph a macro made
 //         (viaMacro) or from another file falls through to fuzzy.
-import { laidCount, segmentSvg, docOf } from '../view/viewer-bridge.js';
+import { segmentsOf, documentOf, spToPx } from '../view/viewer-host.ts';
 import { screenCTM } from '../view/screen-ctm.ts';
 import { sourcePositionFor as mapPosition, toSourceOffset } from '../../../engine/api/src/sourcemap.ts';
 import { guardedLocate } from '../../../engine/api/src/sourcemap-guard.ts';
@@ -57,16 +57,13 @@ export function sourcePositionFor(block, click) {
 
 /** The glyph node the viewer drew under a point, in one block element. */
 export function glyphNodeAt(el, x, y) {
-  const ins = window.reflowtex?.inspect;
-  const n = laidCount(el);                                  // the viewer's internals through view/viewer-bridge.js
   let best = null;
-  for (let i = 0; i < n; i++) {
-    const svg = segmentSvg(el, i);
-    const m = screenCTM(svg);   // (CSS zoom in it in every browser)
+  for (const sg of segmentsOf(el)) {
+    const m = screenCTM(sg.svg);   // (CSS zoom in it in every browser)
     if (!m) continue;
     const pt = new DOMPoint(x, y).matrixTransform(m.inverse());
-    const em = 10 * 65536 * ins.spToPx;
-    ins.replay(el, i, {
+    const em = 10 * 65536 * spToPx();
+    sg.walk({
       node(n, nx, ny, adv) {
         if (n.type !== 'glyph') return;
         if (pt.x < nx || pt.x > nx + Math.max(adv, 1)) return;
@@ -76,7 +73,7 @@ export function glyphNodeAt(el, x, y) {
       },
     });
   }
-  return best && { node: best.node, doc: docOf(el), after: best.after };
+  return best && { node: best.node, doc: documentOf(el), after: best.after };
 }
 
 function enginePosition(block, click) {

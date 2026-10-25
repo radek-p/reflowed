@@ -10,7 +10,7 @@
 //
 //   const tw = createTextwidth()
 //   tw.get() (pt, 0: unknown) · tw.route(docId | null) · tw.read() (from the viewer now) · tw.learn(pt) · tw.whenKnown(fn)
-import { inspect, sourceWidthPt } from './viewer-bridge.js';
+import { blockEls, sourceWidthPt, viewerHost } from './viewer-host.ts';
 const KEY = 'rtx-editor.textwidth';
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { return {}; } };
 const save = (m) => { try { localStorage.setItem(KEY, JSON.stringify(m)); } catch { /* not kept */ } };
@@ -18,9 +18,9 @@ const save = (m) => { try { localStorage.setItem(KEY, JSON.stringify(m)); } catc
 /** the most common source width (pt) of the viewer's blocks in an editor's first pane */
 export function viewerTextwidth() {
   const n = new Map();
-  for (const el of inspect()?.blocks?.() ?? []) {
+  for (const el of blockEls()) {
     if (!el.closest?.('[data-part="page"]')) continue;
-    const w = sourceWidthPt(el);                           // view/viewer-bridge.js
+    const w = sourceWidthPt(el);
     if (w > 0) n.set(w, (n.get(w) ?? 0) + 1);
   }
   const top = [...n].sort((a, b) => b[1] - a[1])[0];
@@ -51,10 +51,10 @@ export function createTextwidth() {
     /** call fn once the viewer is idle (its blocks laid out), at most one wait at a time */
     whenKnown(fn) {
       if (waiting) return;
-      const idle = window.reflowtex?.inspect?.idle;
-      if (!idle) return;
+      const host = viewerHost();
+      if (!host) return;
       waiting = true;
-      Promise.resolve(idle()).catch(() => {}).then(() => { waiting = false; fn(); });
+      Promise.resolve(host.idle()).catch(() => {}).then(() => { waiting = false; fn(); });
     },
   };
   // the document in the address at start: its width is the first column drawn
