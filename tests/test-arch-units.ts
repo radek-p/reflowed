@@ -252,8 +252,6 @@ check('editorAPI reader allow-list has no stale entries', goneReaders.length ===
 // top-level `let` in refs/ and bib/: only these, which are the page's and not one document's
 const REFS_LETS_ALLOWED = new Set([
   'app/src/refs/numbering.ts last',         // numberingState(): the last run of any document (refnav's fallback; each refs instance has its own)
-  'app/src/refs/numbering.ts frameAsked',   // the page's one frame for slot patches
-  'app/src/refs/numbering.ts ctx',          // a canvas context for measuring text
 ]);
 const refsLets: string[] = [];
 for (const f of APP.filter((p) => /app\/src\/(refs|bib)\//.test(rel(p)))) {

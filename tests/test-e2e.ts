@@ -345,12 +345,12 @@ await step('displays: tags flush right', async () => {
 // fallback rewrote the drawn glyphs and the paragraph never re-broke; fix in rtx-numbering.sty \rtx@slot)
 /** per paragraph: the furthest line end (glyph advance, not ink) past the column's right edge, in px */
 async function lineEnds(ids: string[]) {
-  const out: { id: string; over: number; lines: number; slots: number; patched: number; text: string }[] = [];
+  const out: { id: string; over: number; lines: number; slots: number; text: string }[] = [];
   for (const id of ids) {
     await reveal(id);
     out.push(await page.evaluate((i: string) => {
       const blk = document.querySelector(`.blk[data-id="${i}"] .blk-render .latex-block`);
-      if (!blk) return { id: i, over: 0, lines: 0, slots: 0, patched: 0, text: '' };
+      if (!blk) return { id: i, over: 0, lines: 0, slots: 0, text: '' };
       const col = blk.getBoundingClientRect().right;
       let over = -1e9, lines = 0, text = '';
       for (const s of blk.querySelectorAll('svg')) {
@@ -365,7 +365,7 @@ async function lineEnds(ids: string[]) {
           if (left + end - col > over) { over = left + end - col; text = ts.map((t: any) => t.textContent).join('').slice(-40); }
         }
       }
-      return { id: i, over: +over.toFixed(2), lines, slots: blk.querySelectorAll('tspan[data-slot]').length, patched: blk.querySelectorAll('tspan[data-rtx-patched]').length, text };
+      return { id: i, over: +over.toFixed(2), lines, slots: blk.querySelectorAll('tspan[data-slot]').length, text };
     }, id));
   }
   return out;
@@ -388,7 +388,7 @@ await step('references reflow', async () => {
     const bad = r.filter((x) => x.over > hang);
     timings[`refsReflow${w}`] = `${r.length - bad.length}/${r.length} fit (worst ${Math.max(...r.map((x) => x.over)).toFixed(1)} px; plain worst ${Math.max(...p.map((x) => x.over)).toFixed(1)} px)`;
     check(`window ${w} px: every line of a paragraph with refs/cites fits the column (±1 px, and the protrusion plain paragraphs have)`, r.length >= 5 && bad.length === 0,
-      `${r.length - bad.length}/${r.length} fit; patched glyphs ${r.reduce((n, x) => n + x.patched, 0)}; worst ${bad.slice(0, 3).map((x) => `${x.over} px «…${x.text}»`).join(' | ')}; plain paragraphs worst ${Math.max(...p.map((x) => x.over)).toFixed(2)} px`);
+      `${r.length - bad.length}/${r.length} fit; worst ${bad.slice(0, 3).map((x) => `${x.over} px «…${x.text}»`).join(' | ')}; plain paragraphs worst ${Math.max(...p.map((x) => x.over)).toFixed(2)} px`);
     if (bad[0]) { await reveal(bad[0].id); await shot(page, `04e-refs-overflow-${w}`); }
   }
   // the same paragraph with its references typed out as plain text breaks into as many lines

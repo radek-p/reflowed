@@ -17,14 +17,13 @@
 // source are applied at the block's start; labels carry cleveref's type and
 // names, so \cref/\Cref print "Lemma 3.2", "Bounds 1 to 4" (cref.ts); a
 // restated theorem (thm-restate's \name*) is a reference to thmtools' label of
-// the original; captions and \tag labels are covered.
+// the original; captions and \tag labels are covered. The viewer sets a text
+// wherever its slot is, in a box too (an equation's tag, a caption, maths'
+// \text), and packs the box again around it.
 //
-// The viewer replaces a slot only in a paragraph's own list; a slot inside a
-// box (an \hbox, maths' \text, an equation's tag in its display, a one-line
-// caption) keeps TeX's default. For those, a DOM fallback rewrites the drawn
-// glyphs, as in numbering/.
-// @ts-ignore: a JS module
-import { madeElements } from '../view/viewer-bridge.js';
+// It keeps module state (numberingState(), the texts last given), so one
+// numbering per page at a time; it uses only the host it is given and the
+// public Block API.
 import { autorefText, crefText, type CrefData, type LabelInfo } from './cref.ts';
 import { scanSource } from './scan.ts';
 import { texToText } from './tex-text.ts';
@@ -40,9 +39,8 @@ export interface HostBlock {
   el: HTMLElement;
   key?: string;
   instances(query?: unknown): Instance[];
-  on(event: 'layout', fn: () => void): () => void;
 }
-interface Host { setText(name: string, text: string | null): void; views?(of: HostBlock): HostBlock[] }
+interface Host { setText(name: string, text: string | null): void }
 export interface BlockEntry { id: string; source?: string; block: HostBlock | null; type?: string }
 
 export interface LabelRec extends CrefData { l: string; s: number; c: string; t: string }
@@ -155,8 +153,6 @@ const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 let last: NumberingState = { items: [], labels: {}, refs: {}, refsByBlock: {}, duplicates: [], mounted: [], runs: 0 };
 const shown = new WeakMap<Instance, string>();   // what an instance was last given
 const refShown = new Map<string, string>();        // what a reference name was last given
-const wanted = new WeakMap<Element, Map<string, string>>();
-const watched = new WeakSet<HostBlock>();
 const listeners = new Set<(s: NumberingState) => void>();
 
 /** How a run gives the reference slots their texts:
@@ -282,8 +278,7 @@ export function numberDocument(blocks: BlockEntry[], host: Host | null = hostOf(
     if (shown.get(inst) !== text) { try { inst.setText(text, { mirror: true }); shown.set(inst, text); } catch { /* block gone */ } }
   };
   for (const it of items) set(it.inst, it.number);
-  const recallNumbers = new Map<Instance, string>();
-  for (const r of restated) { set(r.inst, r.number); recallNumbers.set(r.inst, r.number); }
+  for (const r of restated) set(r.inst, r.number);
   for (const { entry, p } of per) {
     const orig = p && recallOf.get(entry.id);
     if (!orig) continue;
@@ -292,7 +287,7 @@ export function numberDocument(blocks: BlockEntry[], host: Host | null = hostOf(
     for (const it of items) if (it.blockId === orig) { if (!queue.has(it.data.c)) queue.set(it.data.c, []); queue.get(it.data.c)!.push(it); }
     for (const { data, inst } of p!.items) {
       const src = queue.get(data.c)?.shift();
-      if (src) { set(inst, src.number); recallNumbers.set(inst, src.number); }
+      if (src) set(inst, src.number);
     }
     refsByBlock[entry.id] = [...new Set([...p!.refs].flatMap(refLabels))];
   }
@@ -306,27 +301,6 @@ export function numberDocument(blocks: BlockEntry[], host: Host | null = hostOf(
     for (const { p } of per) if (p) for (const { name, inst } of p.refInsts) set(inst, refs[name]);
   } else if (host) for (const [name, text] of Object.entries(refs)) {
     if (byName.get(name) !== text) { host.setText(name, text); byName.set(name, text); }
-  }
-
-  // what each block's glyphs should read, for the DOM fallback
-  const byInst = new Map(items.map((it) => [it.inst, it]));
-  for (const { entry, p } of per) {
-    if (!p) continue;
-    const want = new Map<string, string>();
-    for (const { inst } of p.items) { const n = byInst.get(inst)?.number ?? recallNumbers.get(inst); if (n !== undefined) want.set(inst.attrs.name, n); }
-    for (const name of p.refs) want.set(name, refs[name]);
-    const block = entry.block!;
-    // and in the block's other views (split view): the same texts, each view patched on its own layouts
-    let views: HostBlock[] = [];
-    try { views = host?.views?.(block) ?? []; } catch { views = []; }
-    for (const v of views.length ? views : [block]) {
-      wanted.set(v.el, want);
-      if (!watched.has(v) && (p.items.length || p.refs.size)) {
-        watched.add(v);
-        v.on('layout', () => schedulePatch(v.el));
-      }
-      schedulePatch(v.el);
-    }
   }
 
   last = {
@@ -358,83 +332,3 @@ export function refText(name: string, get: (l: string) => LabelInfo | undefined)
 }
 
 export function numberingState(): NumberingState { return last; }
-
-// ── The DOM fallback: slots inside boxes ─────────────────────────────────────
-
-const due = new Set<Element>();
-let frameAsked = false;
-function schedulePatch(el: Element) {
-  due.add(el);
-  if (frameAsked || typeof requestAnimationFrame === 'undefined') return;
-  frameAsked = true;
-  // a frame after setText: the viewer's own frame (applying the texts) was
-  // asked for first, so it has run by now
-  requestAnimationFrame(() => {
-    frameAsked = false;
-    const pend = (globalThis as any).reflowtex?.inspect?.pending?.() as string[] | undefined;
-    if (pend && pend.some((n) => /slot/.test(n))) { for (const e of due) schedulePatch(e); return; }
-    for (const e of [...due]) { due.delete(e); patchBlock(e); }
-  });
-}
-
-let ctx: CanvasRenderingContext2D | null = null;
-function textWidth(el: Element, text: string): number {
-  ctx = ctx || document.createElement('canvas').getContext('2d');
-  if (!ctx) return 0;
-  const size = el.getAttribute('font-size') || '12';
-  const family = el.getAttribute('font-family') || 'serif';
-  ctx.font = `${size}px ${JSON.stringify(family)}`;
-  return ctx.measureText(text).width;
-}
-
-/** The elements the viewer drew for the texts it set in slots (its words, from setText): not TeX's
- *  default, so never rewritten here. */
-function viewerSet(el: Element): Set<Element> {
-  // the viewer's internals through view/viewer-bridge.js
-  return madeElements(el, (doc: any) => (doc?.slotParas ?? []).flatMap((sp: any) => sp.made ?? [])) as Set<Element>;
-}
-
-/** Rewrite the drawn glyphs of every run of a slot that does not read what it
- *  should (a slot the viewer could not replace), and shift what follows it.
- *  The words the viewer set for a slot are left alone: a text with a breakable space
- *  ("Bounds 1 to 4", a multi-label \cref) is drawn as several words, which read here as several runs of
- *  the slot, none of them the whole text, and each was rewritten to the whole text: the reference drawn
- *  two to four times over the words after it. */
-export function patchBlock(el: Element): number {
-  const want = wanted.get(el);
-  if (!want || !el.isConnected) return 0;
-  const set = viewerSet(el);
-  const glyphs = [...el.querySelectorAll<SVGTSpanElement>('tspan[data-slot]')].filter((g) => !set.has(g));
-  let patched = 0;
-  for (let i = 0; i < glyphs.length;) {
-    const name = glyphs[i].dataset.slot!;
-    let j = i + 1;
-    while (j < glyphs.length && glyphs[j].dataset.slot === name && glyphs[j] === glyphs[j - 1].nextElementSibling) j++;
-    const run = glyphs.slice(i, j);
-    i = j;
-    const text = want.get(name);
-    if (text === undefined) continue;
-    const first = run[0];
-    const reads = run.map((g) => g.textContent).join('');
-    if (!first.dataset.rtxW0 && reads.replace(/\s+/g, '') === text.replace(/\s+/g, '')) continue;
-    if (!first.dataset.rtxW0) first.dataset.rtxW0 = String(run.reduce((w, g) => w + textWidth(g, g.textContent || ''), 0));
-    if (reads !== text) {
-      first.textContent = text;
-      for (const g of run.slice(1)) g.textContent = '';
-      for (const g of run) g.dataset.rtxPatched = '';
-      patched++;
-    }
-    const delta = textWidth(first, text) - Number(first.dataset.rtxW0);
-    const y = first.getAttribute('y');
-    let f = run[run.length - 1].nextElementSibling as SVGElement | null;
-    for (; f; f = f.nextElementSibling as SVGElement | null) {
-      if (f.tagName.toLowerCase() !== 'tspan' || f.getAttribute('y') !== y) continue;
-      const x = Number(f.getAttribute('x'));
-      const base = f.dataset.rtxXs !== undefined && f.getAttribute('x') === f.dataset.rtxXs ? Number(f.dataset.rtxX0) : x;
-      const nx = String(base + delta);
-      if (f.getAttribute('x') !== nx) f.setAttribute('x', nx);
-      f.dataset.rtxX0 = String(base); f.dataset.rtxXs = nx;
-    }
-  }
-  return patched;
-}

@@ -1,5 +1,7 @@
 // a multi-label \cref/\Cref ("Adding up \Cref{bound:1,bound:2,bound:3,bound:4}, we can …") drew
 // text over text. A reference to labels in other blocks is a live-text slot filled by app/src/refs.
+// Then numbers and references inside boxes (an equation's tag, a \ref in a \tag, an \eqref in a caption),
+// renumbered by an equation put in front, with no compile of theirs: what each reads, and no overlap.
 //
 //   node tests/test-cref.ts dev [http://localhost:8150/] | file [dist/reflowtex-editor.html]
 //
@@ -107,8 +109,62 @@ for (const width of [1280, 860, 520]) {
     check(`${width} px, ${CASES[c][0]}: lines as with the reference written out`, same, same ? '' : { ref: a.map((l) => l.text), written: b.map((l) => l.text) });
   }
 }
-check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await page.evaluate(async (i: string) => { location.hash = '#/'; await (window as any).editorAPI.store().deleteDoc(i); }, id);
+await page.waitForFunction(() => (window as any).editorAPI.route().name === 'home');
+
+// ── numbers and references inside boxes: an equation's tag, a \tag holding a \ref, a caption (one in a minipage) ──
+// The viewer sets a slot's text in a box too and packs the box again (reflowtex host/slots.ts); there is no
+// DOM rewrite of drawn glyphs. An equation put in front renumbers the ones after it with no compile of
+// theirs: each tag, the \ref in a \tag and the \eqref in a caption read the new numbers, nothing overlaps.
+await page.setViewportSize({ width: 1280, height: 900 });
+const BOXED = [
+  '\\begin{equation}\\label{eq:a}\n  a = b\n\\end{equation}',
+  '\\begin{equation}\\label{eq:b}\n  c = d\n\\end{equation}',
+  '\\begin{figure}\n\\centering\n\\rule{2cm}{1cm}\n\\caption{The box of \\eqref{eq:b}.}\\label{fig:box}\n\\end{figure}',
+  '\\begin{equation}\n  e = f \\tag{\\ref{eq:b}$\'$}\n\\end{equation}',
+  'By \\eqref{eq:a}, \\eqref{eq:b} and \\cref{fig:box}, the rest follows from the box.',
+  // a caption in a minipage: its lines are in the minipage's box
+  '\\begin{figure}\n\\centering\n\\begin{minipage}{0.45\\linewidth}\n\\centering\n\\rule{2cm}{1cm}\n\\caption{Left of \\eqref{eq:b}.}\\label{fig:left}\n\\end{minipage}\n\\end{figure}',
+];
+const id2: string = await page.evaluate(async ([pre, bs]: [string, string[]]) => (window as any).editorAPI.store().createDoc({ title: 'Numbers in boxes', preamble: pre, blocks: bs.map((source) => ({ source })) }), [PREAMBLE, BOXED] as [string, string[]]);
+await page.evaluate((i: string) => { location.hash = `#/doc/${i}`; }, id2);
+await page.waitForFunction(() => (window as any).editorAPI.route().name === 'doc' && (window as any).editorAPI.currentDoc());
+await settle();
+const reads = async (bid: string) => {
+  const ls = await linesOf(await shown(bid));
+  const overlaps: string[] = [];
+  ls.forEach((l, li) => {
+    const bx = [...l.boxes].sort((p, q) => p.l - q.l);
+    for (let k = 1; k < bx.length; k++) if (bx[k].l < bx[k - 1].r - 2.5) overlaps.push(`line ${li + 1}: «${bx[k - 1].ch}» and «${bx[k].ch}»`);
+  });
+  return { text: ls.map((l) => l.text.replace(/\s+/g, '')).join(' | '), overlaps };
+};
+const expectBoxed = async (when: string, eqA: string, eqB: string) => {
+  const ids2: string[] = await page.evaluate(() => (window as any).editorAPI.blocks().map((b: any) => b.id));
+  const off = ids2.length - BOXED.length;           // blocks put in front
+  // (the prime of the tag is maths: whatever character its font draws it with)
+  const want: [number, RegExp, string][] = [
+    [0, new RegExp(`\\(${eqA}\\)`), 'the tag of eq:a'], [1, new RegExp(`\\(${eqB}\\)`), 'the tag of eq:b'],
+    [2, new RegExp(`Theboxof\\(${eqB}\\)`), 'the \\eqref in the caption'],
+    [3, new RegExp(`\\(${eqB}.\\)`), 'the \\ref in a \\tag'], [4, new RegExp(`By\\(${eqA}\\),\\(${eqB}\\)andfig\\.1`), 'the paragraph\'s references'],
+    [5, new RegExp(`Figure2:Leftof\\(${eqB}\\)`), 'the number and the \\eqref of a caption in a minipage'],
+  ];
+  for (const [k, re, what] of want) {
+    const r = await reads(ids2[off + k]);
+    check(`${when}: ${what} reads ${re.source}`, re.test(r.text), r.text);
+    check(`${when}: ${what}: no glyphs overlap`, r.overlaps.length === 0, r.overlaps.slice(0, 3).join(' | '));
+  }
+};
+check('numbers in boxes: every block typeset', await page.evaluate(() => (window as any).editorAPI.blocks().every((b: any) => b.state === 'ok')));
+await expectBoxed('as typeset', '1', '2');
+await page.evaluate(() => (window as any).editorAPI.resetCounters());
+await page.evaluate(() => (window as any).editorAPI.insert(0, 'paragraph', '\\begin{equation}\n  z = 0\n\\end{equation}'));
+await settle();
+const compiled: string[] = await page.evaluate(() => (window as any).editorAPI.counters().compiledIds);
+check('an equation put in front: only it is compiled', compiled.length === 1, compiled.join(', '));
+await expectBoxed('an equation put in front', '2', '3');
+check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
+await page.evaluate(async (i: string) => { location.hash = '#/'; await (window as any).editorAPI.store().deleteDoc(i); }, id2);
 await ctx.close();
 console.log(`\n${n - fail}/${n} passed`);
 process.exit(fail ? 1 : 0);

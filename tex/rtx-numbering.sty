@@ -691,9 +691,9 @@
   \fi
   \def\@hangfrom##1{\setbox\@tempboxa\hbox{{##1}}%
     \hangindent\wd\@tempboxa\noindent\unhbox\@tempboxa}%
-  % equation numbers (in the display's box: a slot there keeps its default,
-  % the overlay's DOM fallback shows the number); a \tag's text rides a
-  % marker, so a label on it is kept
+  % equation numbers (in the display's box: the viewer sets the slot's text
+  % there and places the tag again); a \tag's text rides a marker, so a
+  % label on it is kept
   \def\rtx@theeq{\theequation}%
   \ifdefined\tagform@
     \let\rtx@orig@tagform\tagform@
