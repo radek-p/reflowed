@@ -1,6 +1,7 @@
 // MOTION units (Node, no browser):
 //  - motion/place.js: the popover's final place (the scroll), its rules one by one;
-//  - engine-api toSourceOffset with its line memo: the same answers as the old one (it split the whole text per call).
+//  - engine-api toSourceOffset with its line memo: the same answers as the old one (it split the whole text per call);
+//  - engine-api locateGlyph in a display whose box the viewer substituted (live text in a tag): TeX's ordinals.
 //   node tests/test-motion-units.ts
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -102,6 +103,21 @@ const sp = (top: number, h: number) => ({ top, bottom: top + h });
   reads = 0;
   const offs = blockGlyphOffsets(map, d, d.paragraphs[0].nodes, 'x'.repeat(400), { file: 'b.tex', firstLine: 1 });
   check('blockGlyphOffsets: the cached index (no walk when every drawn glyph is in it)', offs.glyphs.length === 301 && offs.glyphs[5] === 5 && reads <= 301, { reads, g5: offs.glyphs[5] });
+}
+
+// ── a display whose box holds live text: glyphs are addressed in TeX's box, not the viewer's ──
+{
+  // the viewer put two words in place of an equation tag's number "1" (reflowtex host/slots.ts),
+  // keeping TeX's box in doc.slotDisplays; the ")" after it is still TeX's third glyph
+  const g = (char: number) => ({ type: 'glyph', char, font: 1 });
+  const open = g(40), one = { ...g(49), slot: 1 }, close = g(41);
+  const orig = { type: 'hlist', children: [open, one, close] };
+  const item: any = { kind: 'display', box: orig };
+  const made = [{ type: 'glyph', text: '12', font: 1, slot: 1 }, { type: 'glyph', text: 'a', font: 1, slot: 1 }];
+  item.box = { type: 'hlist', children: [open, ...made, close] };
+  const d = { content: [item], paragraphs: [], slotDisplays: [{ owner: item, item, orig, made }] };
+  check('locateGlyph: in a display whose box the viewer substituted, a glyph after the slot keeps its ordinal in TeX\'s box',
+    locateGlyph(d, close)?.glyph === 2 && locateGlyph(d, open)?.glyph === 0, [locateGlyph(d, open), locateGlyph(d, close)]);
 }
 
 // ── toSourceOffset: the line memo gives the old answers ──

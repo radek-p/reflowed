@@ -45,12 +45,14 @@ const glyphsOf = (nodes: J[]): J[] => {
 };
 
 // A paragraph's nodes as captured: the viewer substitutes slot text (numbers,
-// \webtext) in place, keeping TeX's list as its slotParas[].orig, and the map's
-// glyph ordinals count TeX's glyphs. With the substituted list every glyph
-// after a changed number would be off by the difference in length.
+// \webtext) in place, keeping TeX's list as its slotParas[].orig (a display's
+// box as its slotDisplays[].orig), and the map's glyph ordinals count TeX's
+// glyphs. With the substituted list every glyph after a changed number would
+// be off by the difference in length.
 const paraNodes = (doc: J, para: J): J[] => (doc.slotParas?.find((sp: J) => sp.para === para)?.orig ?? para?.nodes ?? []);
+const boxOf = (doc: J, it: J): J | undefined => doc.slotDisplays?.find((sd: J) => sd.item === it)?.orig ?? it.box;
 const itemNodes = (doc: J, it: J): J[] =>
-  it.kind === 'paragraph' ? paraNodes(doc, doc.paragraphs[it.para - 1]) : it.box ? [it.box] : [];
+  it.kind === 'paragraph' ? paraNodes(doc, doc.paragraphs[it.para - 1]) : it.box ? [boxOf(doc, it)] : [];
 
 function* items(doc: J): Generator<[string, J]> {
   for (let i = 0; i < (doc.content ?? []).length; i++) yield [`c${i}`, doc.content[i]];
