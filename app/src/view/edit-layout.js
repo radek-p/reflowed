@@ -80,7 +80,7 @@ export function clearLayout(el) {
 // The caret, the selection and the caret's line mirrored in the preview, and a click mapped back to the source:
 // edit/preview-marks.js (re-exported here for the modules and tests that import them from this one).
 import { visibleBox } from '../../../workbench/src/viewport.ts';
-export { markCaret, caretMap, offsetAt, warmMap, carryCaret, caretPlace, ligatureSpan, callEnd, definitions } from '../edit/preview-marks.js';
+export { markCaret, caretMap, offsetAt, warmMap, carryCaret, caretPlace, ligatureSpan, callEnd, definitions } from '../edit/preview-marks.ts';
 
 // ── sliding into and out of the layout (after motion.js's morph) ───────────
 // FLIP: the result was at r0 before the layout changed; it is laid out at its
