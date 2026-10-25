@@ -9,7 +9,7 @@
 //     (\pdfmapline{+face PSName "… ReEncodeFont" <enc.enc <outline.pfb}, doc-fonts.ts): drawn
 //     through that encoding;
 //   * virtual fonts (newtx's maths, ae's T1 over Computer Modern; fidelity/virtual-fonts.ts): each glyph drawn
-//     from the font its packet names. Their files are not in the embedded set: the document gets them as the
+//     from the font its packet names; an accented letter drawn as a letter and an accent reads as the letter. Their files are not in the embedded set: the document gets them as the
 //     TeX resource server would give them (here as its files: what TeX, the converter and the encoder read).
 //   node tests/classic-fonts.test.ts      (after node scripts/build-worker.ts)
 import { existsSync, readFileSync } from 'node:fs';
@@ -48,14 +48,15 @@ async function glyphs(preamble: string, source: string, assets: { name: string; 
   }
   const res = r.blocks.b;
   const problems = [...pre.errors, ...res.errors].map((p: { message: string }) => p.message);
-  if (!res.nodelist) return { drawn: [] as [string, string][], problems };
+  if (!res.nodelist) return { drawn: [] as [string, string][], texts: [] as string[], problems };
   const doc = DocType.toObject(DocType.decode(Buffer.from(res.nodelist, 'base64')), { defaults: false, arrays: true, enums: String, longs: Number });
   const fonts = new Map<number, { name: string; filename: string }>((doc.fonts ?? []).map((f: { id: number; name: string; filename: string }) => [f.id, f]));
-  const drawn: [string, string][] = [];
+  const drawn: [string, string][] = [], texts: string[] = [];
   const walk = (o: unknown): void => {
     if (!o || typeof o !== 'object') return;
     if (Array.isArray(o)) { o.forEach(walk); return; }
-    const n = o as { type?: string; font?: number; char?: number };
+    const n = o as { type?: string; font?: number; char?: number; actual_text?: string };
+    if (n.actual_text !== undefined) texts.push(n.actual_text);
     if (n.type === 'glyph') {
       const f = fonts.get(n.font ?? -1);
       const file = f && files.get((r.fonts as Record<string, string>)[f.filename] ?? f.filename);
@@ -64,7 +65,7 @@ async function glyphs(preamble: string, source: string, assets: { name: string; 
     for (const v of Object.values(o)) walk(v);
   };
   walk(doc.paragraphs);
-  return { drawn, problems };
+  return { drawn, texts, problems };
 }
 
 // ── lmodern maths ───────────────────────────────────────────────────────────
@@ -110,14 +111,16 @@ function filesFor(preamble: string, source: string): { name: string; bytes: Uint
   }
   return [...names].map((name) => ({ name, bytes: fetchSync(0, name)! }));
 }
-for (const [what, preamble, source, want] of [
+for (const [what, preamble, source, want, read] of [
   ['newtx maths', '\\documentclass{article}\n\\usepackage{newtxtext,newtxmath}', 'Let $\\alpha+\\sum_i x_i \\leq \\infty$.',
-    [['NewTXMI', 'u1D6FC'], ['txsys', 'plus'], ['txexs', 'summationtext.1'], ['NewTXMI7', 'u1D456'], ['NewTXMI', 'u1D465'], ['NewTXMI7', 'u1D456'], ['txsys', 'lessequal'], ['txsys', 'infinity']]],
+    [['NewTXMI', 'u1D6FC'], ['txsys', 'plus'], ['txexs', 'summationtext.1'], ['NewTXMI7', 'u1D456'], ['NewTXMI', 'u1D465'], ['NewTXMI7', 'u1D456'], ['txsys', 'lessequal'], ['txsys', 'infinity']], []],
   ['ae', '\\documentclass{article}\n\\usepackage[T1]{fontenc}\n\\usepackage{ae}', 'Caf\\\'e.',
-    [['cmr10', 'C'], ['cmr10', 'a'], ['cmr10', 'f'], ['cmr10', 'acute'], ['cmr10', 'e'], ['cmr10', 'period']]],
+    [['cmr10', 'C'], ['cmr10', 'a'], ['cmr10', 'f'], ['cmr10', 'acute'], ['cmr10', 'e'], ['cmr10', 'period']], ['é']],
 ] as const) {
-  const { drawn, problems } = await glyphs(preamble, source, filesFor(preamble, source));
+  const { drawn, texts, problems } = await glyphs(preamble, source, filesFor(preamble, source));
   check(`${what}: the block compiles`, problems.length === 0, problems.join(' | '));
+  // an accented letter, drawn as a letter and an accent, reads as the one character (the box's actual_text)
+  check(`${what}: each accented letter reads as one character`, JSON.stringify(texts) === JSON.stringify(read), JSON.stringify(texts));
   const got = drawn.filter(([f]) => !/^TeXGyreTermesX/.test(f));
   check(`${what}: every glyph is drawn from the font its packet names`, JSON.stringify(got) === JSON.stringify(want), JSON.stringify(got));
 }

@@ -4,7 +4,8 @@
 // draws (the public pipeline's fonts/vf.ts, copied in engine-api's rtx/): the
 // glyph itself in the base font, or a box of the pieces. Done here, before the
 // source map is made from the output, so the map counts the glyphs the encoder
-// keeps (a virtual accented letter is two glyphs, an accent and a letter).
+// keeps (a virtual accented letter is two glyphs, an accent and a letter; its
+// box notes the character, and the pipeline's transform gives it its text).
 import { FontFiles, resolveVirtualFonts } from '../../build/engine-api-src/rtx/pipeline/fonts/vf.ts';
 import { walk } from '../../build/engine-api-src/rtx/shared/tree.ts';
 
