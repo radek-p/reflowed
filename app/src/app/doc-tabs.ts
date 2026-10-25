@@ -35,7 +35,7 @@ import { createWidths } from '../panes/widths.js';
 import { createPerf } from '../perf/index.js';
 import { relayout, laidAt } from '../view/viewer-host.ts';
 import { createBibPane } from '../bibpane/index.js';
-import { installRefNav } from '../refnav/index.js';
+import { installRefNav } from '../refnav/index.ts';
 import { installControls, controlsChanged } from '../docview/controls.js';
 import { featureFailed } from './release-mode.js';
 import { h } from './app.js';

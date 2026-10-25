@@ -30,7 +30,7 @@ import { mountTopBar } from '../chrome/top-bar.js';
 import { mountSidebarChrome, mountAddEnd } from '../chrome/sidebar-chrome.ts';
 import { installControls } from '../docview/controls.js';
 import { createBibPane } from '../bibpane/index.js';
-import { installRefNav } from '../refnav/index.js';
+import { installRefNav } from '../refnav/index.ts';
 import '../files/index.ts';                     // the Files panel (advanced): a registered side panel
 import { featureFailed } from './release-mode.js';
 import { computed, type ReadonlySignal } from '@preact/signals';
