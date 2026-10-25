@@ -177,9 +177,8 @@ Example University, Poland
 `;
 const orig = await t.newDoc(page, { title: 'Functors (original title commands)', preamble: ORIGINAL, blocks: [{ kind: 'title', source: '\\maketitle' }, { source: 'Text.' }] });
 const docs: any[] = await page.evaluate(async () => ((await (window as any).editorAPI.store().listDocs()) as any[]).map((d) => ({ id: d.id, title: d.title })));
-for (const [who, re, nAuthors] of [['Five authors (original)', /^Functors \(original/, 5], ['One author (LIPIcs)', /^A LIPIcs paper/, 1]] as const) {
+for (const [who, re, nAuthors] of [['Five authors (original)', /^Functors \(original/, 5]] as const) {
   const d = docs.find((x) => re.test(x.title));
-  if (!d && who === 'One author (LIPIcs)') { console.log('(the example is not in this store: skipped)'); continue; }
   if (!t.check(`${who}: the document is there`, !!d, docs.map((x) => x.title))) continue;
   void orig;
   await t.openDoc(page, d.id);
@@ -199,20 +198,10 @@ for (const [who, re, nAuthors] of [['Five authors (original)', /^Functors \(orig
     await previewOk();
     t.check(`${who}: converted, the form shows the authors`, (await names()).length === nAuthors && (await preamble()).includes('\\ReflowedMeta{'), await names());
   }
-  if (who.startsWith('Five authors')) t.check(`${who}: one shared affiliation, the line break after the third name`, (await page.$$('.mf-affil')).length === 1 && /break-after/.test(await preamble()));
-  if (who === 'One author (LIPIcs)') {
-    await page.click('[data-field="anonymous"] input');
-    c = await closed();
-    await page.click('.mf-done');
-    await c.wait();
-    t.check('One author (LIPIcs): anonymous is the class option', /\\documentclass\[[^\]]*anonymous[^\]]*\]\{lipics-v2021\}/.test(await preamble()));
-    await api('undo');
-    await t.idle(page);
-  } else {
-    c = await closed();
-    await page.click('.mf-cancel');
-    await c.wait();
-  }
+  t.check(`${who}: one shared affiliation, the line break after the third name`, (await page.$$('.mf-affil')).length === 1 && /break-after/.test(await preamble()));
+  c = await closed();
+  await page.click('.mf-cancel');
+  await c.wait();
   await t.idle(page);
   const st = ((await api('blocks')) as any[]).find((b) => b.kind === 'title');
   t.check(`${who}: the converted title block typesets without errors`, st.state === 'ok' && !st.errors.length, st.errors);

@@ -22,9 +22,11 @@
 //        /dev/seed-cache-info says which. The page uses it with ?seedcache, or on every page of a server
 //        started with --seed-cache (test-all's seeded dev server): the seed papers then open with 0 compiles,
 //        as from the single file
-//   /seed/intro.json, /seed/example.json   the default documents from build/seed/ (scripts/seed.ts), the ones a release
-//        precompiles, when there; app/seed/'s copies (w3-build --assets) otherwise. (A copy gone stale opened a block
+//   /seed/intro.json   the default document from build/seed/ (scripts/seed.ts), the one a release
+//        precompiles, when there; app/seed/'s copy (w3-build --assets) otherwise. (A copy gone stale opened a block
 //        the seed cache did not have: dev-seed compiled 1.)
+//   /texlive/2022/…   the TeX Live tree scripts/fetch-engine.ts installs (build/resources/www/texlive/), beside the
+//        page as a release has it (app/src/settings/resources.ts: the default resource server); 404 while not installed
 //   everything else                       app, index.html with the viewer schema
 //        filled in (as scripts/build.ts does)
 import { createServer } from 'node:http';
@@ -38,6 +40,7 @@ import { promisify } from 'node:util';
 const EDITOR = join(dirname(fileURLToPath(import.meta.url)), '../..');   // the repository root
 const TC = EDITOR;
 const WEB = join(EDITOR, 'app');
+const WWW = join(EDITOR, 'build/resources/www');   // the TeX tree's parent (scripts/fetch-engine.ts TREE)
 // the bundle's disk cache: $TECTONIC_CACHE, else the workspace's shared one (engine/server/bundle.ts); its hits and
 // misses go to this log
 const { getFile, getIndexGz, getIndex, resolveTarUrl, logCacheTo, CACHE } = await import(join(TC, 'engine/server/bundle.ts'));
@@ -175,7 +178,11 @@ createServer(async (req, res) => {
     if (path === '/formats/latex.fmt') file = join(TC, 'engine/api/formats/latex.fmt');
     else if (path.startsWith('/tc/engine/dist/') || path.startsWith('/tc/engine/tex/')) file = normalize(join(TC, path.slice(3)));
     else if (path === '/dist/editor-worker.js') file = join(EDITOR, 'engine/dist/editor-worker.js');
-    else if (/^\/seed\/(example|intro)\.json$/.test(path) && (await stat(join(EDITOR, 'build', path)).catch(() => null))?.isFile()) file = join(EDITOR, 'build', path);
+    else if (path.startsWith('/texlive/')) {
+      file = normalize(join(WWW, path));
+      if (!file.startsWith(WWW + '/')) return send(403, 'no');
+    }
+    else if (path === '/seed/intro.json' && (await stat(join(EDITOR, 'build', path)).catch(() => null))?.isFile()) file = join(EDITOR, 'build', path);
     else {
       if (path.endsWith('/')) path += 'index.html';
       file = normalize(join(WEB, path));

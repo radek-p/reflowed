@@ -27,7 +27,7 @@ function oldKeys(sent: Map<string, string | null>) {
 
 interface Doc { name: string, preamble: string, bbl: string, blocks: { id: string, source: string, context?: string }[] }
 const docs: Doc[] = [];
-for (const f of ['app/seed/intro.json', 'app/seed/example.json']) {
+for (const f of ['app/seed/intro.json']) {
   const p = join(HERE, f);
   if (!existsSync(p)) { console.log(`(no ${f}: node scripts/seed.ts, w3-build --assets; synthetic blocks only)`); continue; }
   const init = JSON.parse(readFileSync(p, 'utf8')).init;

@@ -6,15 +6,14 @@
 //   node tests/test-cite.ts --units                 the numbering of \bibitem's and the context lines (Node)
 //   node tests/test-cite.ts --engine                the editor engine in Node: every cited key's \bibcite line in a
 //                                                     block run equals a whole-document compile's (.aux), for the
-//                                                     intro (plain: its .bbl), the example when built
-//                                                     (LIPIcs + plainurl + hyperref) and fixtures
+//                                                     intro (plain: its .bbl) and fixtures
 //                                                     (article + plain with [labels], natbib author-year, natbib numbers)
 //   node tests/test-cite.ts dev [http://localhost:8150/] | file [dist/….html]
 //                                                     the app: the intro's citations print its .bbl's
 //                                                     numbers (no [?]), refsState().bib has its entries, an unknown key
 //                                                     is a problem; the tests' biblatex document is unchanged
 import { createRequire } from 'node:module';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +29,6 @@ const check = (name: string, ok: boolean, detail: unknown = '') => {
   n++; const d = typeof detail === 'string' ? detail : JSON.stringify(detail);
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${d && !ok ? ` — ${d.slice(0, 900)}` : ''}`); if (!ok) fail++;
 };
-const seedPath = (name: string) => [join(HERE, 'build/seed', name), join(HERE, 'app/seed', name)].find(existsSync) ?? null;
 
 // ── units ────────────────────────────────────────────────────────────────────
 async function units() {
@@ -102,11 +100,6 @@ async function engineChecks() {
   const list = [...FIXTURES];
   const intro = (await buildIntroSeed()).seed.init as any;
   list.push({ name: 'the intro (article, plain, hyperref)', preamble: intro.preamble, blocks: intro.blocks, bbl: intro.bib?.source ?? null, assets: intro.assets });
-  const mso = seedPath('example.json');
-  if (mso) {
-    const init = JSON.parse(readFileSync(mso, 'utf8')).init;
-    list.push({ name: 'the MSO paper (LIPIcs, plainurl, hyperref)', preamble: init.preamble, blocks: init.blocks, bbl: init.bib?.kind === 'bbl' ? init.bib.source : null, assets: init.assets });
-  } else console.log('(the MSO paper\'s seed is not on disk: build/seed/example.json; skipped)');
   const e = await engine('async');
   const bibcites = (aux: string) => new Map([...aux.matchAll(/^\\bibcite\{([^}]*)\}(.*)$/gm)].map((m) => [m[1], m[2]]));
   for (const fx of list) {
@@ -153,13 +146,10 @@ async function engineChecks() {
   const { memoryStore } = await import('../app/src/store/api.ts');
   const { exportSingle } = await import('../app/src/io/export.ts');
   const { loadSeed } = await import('../app/src/io/api.ts');
-  const exPath = seedPath('example.json');
   const introSeed = (await buildIntroSeed()).seed;
-  const exSeed = exPath ? JSON.parse(readFileSync(exPath, 'utf8')) : null;
   const docs: [string, (st: any) => Promise<string>, { name: string; base64: string }[]][] = [
     ['the intro', async (st) => loadSeed(st, introSeed), (introSeed.init as any).assets ?? []],
     ['the biblatex document', async (st) => st.createDoc(biblatexDoc()), []],
-    ...(exSeed ? [['the MSO paper', async (st: any) => loadSeed(st, exSeed), exSeed.init.assets ?? []] as [string, (st: any) => Promise<string>, { name: string; base64: string }[]]] : []),
   ];
   for (const [label, make, assets] of docs) {
     for (const a of assets) local.set(a.name, Buffer.from(a.base64, 'base64'));

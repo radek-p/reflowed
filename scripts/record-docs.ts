@@ -1,6 +1,6 @@
 // The documents scripts/record.ts records the working set with, and the pack's
 // minification proof (scripts/minify-pack.ts) compiles twice: the default
-// documents (the intro, the example), figure labels, TikZ, the engine's samples, the block templates, font
+// document (the intro), figure labels, TikZ, the engine's samples, the block templates, font
 // switches, then the tier documents of engine/scripts/tiers.ts.
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -29,7 +29,6 @@ export async function recordDocs(): Promise<Doc[]> {
       assets: (ex.assets ?? []).map((a: { name: string; mime: string; base64: string }) => ({ name: a.name, mime: a.mime, b64: a.base64 })) });
   };
   seedDoc('intro.json', 'intro');
-  seedDoc('example.json', 'example (paper2)');
   docs.push({ name: 'figure labels', preamble: r`\documentclass{article}
   \usepackage{amsmath,amssymb,mathrsfs}
   \usepackage{tikz}`, blocks: [

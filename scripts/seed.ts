@@ -1,19 +1,17 @@
 // The seed documents, imported with the editor's own importer, each one JSON file the build inlines and the app
 // loads with io's loadSeed(store, json):
-//   build/seed/intro.json     the introduction to ReflowEd (samples/intro/seed-intro.ts; a default document)
-//   build/seed/example.json   the example: an optional example document (samples/paper2/seed-example.ts; sources from
-//                             samples/paper2/fetch.sh, skipped with a note when they are not there)
+//   build/seed/intro.json     the introduction to ReflowEd (samples/intro/seed-intro.ts; the default document)
 //
 // Each file carries seedHash (its content) and builtAt; the app replaces an
 // unedited stored copy when the version changes (app/src/io/seeds.ts).
 //
-//   node scripts/seed.ts [--out-dir build/seed] [--no-example]      (the intro is always built)
+//   node scripts/seed.ts [--out-dir build/seed]
 //
 // Ids are deterministic (seeded generators, fixed doc ids), so rebuilding
 // gives the same doc and block ids and the prebuilt cache stays valid.
-// Also writes <out-dir>/example-report.json and intro-report.json (the import reports).
+// Also writes <out-dir>/intro-report.json (the import report).
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { SeedFile } from '../app/src/io/seed.ts';
@@ -46,19 +44,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     writeFileSync(resolve(dir, 'intro-report.json'), JSON.stringify(intro.report, null, 1));
     const r = intro.report as { blocks: number; assets: unknown[] };
     console.log(`${resolve(dir, 'intro.json')}: ${kb(json)} · "${intro.seed.init.title}" · ${r.blocks} blocks · ${r.assets.length} assets · doc id ${intro.seed.id}`);
-  }
-  // the example document (samples/paper2/: not in every checkout)
-  const exampleScript = resolve(EDITOR, 'samples/paper2/seed-example.ts');
-  const exMod = !process.argv.includes('--no-example') && existsSync(exampleScript) ? await import(exampleScript) : null;
-  if (process.argv.includes('--no-example')) { /* skipped */ }
-  else if (!exMod) console.log('example.json: skipped (no samples/paper2/ in this checkout)');
-  else if (!exMod.exampleSourcesPresent()) console.log('example.json: skipped (no paper2/source/: run paper2/fetch.sh)');
-  else {
-    const ex = await exMod.buildExampleSeed();
-    const json = JSON.stringify(await stampSeed(ex.seed));
-    writeFileSync(resolve(dir, 'example.json'), json);
-    writeFileSync(resolve(dir, 'example-report.json'), JSON.stringify(ex.report, null, 1));
-    const er = ex.report as { blocks: number; assets: unknown[]; bib: { entries: number } };
-    console.log(`${resolve(dir, 'example.json')}: ${kb(json)} · "${ex.seed.init.title}" · ${er.blocks} blocks · ${er.assets.length} assets · ${er.bib.entries} bbl entries · doc id ${ex.seed.id}`);
   }
 }

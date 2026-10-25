@@ -3,8 +3,7 @@
 // the npm packages bundled into the app and the worker (from esbuild's
 // metafiles), the engine (reflow-tectonic: Tectonic/XeTeX and the C libraries in the wasm), each
 // packed TeX file (its licence as the file states it), and the default documents
-// (the introduction: AGPL-3.0-or-later, the editor's licence; the example paper, when a build carries it: CC BY 4.0, with
-// the changes made for the demo).
+// (the introduction: AGPL-3.0-or-later, the editor's licence).
 import { createRequire } from 'node:module';
 import type * as E from 'esbuild';
 // esbuild lives in engine/node_modules
@@ -103,7 +102,7 @@ export function texLicence(name: string, bytes: Uint8Array): string {
 }
 
 export async function collectLicences(o: {
-  appMeta: E.Metafile; engineDir: string; editorDir: string; pub: string; tc: string;
+  appMeta: E.Metafile; engineDir: string; pub: string; tc: string;
   texFiles: [string, Uint8Array][]; roots: string[]; seeds?: string[];
 }): Promise<Licences> {
   const app = packagesOf(o.appMeta), worker = await workerPackages(o.engineDir, o.pub, o.tc);
@@ -128,9 +127,6 @@ export async function collectLicences(o: {
   const documents: { seed: string; title: string; source: string; licence: string; url?: string; changes: string[] }[] = [
     { seed: 'intro.json', title: 'An Introduction to ReflowEd', source: 'written for ReflowEd', licence: 'AGPL-3.0-or-later', url: 'https://www.gnu.org/licenses/agpl-3.0.html', changes: [] },
   ];
-  // the example's row lives with the example (samples/paper2/licence.ts, not in every checkout)
-  const exRow = join(o.editorDir, 'samples/paper2/licence.ts');
-  if (o.seeds?.includes('example.json') && existsSync(exRow)) documents.push((await import(exRow)).EXAMPLE_LICENCE);
   return { notice: NOTICE, npm, engine, tex, documents: documents.filter((d) => !o.seeds || o.seeds.includes(d.seed)).map(({ seed: _s, ...d }) => d) };
 }
 

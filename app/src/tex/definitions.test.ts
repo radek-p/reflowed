@@ -51,7 +51,7 @@ check('contextsFor: defs lists the contributing blocks, each before the block', 
 // the seeds: no block that typesets is in a later block's context (outside a thm-restate restatement);
 // a block that glues \machineQX to a display gives only its definition
 const SEEDS = new URL('../../../build/seed/', import.meta.url);
-for (const f of ['example.json', 'seed.json']) {
+for (const f of ['intro.json']) {
   const p = new URL(f, SEEDS);
   if (!existsSync(p)) { console.log(`skip ${f}: no seed (node scripts/seed.ts)`); continue; }
   const bl = JSON.parse(readFileSync(p, 'utf8')).init.blocks.filter((b: any) => !b.attrs?.container);

@@ -16,7 +16,7 @@
 // broken down by font kind (TFM / native) and by mode (text: paragraph glyphs
 // outside inline maths; math: inline maths; display: display items and boxes).
 //
-//   node scripts/position-coverage.ts [--seeds=intro.json,example.json] [--blocks=N] [--list=K]
+//   node scripts/position-coverage.ts [--seeds=intro.json] [--blocks=N] [--list=K]
 //   → build/position-coverage.json, a table on stdout; exit 0 (it measures)
 import { readFileSync, writeFileSync } from 'node:fs';
 import { engine, local, TC, EXTRA, fetchSync, ENGINE } from '../tests/node-host.ts';
@@ -26,7 +26,7 @@ import { walk } from '../build/engine-api-src/rtx/shared/tree.ts';
 
 type J = Record<string, any>;
 const arg = (k: string) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3);
-const SEEDS = (arg('seeds') ?? 'intro.json,example.json').split(',');
+const SEEDS = (arg('seeds') ?? 'intro.json').split(',');
 const MAX = Number(arg('blocks') ?? 1e9);
 const LIST = Number(arg('list') ?? 8);
 

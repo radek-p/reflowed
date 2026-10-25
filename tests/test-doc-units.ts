@@ -331,16 +331,15 @@ const inMemory = (t: any) => t.doc.blocks.map((b: any) => `${b.kind}:${b.source}
 
 // ── derived state and results per document: keys as the editor made them, two documents apart ──
 {
-  const { existsSync, readFileSync } = await import('node:fs');
   const { createDerived, hash } = await imp('app/src/doc/derived.js');
   const { createResults } = await imp('app/src/doc/results.js');
   const { blockCacheKey } = await imp('app/src/doc/cache-key.js');
   const { splitMeta, blockSource } = await imp('app/src/meta/compile.ts');
   const { guessKind, theoremKinds } = await imp('app/src/doc/kinds.js');
   const { createRefs } = await imp('app/src/refs/index.ts');
-  // the intro from its source (always in the checkout); the example when this checkout has it built
+  // the intro from its source (always in the checkout)
   const { buildIntroSeed } = await import('../samples/intro/seed-intro.ts');
-  const inits: [string, any][] = [['intro', (await buildIntroSeed()).seed.init], ...['app/seed/example.json'].filter((p) => existsSync(join(HERE, p))).map((p): [string, any] => [p, JSON.parse(readFileSync(join(HERE, p), 'utf8')).init])];
+  const inits: [string, any][] = [['intro', (await buildIntroSeed()).seed.init]];
   // a flat document (no containers): the nesting's view of it is the list itself
   const nest = { contextView: (l: any[]) => l, extraContext: () => '', compileSource: (b: any) => b.source, treeSig: () => 'flat' };
   const backend = { id: 'tectonic', keyFor: (b: any) => `e1.${hash(`${b.context}\u0000${b.source}`)}` };

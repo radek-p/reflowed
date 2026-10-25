@@ -1,5 +1,5 @@
 // A probe of the integrated page (dev only): opens ?workbench=1 on a document, prints the page's errors and the
-// state, takes a screenshot. node tests/qa/probe-wb.ts [base] [--hash '#/doc/example'] [--out name] [--js 'expr']
+// state, takes a screenshot. node tests/qa/probe-wb.ts [base] [--hash '#/doc/intro'] [--out name] [--js 'expr']
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -17,7 +17,7 @@ const page = await ctx.newPage();
 page.on('pageerror', (e: any) => console.log('pageerror:', e.message, e.stack?.split('\n').slice(0, 4).join(' | ')));
 page.on('console', (m: any) => { if (m.type() === 'error' || m.type() === 'warning') console.log(`console.${m.type()}:`, m.text().slice(0, 400)); });
 page.setDefaultTimeout(120000);
-await page.goto(`${BASE}?engine${argv.includes('--keep') ? '' : '&fresh'}${opt('--q', '')}${opt('--hash', '#/doc/example')}`);
+await page.goto(`${BASE}?engine${argv.includes('--keep') ? '' : '&fresh'}${opt('--q', '')}${opt('--hash', '#/doc/intro')}`);
 await page.waitForFunction(() => (window as any).editorAPI?.whenIdle, null, { timeout: 120000 });
 await page.evaluate(() => (window as any).editorAPI.whenIdle?.());
 const js = opt('--js', '');

@@ -8,8 +8,8 @@
 // scripts/lib/app-bundle.ts) to the real module, or to app/stubs.js while it is missing. URL options:
 //   ?stubs=store,refs   use the stub even where the real module exists
 //   ?backend=none|…    pick the compile backend (else the saved choice)
-//   ?seed=example|paper|sample  what to put in an empty store (default: the example and
-//                       the paper; sample = the tests' fixture, app/test-fixture.js)
+//   ?seed=intro|sample|long  what to put in an empty store (default: the introduction; sample = the
+//                       tests' fixture, app/test-fixture.js; long = the intro repeated; app/seeds.ts)
 //   ?engine             offer engine backend on a dev page (it needs /bundle/)
 //   ?fresh              start from the default layout (the saved one is a disposable preference)
 import { h } from './app/app.js';

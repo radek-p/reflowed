@@ -1,6 +1,6 @@
 // "Missing character" lines of every block of the default documents through the editor engine (Node):
 // characters XeTeX could not find in the font, which vanish from the output. With
-//   node scripts/missing-chars.ts [--seeds=intro.json,example.json] [--without-fix]
+//   node scripts/missing-chars.ts [--seeds=intro.json] [--without-fix]
 import { readFileSync } from 'node:fs';
 import { engine, local, TC, EXTRA, ENGINE } from '../tests/node-host.ts';
 import { buildHost, blockFile } from '../src/compile.ts';
@@ -8,7 +8,7 @@ const { contextFor } = await import('../../app/src/refs/context.ts');
 
 type J = Record<string, any>;
 const arg = (k: string) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3);
-const SEEDS = (arg('seeds') ?? 'intro.json,example.json').split(',');
+const SEEDS = (arg('seeds') ?? 'intro.json').split(',');
 const WITHOUT = process.argv.includes('--without-fix');
 const extra = { ...EXTRA };
 if (WITHOUT) extra['rtx-xetex.sty'] = extra['rtx-xetex.sty'].replace('\\RequirePackage{rtx-tfm-unicode}', '');

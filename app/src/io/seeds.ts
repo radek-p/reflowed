@@ -223,8 +223,8 @@ export async function resetToSeed(store: DocStore, docId: string): Promise<strin
 }
 
 const EDITED = ' (edited)';
-/** The app's own tags that name the sample (app/seeds.ts: #/doc/example, #/doc/intro): they go with the sample. */
-const SAMPLE_TAGS = new Set(['example', 'intro']);
+/** The app's own tag that names the sample (app/seeds.ts: #/doc/intro): it goes with the sample. */
+const SAMPLE_TAGS = new Set(['intro']);
 
 /** "Open the new version": this build's version of the sample as a new document (new ids), which is the
  *  sample from now on (later builds update it, it carries the sample's tags); the user's copy stays as it is,

@@ -57,7 +57,7 @@ import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rm
 import { join, resolve } from 'node:path';
 import { cpus, loadavg } from 'node:os';
 import { ensureBrowsers } from './qa/lib/browsers.ts';
-import { introBuilt, exampleBuilt } from './qa/lib/samples.ts';
+import { introBuilt } from './qa/lib/samples.ts';
 import { SUITES, scriptOf, KNOWN, KNOWN_REVIEW_DAYS, knownAge, afterRerun, normLine, tooLoadedLines, factorsIn, ROOT, select, estimate, seeded, type Suite, type Ctx } from './suites.ts';
 
 const HERE = ROOT;     // the repository root
@@ -214,7 +214,7 @@ function run(s: Suite, sampled: boolean, L: Lane): Promise<Row> {
   return new Promise((resolve) => {
     // every row's script is in the repository (test-select checks it): a missing one fails, it is not skipped
     if (!existsSync(join(HERE, scriptOf(s)))) { resolve({ name: s.name, group: s.group, status: 'fail', counts: '', seconds: 0, fails: [`${scriptOf(s)} is not in the repository`], known: [] }); return; }
-    const miss = s.needs === 'file' && !existsSync(FILE) ? `${FILE} not built (node scripts/build.ts)` : s.needs === 'intro' && !introBuilt() ? 'the intro is not built (node scripts/seed.ts)' : s.needs === 'example' && !exampleBuilt() ? 'the example is not built (node scripts/seed.ts)' : s.needs === 'samples' && !introBuilt() && !exampleBuilt() ? 'no sample document here (node scripts/seed.ts)' : s.seedOnly && !seedOk ? 'no dev seed cache (--cold, or it does not fit the worker)' : null;
+    const miss = s.needs === 'file' && !existsSync(FILE) ? `${FILE} not built (node scripts/build.ts)` : s.needs === 'intro' && !introBuilt() ? 'the intro is not built (node scripts/seed.ts)' : s.seedOnly && !seedOk ? 'no dev seed cache (--cold, or it does not fit the worker)' : null;
     if (miss) { resolve({ name: s.name, group: s.group, status: 'skipped', counts: '', seconds: 0, fails: [], known: [], note: miss }); return; }
     const useSeed = !!L.seeded && seedOk && seeded(s);
     const [cmd, ...args] = (sampled && s.sample ? s.sample : s.cmd)(useSeed ? { ...L.ctx, dev: L.seeded } : L.ctx);

@@ -1,9 +1,9 @@
 // The caret between the preview and the source, clicked through on whole documents.
 //
-//   node tests/test-caret.ts dev [http://localhost:8150/] [--docs intro,example] [--per 10] [--sample N] [--browser chromium]
+//   node tests/test-caret.ts dev [http://localhost:8150/] [--docs intro] [--per 10] [--sample N] [--browser chromium]
 //   (--sample N: N blocks per document spread over it, the standard tier; without it every block)
 //   node tests/test-caret.ts file [dist/reflowtex-editor.html] [--docs …]
-//   (Playwright; the file must carry the documents: build.ts carries the intro; --seeds=example.json adds the example)
+//   (Playwright; the file must carry the documents: build.ts carries the intro)
 //
 // For every block of each document that has text (up to all of them), on the app itself:
 //   1. identity: every letter the view maps exactly (not through a macro) is the source character at
@@ -27,7 +27,7 @@ const argv = process.argv.slice(2);
 const TARGET = argv[0] === 'file' ? 'file' : 'dev';
 const flag = (n: string) => (argv.includes(n) ? argv[argv.indexOf(n) + 1] : null);
 const BROWSER = flag('--browser') ?? 'chromium';
-const DOCS = (flag('--docs') ?? 'intro,example').split(',');
+const DOCS = (flag('--docs') ?? 'intro').split(',');
 const PER = Number(flag('--per') ?? 10);
 const SAMPLE = sampleArg(argv);              // blocks per document, spread over it (null: all)
 const pos = argv[1] && !argv[1].startsWith('--') ? argv[1] : null;

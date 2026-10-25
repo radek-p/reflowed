@@ -14,7 +14,7 @@
 //       [u32 header length][JSON [[name, offset, length]…]][bytes…] with latex.fmt,
 //       tectonic_wasm.wasm (the editor engine: Asyncify + engine capture) and
 //       texmf/<name> for every working-set file
-//   <script id="rtx-seed-doc" type="application/json">   { 'intro.json': …, 'example.json': … }:
+//   <script id="rtx-seed-doc" type="application/json">   { 'intro.json': … }:
 //       the default documents (build/seed/, scripts/seed.ts); the boot script sets
 //       globalThis.__rtxSeeds and answers seed/<name> fetches from them
 //   <script id="rtx-seed-cache" type="application/octet-stream">   base64 gzip of
@@ -202,9 +202,9 @@ const cssText = {
 const builtAt = new Date().toISOString();
 const { collectLicences, licencesText, NOTICE } = await import('./licences.ts');
 // the default documents this build carries: the intro always (samples/intro/, rebuilt from its source below), and
-// what --seeds=example.json adds (the example is out by default: its caret mapping is unreliable)
+// what --seeds=<name>.json adds (other seed files in build/seed/)
 const SEED_NAMES = [...new Set(['intro.json', ...([...args].find((a) => a.startsWith('--seeds='))?.slice(8) ?? '').split(',').filter(Boolean)])];
-const LIC = await collectLicences({ appMeta: app.metafile!, engineDir: ENGINE, editorDir: HERE, pub: PUB, tc: TC, texFiles: entries, seeds: SEED_NAMES,
+const LIC = await collectLicences({ appMeta: app.metafile!, engineDir: ENGINE, pub: PUB, tc: TC, texFiles: entries, seeds: SEED_NAMES,
   roots: [join(ENGINE, 'node_modules'), join(WEB, 'node_modules'), join(TC, 'engine/encode/node_modules'), join(PUB, 'node_modules')] });
 const LICENCES_RAW = licencesText(LIC, `reflowtex editor ${VERSION}, engine ${worker.build}, ${builtAt}`);
 const LICENCES = LICENCES_RAW.replace(/<\//g, '<\\/');
@@ -213,8 +213,8 @@ const LICENCES_JSON = JSON.stringify({ ...LIC, npm: LIC.npm.map(({ text: _t, ...
 console.log(`licences: ${LIC.npm.length} npm packages, ${LIC.engine.length} engine parts, ${LIC.tex.length} TeX files (${LIC.tex.filter((t) => !/not stated/.test(t.licence)).length} with a stated licence), 2 documents`);
 
 // ── Seed documents and seed cache ────────────────────────────────────────────
-// build/seed/intro.json (the introduction to ReflowEd, samples/intro/) and build/seed/example.json
-// (an optional example document, samples/paper2/), each inline; the app loads them into an empty store.
+// build/seed/intro.json (the introduction to ReflowEd, samples/intro/) and any --seeds, each inline; the app loads
+// them into an empty store.
 // The seed cache, engine/build/seed-cache.json.gz =
 //   { build, docs, results: { key: result }, fonts: { reqs, served, files: { name: base64 } } }
 // is kept up to date on every build (below, "Precompiling"): results whose key
@@ -554,9 +554,8 @@ else {
 // mounted blocks use draws its own glyphs (a canvas width test: the text
 // measures the same with a serif and a monospace fallback behind the family,
 // and draws some ink: any at all, as cmsy10's centred dot covers 14 pixels at
-// 40 px); maths fonts, Latin Modern T1 (the example, when shipped) and a
-// typewriter font must be among them. A failure renames the
-// file to reflowtex-editor.broken.html and exits 1. --no-verify skips it.
+// 40 px); maths fonts and a typewriter font must be among them. A failure
+// renames the file to reflowtex-editor.broken.html and exits 1. --no-verify skips it.
 /** After a click on a late section in the outline, the page settles and then holds still:
  *  scrollY sampled every frame for 2 s once the glide ends varies by at most 1 px. */
 async function outlineStillCheck(page: any, id: string | undefined): Promise<string[]> {
@@ -769,11 +768,10 @@ async function acceptance(baked: boolean): Promise<string[]> {
     for (const f of bad) problems.push(`${n}: font ${f.fam} (${f.status}) does not draw "${f.s}" (${!f.own ? 'a fallback font draws it' : 'no ink'})`);
     for (const f of r.fams) {
       if (/^(cm(mi|sy|ex)|msam|msbm|rsfs|eufm|lmmi|lmsy|lmex)/i.test(f.fam)) kinds.add('maths');
-      if (/^(ec[-_]lm|lm[-_]|lmr|lmroman|lmss|lmsans|lmtt)/i.test(f.fam)) kinds.add('Latin Modern');
       if (/tt|mono|inconsolata|courier/i.test(f.fam)) kinds.add('typewriter');
     }
   }
-  for (const k of ['maths', 'typewriter', ...(seedNames.includes('example.json') ? ['Latin Modern'] : [])]) if (!kinds.has(k)) problems.push(`no ${k} text found in the documents to check`);
+  for (const k of ['maths', 'typewriter']) if (!kinds.has(k)) problems.push(`no ${k} text found in the documents to check`);
   // the introduction (every release carries it): there, opens, no block error, every picture drawn from its bytes
   {
     const { introCheck, introProblems } = await import('../tests/qa/lib/intro-check.ts');

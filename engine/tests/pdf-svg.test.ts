@@ -1,8 +1,8 @@
 // engine/src/pdf-svg.ts: a PDF picture as SVG (Node). Synthetic PDFs written here (paths, colours, clipping,
-// a form XObject, an object stream; text and images refused), and the seed's own PDFs when they are on disk
-// (web/seed/example.json: orcid.pdf, cc-by.pdf, lipics-logo-bw.pdf are vector: drawn; eatcs.pdf has text: refused).
+// a form XObject, an object stream; text and images refused), and the class's own PDFs (engine/tex/: orcid.pdf,
+// cc-by.pdf, lipics-logo-bw.pdf are vector: drawn).
 //   node tests/pdf-svg.test.ts
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -87,21 +87,14 @@ const page = (content: string, res = '<<>>', extra = '') => pdf([
 // WebKit smoke saw 'Cannot load blob:null/…' after a preamble change)
 check('the inflate writes into the stream, no Blob', !/new Blob\(/.test(readFileSync(join(HERE, '../src/pdf-svg.ts'), 'utf8')));
 
-// the seed's own pictures (paper content: on disk, not in git)
-const seed = join(HERE, '../../app/seed/example.json');
-if (existsSync(seed)) {
-  const assets: { name: string; base64: string }[] = JSON.parse(readFileSync(seed, 'utf8')).init.assets;
-  const get = (n: string) => { const a = assets.find((x) => x.name === n); return a ? new Uint8Array(Buffer.from(a.base64, 'base64')) : null; };
-  const orcid = get('orcid.pdf');
-  if (orcid) {
-    const s = await pdfToSvg(orcid);
-    if (process.env.PDF_SVG_OUT && s) (await import('node:fs')).writeFileSync(process.env.PDF_SVG_OUT, s);
-    check('example.json orcid.pdf: drawn (256 × 256 pt, the green disc and the white iD)', !!s && /viewBox="0 0 256 256"/.test(s) && /rgb\(144,210,60\)/.test(s) && /rgb\(255,255,255\)/.test(s) && (s.match(/<path/g) ?? []).length >= 4, s?.slice(0, 300));
-  }
-  for (const nm of ['cc-by.pdf', 'lipics-logo-bw.pdf']) { const b = get(nm); if (b) { const s = await pdfToSvg(b); check(`example.json ${nm}: drawn (vector)`, !!s && (s.match(/<path/g) ?? []).length > 3, s?.slice(0, 200)); } }
-  const e = get('eatcs.pdf');
-  if (e) check('example.json eatcs.pdf (text inside): refused', await pdfToSvg(e) === null);
-} else console.log('(web/seed/example.json not on disk: the seed checks skipped)');
+// the class's own pictures (engine/tex/, beside lipics-v2021.cls)
+const texPdf = (n: string) => new Uint8Array(readFileSync(join(HERE, '../tex', n)));
+{
+  const s = await pdfToSvg(texPdf('orcid.pdf'));
+  if (process.env.PDF_SVG_OUT && s) (await import('node:fs')).writeFileSync(process.env.PDF_SVG_OUT, s);
+  check('orcid.pdf: drawn (256 × 256 pt, the green disc and the white iD)', !!s && /viewBox="0 0 256 256"/.test(s) && /rgb\(144,210,60\)/.test(s) && /rgb\(255,255,255\)/.test(s) && (s.match(/<path/g) ?? []).length >= 4, s?.slice(0, 300));
+}
+for (const nm of ['cc-by.pdf', 'lipics-logo-bw.pdf']) { const s = await pdfToSvg(texPdf(nm)); check(`${nm}: drawn (vector)`, !!s && (s.match(/<path/g) ?? []).length > 3, s?.slice(0, 200)); }
 
 console.log(`\n${n - failed}/${n} checks passed`);
 process.exit(failed ? 1 : 0);

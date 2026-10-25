@@ -26,10 +26,8 @@ export interface Suite {
   cmd: (c: Ctx) => string[];
   sample?: (c: Ctx) => string[];
   timing?: boolean; alone?: boolean; cold?: boolean;
-  /** file: the built single file (dist/); intro: build/seed/intro.json (node scripts/seed.ts); example: build/seed/example.json
-   *  (an optional extra document, not in this repository); samples: the intro or the example, each run on the ones there
-   *  (tests/qa/lib/samples.ts docsHere) */
-  needs?: 'file' | 'intro' | 'example' | 'samples';
+  /** file: the built single file (dist/); intro: build/seed/intro.json (node scripts/seed.ts) */
+  needs?: 'file' | 'intro';
   /** runs only against the seeded dev server (skipped with --cold, or when the cache does not fit the worker) */
   seedOnly?: boolean;
   /** why it is cold or alone, shown by --list */
@@ -161,10 +159,8 @@ export const SUITES: Suite[] = [
   S('fmt-early-release', 'file', 20, (c) => node('tests/test-fmt-early.ts', '--release', c.file, '--port', '8173'), { note: 'a static server on 8173; the intro shown with the engine packs held back 30 s' }),
   S('multifile', 'file', 20, (c) => node('tests/test-multifile.ts', '--file', c.file), { note: 'static servers on 8171-8172; the loading indicator, the engine from the packs, requests' }),
 ];
-// the suites a sample document is the subject of (they stop at once without it): skipped, with the reason, where it is
-// not built (the example: an optional extra document)
-for (const s of SUITES) if (['popover-hold', 'refs-panel', 'files', 'e2e-dev'].includes(s.name)) s.needs ??= 'intro';
-for (const s of SUITES) if (['widths', 'far-dev'].includes(s.name)) s.needs ??= 'samples';   // the intro or the example, whichever is there
+// the suites the intro is the subject of (they stop at once without it): skipped, with the reason, where it is not built
+for (const s of SUITES) if (['popover-hold', 'refs-panel', 'files', 'e2e-dev', 'widths', 'far-dev'].includes(s.name)) s.needs ??= 'intro';
 export const byName = new Map(SUITES.map((s) => [s.name, s]));
 const DUMMY: Ctx = { dev: 'http://x', file: '/x.html' };
 /** the script a suite runs (repository-relative) */

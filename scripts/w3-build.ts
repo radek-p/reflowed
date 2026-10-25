@@ -9,7 +9,7 @@
 // app/lib/two-editors.js, app/lib/gallery.js   the harness and the gallery (app/two-editors.html, app/gallery.html; dev only)
 // app/lib/viewer/        latex-viewer.js, protobuf.min.js, schema.b64
 // app/lib/companion/     the public companion package (css; js is bundled)
-// app/seed/              intro.json, example.json (scripts/seed.ts: build/seed/), when built
+// app/seed/              intro.json (scripts/seed.ts: build/seed/), when built
 //
 // --assets copies the assets (the public repo, build/seed); without it only
 // the bundle is rebuilt. The engine's worker is engine/dist (engine/scripts/build-worker.ts), served by the dev server.
@@ -83,7 +83,7 @@ if (args.has('--assets')) {
   copyFileSync(join(PUB, 'src/companion/companion.css'), join(LIB, 'companion/companion.css'));
   mkdirSync(join(WEB, 'seed'), { recursive: true });
   // the default documents (scripts/seed.ts → build/seed/)
-  const seeds = ['intro.json', 'example.json'].filter((n) => existsSync(join(HERE, 'build/seed', n)));
+  const seeds = ['intro.json'].filter((n) => existsSync(join(HERE, 'build/seed', n)));
   for (const n of seeds) copyFileSync(join(HERE, 'build/seed', n), join(WEB, 'seed', n));
   console.log(`assets: viewer, schema, companion, seed (${seeds.join(', ') || 'none'})`);
 }

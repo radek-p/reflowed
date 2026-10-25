@@ -1,15 +1,14 @@
-// THE DEFAULT DOCUMENTS (out of main.js, both of the standalone page's hosts seed the same way): an empty store
-// gets the example and the introduction; on every later start this build's default documents are synced (io/seeds.ts:
-// unedited stored copies follow the build, edited ones get a banner, deleted ones stay deleted).
-//   Each is a seed file read through io.loadSeed: inline in the single file (globalThis.__rtxSeeds[name]), else
-//   seed/<name>. The example: an optional extra document's seed file (seed/example.json). The introduction to
-//   ReflowEd: samples/intro/'s seed file (seed/intro.json), created last so it heads the home list. A build carries
-//   the ones it ships (scripts/build.ts --seeds); a seed this page has neither inline nor at seed/<name> is skipped.
-//   ?seed=example|intro|sample|long picks one (sample = the tests' fixture, app/test-fixture.js; long = the tests' long
+// THE DEFAULT DOCUMENT (out of main.js, both of the standalone page's hosts seed the same way): an empty store
+// gets the introduction; on every later start this build's default document is synced (io/seeds.ts: an unedited
+// stored copy follows the build, an edited one gets a banner, a deleted one stays deleted).
+//   It is a seed file read through io.loadSeed: inline in the single file (globalThis.__rtxSeeds[name]), else
+//   seed/<name>. The introduction to ReflowEd: samples/intro/'s seed file (seed/intro.json). A build carries the
+//   seeds it ships (scripts/build.ts --seeds); a seed this page has neither inline nor at seed/<name> is skipped.
+//   ?seed=intro|sample|long picks one (sample = the tests' fixture, app/test-fixture.js; long = the tests' long
 //   document, the intro repeated: app/long-fixture.ts).
 //
 //   await seedStore({ store, ioMod, what })
-//   await resolveAlias(store, id)      #/doc/example, #/doc/intro, #/doc/sample, #/doc/long: the tagged document's id
+//   await resolveAlias(store, id)      #/doc/intro, #/doc/sample, #/doc/long: the tagged document's id
 import { testFixtureDocument } from './test-fixture.js';
 import { longSeed, LONG } from './long-fixture.ts';
 
@@ -25,13 +24,10 @@ interface IoLike {
   syncSeeds?(store: StoreLike, seeds: unknown[]): Promise<unknown>;
 }
 const g = globalThis as { __rtxSeeds?: Record<string, unknown> };
-/** The example (samples/paper2/seed-example.ts writes build/seed/example.json, where its sources are; not in every
- *  checkout or build) */
-export const EXAMPLE = Object.freeze({ seed: 'example.json', tag: 'example' });
 /** The introduction to ReflowEd (samples/intro/seed-intro.ts writes build/seed/intro.json; the seed tags itself). */
 export const INTRO = Object.freeze({ seed: 'intro.json', tag: 'intro' });
 /** The default documents, in the order they are created (the last heads the home list). */
-const DEFAULTS = [EXAMPLE, INTRO] as const;
+const DEFAULTS = [INTRO] as const;
 const wanted = (what: string | null) => DEFAULTS.filter((d) => !what || what === d.tag);
 const get = async (name: string) => { try { const r = await fetch(new URL(`seed/${name}`, document.baseURI)); return r.ok ? r : null; } catch { return null; } };
 /** the seed's JSON. A release carries its seeds (the single file inline, the multi-file release from its manifest:
@@ -70,7 +66,7 @@ async function syncBuildSeeds(store: StoreLike, ioMod: IoLike, what: string | nu
   } catch (e) { console.warn('seed versioning:', (e as Error).message); }
 }
 
-/** the aliases of dev and tests: a tag (sample, long, example, intro) names the document carrying it */
+/** the aliases of dev and tests: a tag (sample, long, intro) names the document carrying it */
 export async function resolveAlias(store: StoreLike, id: string): Promise<string> {
   if (id !== 'sample' && id !== LONG.tag && !DEFAULTS.some((d) => d.tag === id)) return id;
   const list = await store.listDocs();

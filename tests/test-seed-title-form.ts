@@ -51,7 +51,7 @@ for (const [label, pre] of [['lipics', LIPICS], ['article', ARTICLE]] as const) 
 check('a lost field is caught (titleLosses)', titleLosses(LIPICS, withTitleForm(LIPICS).preamble.replace(/, email = \{ada@example.org\}/, '')).some((x) => /email/.test(x)));
 
 // the built seeds
-for (const [f, authors, orcids, emails, affil] of [['build/seed/intro.json', 0, 0, 0, false], ['build/seed/example.json', 1, 1, 1, true]] as const) {
+for (const [f, authors, orcids, emails, affil] of [['build/seed/intro.json', 0, 0, 0, false]] as const) {
   const p = join(HERE, f);
   if (!existsSync(p)) { console.log(`(${f} not built: skipped)`); continue; }
   const pre: string = JSON.parse(readFileSync(p, 'utf8')).init.preamble;

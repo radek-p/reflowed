@@ -1,7 +1,7 @@
 // The tests' fixture document (?seed=sample, #/doc/sample): a small made-up
 // tests (tests/test-w3.ts, test-w6.ts), which check its labels, theorem
-// kinds, citations and TODO macros. It is not an example and is never seeded
-// by default: the built-in example is an optional document (seed/example.json).
+// kinds, citations and TODO macros. It is never seeded by default (the
+// default document is the introduction, app/seeds.ts).
 import { guessKind } from '../doc/kinds.js';
 
 /** Title, abstract, sections with labels and references, theorem kinds, a
