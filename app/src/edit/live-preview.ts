@@ -54,7 +54,7 @@ export interface RevealBlock { revealInDisplay?(display: number, x?: number, o?:
 /** A block's view as renderClick reads it. */
 export interface RenderView { id: string; render: HTMLElement; pane: string }
 
-// (a reference, a citation or a link is refnav's unit: refnav/index.js decides its click before this does)
+// (a reference, a citation or a link is refnav's unit: refnav/listen.ts decides its click before this does)
 export const INTERACTIVE = 'a, button, [role="button"], [tabindex], .latex-action, .latex-stream[data-kind="hint"]';
 
 /** the render's listeners: a click on it (and in the frame just beside it: its padding, where a hanging full stop
