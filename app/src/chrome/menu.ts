@@ -233,7 +233,7 @@ export function openMenu({ anchor, cls = 'block-menu', items, align = 'start', f
   return h;
 }
 
-/** a block kind of the slash menu (doc/kinds.js) */
+/** a block kind of the slash menu (doc/kinds.ts) */
 export interface SlashKind { kind: string; label: string; hint?: string; icon?: string; group?: string; env?: string; source?: string; caret?: number }
 
 function SlashView({ h, anchor, kinds, onPick }: { h: MenuHandle; anchor: Element; kinds: readonly SlashKind[]; onPick: (k: SlashKind) => void }) {

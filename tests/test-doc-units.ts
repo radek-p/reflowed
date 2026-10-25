@@ -335,7 +335,7 @@ const inMemory = (t: any) => t.doc.blocks.map((b: any) => `${b.kind}:${b.source}
   const { createResults } = await imp('app/src/doc/results.js');
   const { blockCacheKey } = await imp('app/src/doc/cache-key.js');
   const { splitMeta, blockSource } = await imp('app/src/meta/compile.ts');
-  const { guessKind, theoremKinds } = await imp('app/src/doc/kinds.js');
+  const { guessKind, theoremKinds } = await imp('app/src/doc/kinds.ts');
   const { createRefs } = await imp('app/src/refs/index.ts');
   // the intro from its source (always in the checkout)
   const { buildIntroSeed } = await import('../samples/intro/seed-intro.ts');

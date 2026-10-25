@@ -161,7 +161,7 @@ export function detectKind(source: string, opts: SplitOptions): { kind: string; 
     else if (bare === 'itemize' || bare === 'enumerate') kind = bare;
     else if (bare === 'description') kind = 'itemize';
     else if (bare === 'abstract') kind = 'abstract';
-    else if (bare === 'thebibliography') kind = 'bibliography';   // as doc/kinds.js guessKind has it (the Files panel, the e2e)
+    else if (bare === 'thebibliography') kind = 'bibliography';   // as doc/kinds.ts guessKind has it (the Files panel, the e2e)
     else if (opts.proofEnvs.has(env) || opts.proofEnvs.has(bare)) kind = 'proof';
     else if (opts.theoremEnvs.has(env) || opts.theoremEnvs.has(bare)) kind = bare;
     return { kind, attrs: { env } };

@@ -9,7 +9,7 @@
 //     menus.close(cancelled = true) · menus.open (is one open?)
 import { openMenu, openSlash, item as menuEntry, submenu, SEP, type MenuEntry, type MenuCommand, type SlashKind } from '../chrome/menu.ts';
 import { documentGroups } from '../chrome/main-menu.ts';
-import { kindsFor } from '../doc/kinds.js';
+import { kindsFor } from '../doc/kinds.ts';
 
 export type { MenuEntry, SlashKind };
 /** what a contribution makes entries with (chrome/menu-model.ts item) */

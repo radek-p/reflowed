@@ -1,6 +1,6 @@
-// app/kinds.js markerOf: which blocks are markers the page draws itself (not compiled), and which typeset.
-//   node app/src/app/kinds.test.ts      (Node; exit 1 on a failure)
-import { markerOf } from './kinds.js';
+// doc/kinds.ts markerOf: which blocks are markers the page draws itself (not compiled), and which typeset.
+//   node app/src/doc/kinds.test.ts      (Node; exit 1 on a failure)
+import { markerOf } from './kinds.ts';
 
 let bad = 0, n = 0;
 const check = (name: string, ok: boolean, d: unknown = '') => { n++; if (!ok) bad++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${d && !ok ? ` — ${JSON.stringify(d)}` : ''}`); };

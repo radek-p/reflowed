@@ -1,7 +1,7 @@
 // The built-in example document, and a plain .tex round trip for the io
 // stub. The document itself
-// is the store's (contracts.d.ts: Doc, Block), kinds are in kinds.js.
-import { guessKind } from '../doc/kinds.js';
+// is the store's (contracts.d.ts: Doc, Block), kinds are in doc/kinds.ts.
+import { guessKind } from '../doc/kinds.ts';
 import { commentStart } from '../tex/lex.ts';
 export { guessKind };
 

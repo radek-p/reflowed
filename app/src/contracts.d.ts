@@ -470,7 +470,7 @@ export interface Refs {
 
 export interface IpeModel { kind: 'ipe'; xml: string; bbox?: unknown }
 
-// ── Theorem kinds from the preamble (app/kinds.js) ───────────────────────
+// ── Theorem kinds from the preamble (doc/kinds.ts) ───────────────────────
 
 export interface TheoremKind {
   env: string;                     // "lemma"

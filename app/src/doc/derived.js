@@ -23,7 +23,7 @@
 //   hash(str): cyrb53, the app's 53-bit string hash
 import { blockCacheKey } from './cache-key.js';
 import { splitMeta, blockSource } from '../meta/compile.ts';
-import { guessKind, theoremKinds } from './kinds.js';
+import { guessKind, theoremKinds } from './kinds.ts';
 import { includesIn, usedBy } from './block-files.ts';
 import { fileSig } from '../../../engine/web/opened.js';   // a file's signature: the engine's, so a result's record compares
 

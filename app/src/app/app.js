@@ -23,7 +23,7 @@ import { createEditor } from './editor-entry.js';
 import { signal } from '@preact/signals';
 import { bump } from './page-state.ts';                    // the editor's signals (its container's, root.state)
 import { advanced } from '../settings/advanced.js';
-import { kindLabel, markerOf as markerKind } from '../doc/kinds.js';
+import { kindLabel, markerOf as markerKind } from '../doc/kinds.ts';
 import { createCommands, editorCommands, createEditorKeys } from '../commands/index.js';   // every intent: menus, keys, editorAPI
 import { scanHeadings, scanTodos, todoMacros, countWords, texToText, blankComments } from '../tex/texscan.js';
 import { createPanels } from './panels.ts';

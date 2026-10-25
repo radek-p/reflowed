@@ -2,13 +2,23 @@
 // preamble declares (\newtheorem, thmtools' \declaretheorem), plus
 // environments it defines with \newenvironment. The slash menu lists them.
 import { blankComments, readGroup, readArgs } from '../tex/texscan.js';
+import type { TheoremKind } from '../contracts';
 
-/** @returns {import('../contracts').TheoremKind[]} in declaration order */
-export function theoremKinds(preamble) {
-  const s = blankComments(preamble ?? ''), out = [];
+/** a block kind the slash menu offers: its template, its caret, its section (chrome/menu.ts SlashKind) */
+export interface Kind {
+  kind: string; label: string; icon?: string; hint?: string; group?: string;
+  env?: string; source: string; caret?: number; theorem?: TheoremKind;
+}
+/** a built-in kind: its template may depend on the preamble; `when(pre)`: offered only if true */
+interface BuiltinKind extends Omit<Kind, 'source'> { source: string | ((pre: string) => string); when?: (pre: string) => boolean }
+type Group = { content: string; start: number; end: number };
+
+/** in declaration order */
+export function theoremKinds(preamble: string | null | undefined): TheoremKind[] {
+  const s: string = blankComments(preamble ?? ''), out: TheoremKind[] = [];
   let style = 'plain';
   const re = /\\(newtheorem|declaretheorem|theoremstyle|declaretheoremstyle)(\*?)(?![a-zA-Z])/g;
-  let m;
+  let m: RegExpExecArray | null;
   while ((m = re.exec(s))) {
     const cmd = m[1], star = m[2] === '*';
     if (cmd === 'theoremstyle') { const a = readArgs(s, re.lastIndex, { opt: 0, req: 1 }); if (a.reqs[0]) style = a.reqs[0].trim(); continue; }
@@ -40,25 +50,25 @@ export function theoremKinds(preamble) {
 }
 
 /** \newenvironment{name} in the preamble (not theorem-like). */
-export function customEnvironments(preamble) {
-  const s = blankComments(preamble ?? ''), out = [];
+export function customEnvironments(preamble: string | null | undefined): string[] {
+  const s: string = blankComments(preamble ?? ''), out: string[] = [];
   const re = /\\(?:new|renew)environment\*?\s*\{([^}]+)\}/g;
-  let m;
+  let m: RegExpExecArray | null;
   while ((m = re.exec(s))) out.push(m[1].trim());
   return [...new Set(out)];
 }
 
-const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-const plain = (s) => s.replace(/\$\\star\$/g, '⋆').replace(/[{}$\\]/g, '').trim();
-const skip = (s, i) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
-const argAt = (s, i) => readGroup(s, skip(s, i));
-const optAt = (s, i) => readGroup(s, skip(s, i), '[', ']');
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const plain = (s: string) => s.replace(/\$\\star\$/g, '⋆').replace(/[{}$\\]/g, '').trim();
+const skip = (s: string, i: number) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
+const argAt = (s: string, i: number): Group | null => readGroup(s, skip(s, i));
+const optAt = (s: string, i: number): Group | null => readGroup(s, skip(s, i), '[', ']');
 
 /** key=value, key={value, with commas} → object */
-export function keyvals(str) {
-  const out = {};
+export function keyvals(str: string): Record<string, string> {
+  const out: Record<string, string> = {};
   let depth = 0, cur = '';
-  const parts = [];
+  const parts: string[] = [];
   for (const c of str) {
     if (c === '{') depth++;
     if (c === '}') depth--;
@@ -81,12 +91,12 @@ export function keyvals(str) {
 // `source`: the template; `caret`: where the cursor goes (default: the end);
 // `group`: the slash menu's section; `when(pre)`: offered only if true.
 
-const env = (e, body = '  ') => `\\begin{${e}}\n${body}\n\\end{${e}}`;
-const envCaret = (e) => `\\begin{${e}}\n  `.length;
+const env = (e: string, body = '  ') => `\\begin{${e}}\n${body}\n\\end{${e}}`;
+const envCaret = (e: string) => `\\begin{${e}}\n  `.length;
 /** a template with ‸ where the caret goes */
-const tpl = (s) => ({ source: s.replace('‸', ''), caret: s.indexOf('‸') });
+const tpl = (s: string) => ({ source: s.replace('‸', ''), caret: s.indexOf('‸') });
 
-export const BUILTIN = [
+export const BUILTIN: BuiltinKind[] = [
   { kind: 'paragraph', label: 'Text', icon: '¶', hint: 'A paragraph; inline maths with $…$', source: '', group: 'Basic' },
   { kind: 'heading', label: 'Section', icon: 'H1', hint: '\\section', source: '\\section{}', caret: 9, group: 'Basic' },
   { kind: 'subheading', label: 'Subsection', icon: 'H2', hint: '\\subsection', source: '\\subsection{}', caret: 12, group: 'Basic' },
@@ -110,15 +120,15 @@ export const BUILTIN = [
   { kind: 'note', label: 'Note', icon: '▍', hint: 'webnote: set off from the text', source: env('webnote'), caret: envCaret('webnote'), group: 'Web', when: (p) => /\{reflowtex\}/.test(p) },
 ];
 
-const THM_ICON = (name) => name.replace(/[^A-Za-z⋆]/g, '').slice(0, 1).toUpperCase() || '⋆';
+const THM_ICON = (name: string) => name.replace(/[^A-Za-z⋆]/g, '').slice(0, 1).toUpperCase() || '⋆';
 
 /** Everything the slash menu offers for this preamble, in menu order. */
-export function kindsFor(preamble) {
+export function kindsFor(preamble: string | null | undefined): Kind[] {
   const p = preamble ?? '';
-  const items = BUILTIN.filter((k) => !k.when || k.when(p)).map((k) => ({ ...k, source: typeof k.source === 'function' ? k.source(p) : k.source }));
+  const items: Kind[] = BUILTIN.filter((k) => !k.when || k.when(p)).map((k) => ({ ...k, source: typeof k.source === 'function' ? k.source(p) : k.source }));
   const thms = theoremKinds(p);
   const seen = new Set(items.map((k) => k.kind));
-  const thmItems = [];
+  const thmItems: Kind[] = [];
   for (const t of thms) {
     if (seen.has(t.env)) continue;
     seen.add(t.env);
@@ -126,7 +136,7 @@ export function kindsFor(preamble) {
       hint: `${t.env}${t.numbered ? '' : ' · unnumbered'}${t.sibling ? ` · shares ${t.sibling}` : ''}${t.within ? ` · within ${t.within}` : ''}`,
       source: env(t.env), caret: envCaret(t.env), theorem: t });
   }
-  const custom = customEnvironments(p).filter((e) => !seen.has(e)).map((e) => ({
+  const custom = customEnvironments(p).filter((e) => !seen.has(e)).map((e): Kind => ({
     kind: 'raw', env: e, label: cap(e), icon: '{}', group: 'Environments', hint: `\\begin{${e}} from the preamble`, source: env(e), caret: envCaret(e) }));
   // theorems right after the maths kinds, before floats
   const at = items.findIndex((k) => k.group === 'Floats');
@@ -135,7 +145,7 @@ export function kindsFor(preamble) {
 }
 
 /** A block's kind from its source. `thms`: Set of theorem env names. */
-export function guessKind(source, thms = null) {
+export function guessKind(source: string, thms: ReadonlySet<string> | null = null): string {
   const s = source.replace(/^(\s*%[^\n]*\n)+/, '').trim();
   let m = /^\\(sub)?(sub)?section\*?\s*[[{]/.exec(s);
   if (m) return m[2] ? 'subsubheading' : m[1] ? 'subheading' : 'heading';
@@ -166,18 +176,17 @@ export function guessKind(source, thms = null) {
 }
 
 /** Short label of a kind for the gutter/outline tooltips. */
-export function kindLabel(kind, preamble) {
+export function kindLabel(kind: string, preamble: string): string {
   const k = kindsFor(preamble).find((x) => x.kind === kind);
   return k?.label ?? cap(kind);
 }
 
 /** (out of app.js) what a block is when it is not typeset content: a marker the page draws itself
  *  and the compile queue skips: 'container' (its paragraphs are compiled, not the frame), 'appendix' (\appendix
- *  alone), 'comment' (nothing but comments), 'macros' (top-level definitions); null: a block that typesets.
- *  @param {{ kind?: string, source: string }} b @param {(b: any) => boolean} [isContainer] */
-export function markerOf(b, isContainer = () => false) {
+ *  alone), 'comment' (nothing but comments), 'macros' (top-level definitions); null: a block that typesets. */
+export function markerOf<B extends { kind?: string; source: string }>(b: B, isContainer: (b: B) => boolean = () => false): 'container' | 'appendix' | 'comment' | 'macros' | null {
   if (isContainer(b)) return 'container';
-  const code = blankComments(b.source).trim();
+  const code: string = blankComments(b.source).trim();
   if (/^\\appendix$/.test(code)) return 'appendix';
   if (!code) return 'comment';
   if (b.kind === 'macros' || b.kind === 'comment') return b.kind;

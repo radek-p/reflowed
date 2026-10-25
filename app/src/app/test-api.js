@@ -5,7 +5,7 @@
 //
 //   const api = createTestApi(x)
 // @ts-check
-import { kindsFor } from '../doc/kinds.js';
+import { kindsFor } from '../doc/kinds.ts';
 import { pdfRequest } from './pdf-request.js';
 import { next } from './page-state.ts';
 import { advanced, setAdvanced } from '../settings/advanced.js';

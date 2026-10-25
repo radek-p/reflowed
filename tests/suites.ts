@@ -212,7 +212,7 @@ const UI = ['kit', 'sheets', 'settings', 'view', 'boot', 'sidebar', 'chrome', 'd
 export interface Rule { paths: string[]; suites: string[]; why: string }
 export const RULES: Rule[] = [
   { why: 'docs and the licence', paths: ['**/*.md', 'LICENSE', '**/test-results/**', '.gitignore', '**/.gitignore'], suites: [] },
-  { why: 'the core (app.js, main.js)', paths: ['app/src/app/app.js', 'app/src/main.js', 'app/src/app/editor-root.ts', 'app/src/rtx-modules.d.ts', 'app/src/app/editor-entry.js', 'app/src/doc/kinds.js', 'app/src/app/stubs.js', 'app/src/app/model.js', 'app/src/app/panels.ts', 'app/src/app/source-position.js', 'app/src/tex/texscan.js', 'app/src/app/test-fixture.js', 'app/src/contracts.d.ts', 'app/index.html', 'app/app.css', 'app/package.json', 'app/package-lock.json'], suites: WIDE },
+  { why: 'the core (app.js, main.js)', paths: ['app/src/app/app.js', 'app/src/main.js', 'app/src/app/editor-root.ts', 'app/src/rtx-modules.d.ts', 'app/src/app/editor-entry.js', 'app/src/doc/kinds.ts', 'app/src/app/stubs.js', 'app/src/app/model.js', 'app/src/app/panels.ts', 'app/src/app/source-position.js', 'app/src/tex/texscan.js', 'app/src/app/test-fixture.js', 'app/src/contracts.d.ts', 'app/index.html', 'app/app.css', 'app/package.json', 'app/package-lock.json'], suites: WIDE },
   { why: 'the core, other parts', paths: ['app/src/app/**'], suites: WIDE },
   { why: 'the two-editors harness', paths: ['app/src/harness/**', 'app/two-editors.html', 'tests/test-two-editors.ts'], suites: ['two-editors', 'typecheck', 'arch-units'] },
   { why: 'the document model', paths: ['app/src/doc/**'], suites: [...WIDE, 'replay-dev', 'readonly-dev', 'w15-units', 'cache', 'keys', 'doc-units', 'follow'] },

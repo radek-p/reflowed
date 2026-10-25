@@ -1,4 +1,4 @@
-// io/split.ts detectKind: an inline thebibliography is a bibliography block (as doc/kinds.js guessKind says), so the
+// io/split.ts detectKind: an inline thebibliography is a bibliography block (as doc/kinds.ts guessKind says), so the
 // imported intro's bibliography is one (it was a paragraph).
 //   node app/src/io/split.test.ts
 import { detectKind, envsFromPreamble } from './split.ts';

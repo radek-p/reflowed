@@ -2,7 +2,7 @@
 // tests (tests/test-w3.ts, test-w6.ts), which check its labels, theorem
 // kinds, citations and TODO macros. It is never seeded by default (the
 // default document is the introduction, app/seeds.ts).
-import { guessKind } from '../doc/kinds.js';
+import { guessKind } from '../doc/kinds.ts';
 
 /** Title, abstract, sections with labels and references, theorem kinds, a
  *  TikZ figure, a table, todos, an appendix and a bibliography. Compiles on
