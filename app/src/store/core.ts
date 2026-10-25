@@ -7,7 +7,9 @@
 //   - snapshots are gzipped JSON of the OpenDoc (no asset bytes); the newest
 //     KEEP_AUTO automatic ones are kept, manual ones always;
 //   - changes are announced to subscribers here and in other tabs
-//     (BroadcastChannel), so an open editor can reload what another tab wrote.
+//     (BroadcastChannel), so an open editor can follow what another tab wrote;
+//   - a block written with `expect` (the source its writer last saw stored) is written only if that is still
+//     the stored source: else BlockConflict (another tab wrote or deleted it meanwhile), nothing written.
 
 import type { Asset, AssetMeta, Block, Doc, DocInit, DocMeta, DocPatch, DocStore, ListQuery, Op, OpenDoc, Snapshot, SnapshotMeta, StoreEvent } from './types.ts';
 import type { Backend } from './backend.ts';
@@ -27,6 +29,13 @@ export interface CoreOptions {
 }
 
 export const KEEP_AUTO = 30;
+
+/** putBlocks: a block's stored source is not the one its writer expected (another tab changed or deleted it): what
+ *  is stored (null: no such block), nothing written */
+export class BlockConflict extends Error {
+  readonly stored: Block | null;
+  constructor(id: string, stored: Block | null) { super(`block ${id} was changed elsewhere`); this.name = 'BlockConflict'; this.stored = stored; }
+}
 
 export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const subtle = globalThis.crypto?.subtle;
@@ -263,16 +272,24 @@ export class CoreStore implements DocStore {
 
   // ── blocks ──
 
-  async putBlock(docId: string, block: Partial<Block> & { id: string }): Promise<void> {
+  async putBlock(docId: string, block: Partial<Block> & { id: string; expect?: string }): Promise<void> {
     await this.putBlocks(docId, [block]);
   }
 
-  async putBlocks(docId: string, blocks: Array<Partial<Block> & { id: string }>): Promise<Block[]> {
+  async putBlocks(docId: string, blocks0: Array<Partial<Block> & { id: string; expect?: string }>): Promise<Block[]> {
     const now = this.now();
     const out = await this.b.run(['docs', 'blocks'], 'readwrite', async (tx) => {
       const doc = repairDoc(writable(await tx.get('docs', docId)));
       if (!doc) throw new Error(`no document ${docId}`);
       const mainPath = mainOf(doc);
+      // the expected sources first, before anything is written
+      for (const b of blocks0) {
+        if (b.expect === undefined) continue;
+        const stored = await tx.get('blocks', b.id) as Block | undefined;
+        const cur = stored && stored.docId === docId ? repairBlock(stored, docId, mainPath) ?? null : null;
+        if (cur?.source !== b.expect) throw new BlockConflict(b.id, cur);
+      }
+      const blocks = blocks0.map(({ expect: _e, ...b }) => b);
       const res: Block[] = [];
       let changed = false;
       for (const b of blocks) {

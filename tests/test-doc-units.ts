@@ -411,6 +411,23 @@ const inMemory = (t: any) => t.doc.blocks.map((b: any) => `${b.kind}:${b.source}
   void repaired;
 }
 
+// a block written with `expect` (store/core.ts): only over that source; another one there, or none, is a BlockConflict
+{
+  const store = memoryStore();
+  const id = await store.createDoc({ title: 'T', blocks: [{ kind: 'paragraph', source: 'Theirs.' }] });
+  const [b] = await store.getBlocks(id);
+  let c1: any = null, c2: any = null;
+  try { await store.putBlock(id, { ...b, source: 'Mine.', expect: 'Mine before.' }); } catch (e) { c1 = e; }
+  const kept = (await store.getBlocks(id))[0];
+  await store.putBlock(id, { ...b, source: 'Mine.', expect: 'Theirs.' });
+  const over = (await store.getBlocks(id))[0];
+  await store.deleteBlock(id, b.id);
+  try { await store.putBlock(id, { ...b, source: 'Mine again.', expect: 'Mine.' }); } catch (e) { c2 = e; }
+  check('store: a block written with expect only over that source; another one there (or none): BlockConflict with what is stored, nothing written, expect never stored',
+    c1?.name === 'BlockConflict' && c1.stored?.source === 'Theirs.' && kept.source === 'Theirs.' && over.source === 'Mine.' && !('expect' in over) && c2?.name === 'BlockConflict' && c2.stored === null
+      && (await store.getBlocks(id)).length === 0, { c1: c1?.message, kept: kept.source, over, c2: c2?.message });
+}
+
 // ── the panels' data (doc/panels.ts): the outline, the problems and the TODOs as values ──
 {
   const P = await imp('app/src/doc/panels.ts');

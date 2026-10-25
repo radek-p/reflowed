@@ -13,7 +13,7 @@ import { keyBetween } from './fracindex.ts';
 import { applyStorePolicy, type PolicyResult } from './policy.ts';
 
 export * from './types.ts';
-export { CoreStore, blankDoc, sha256Hex, KEEP_AUTO } from './core.ts';
+export { CoreStore, BlockConflict, blankDoc, sha256Hex, KEEP_AUTO } from './core.ts';
 export { keyBetween, nKeysBetween, byPos } from './fracindex.ts';
 export { ulid, ulidFactory, seededUlid, ulidTime } from './ulid.ts';
 export { takeSnapshot, restoreSnapshot, replaceContent, beforeDestructive, AutoSnapshots, AUTO_INTERVAL_MS } from './snapshots.ts';

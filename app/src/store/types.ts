@@ -117,9 +117,11 @@ export interface DocStore extends C.DocStore {
   /** blocks in document order */
   getBlocks(docId: ULID): Promise<Block[]>;
   putMeta(id: ULID, patch: DocPatch): Promise<void>;
-  putBlock(docId: ULID, block: Block | (Partial<Block> & { id: ULID })): Promise<void>;
+  /** expect: the source the writer last saw stored; another one there (another tab wrote it meanwhile, or deleted the
+   *  block): BlockConflict (core.ts), nothing written */
+  putBlock(docId: ULID, block: Block | (Partial<Block> & { id: ULID; expect?: string })): Promise<void>;
   /** several blocks in one transaction (a move, a paste, a restore) */
-  putBlocks(docId: ULID, blocks: Array<Block | (Partial<Block> & { id: ULID })>): Promise<Block[]>;
+  putBlocks(docId: ULID, blocks: Array<Block | (Partial<Block> & { id: ULID; expect?: string })>): Promise<Block[]>;
   putAsset(docId: ULID, asset: Partial<AssetMeta> & { name: string }, bytes: Uint8Array | null): Promise<AssetMeta>;
   getAsset(docId: ULID, assetId: ULID): Promise<Asset | null>;
   getAssetByName(docId: ULID, name: string): Promise<Asset | null>;
