@@ -1,5 +1,6 @@
 // The home screen's pure helpers (no DOM): relative times and the query's marks.
 //   relTime(t, now?)          'just now' · '5 min ago' · '3 h ago' · 'yesterday' · '4 Oct' (· year)
+//   shortDate(t, now?)        '4 Oct' (· year, another year): relTime's date (docview/end-meta.ts too)
 //   markParts(text, words)    [{ text, mark }] runs, the words marked accent- and case-insensitively
 import { searchKey } from '../io/latex-text.ts';
 
@@ -10,6 +11,10 @@ export function relTime(t, now = Date.now()) {
   if (s < 86400 && new Date(t).getDate() === new Date(now).getDate()) return `${Math.round(s / 3600)} h ago`;
   const d = new Date(t), y = new Date(now); y.setDate(y.getDate() - 1);
   if (d.toDateString() === y.toDateString()) return 'yesterday';
+  return shortDate(t, now);
+}
+export function shortDate(t, now = Date.now()) {
+  const d = new Date(t);
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(d.getFullYear() !== new Date(now).getFullYear() ? { year: 'numeric' } : {}) });
 }
 

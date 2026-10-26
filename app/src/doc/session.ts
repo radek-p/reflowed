@@ -11,6 +11,8 @@
 //                                   hashes and stored sources known; false when it is gone
 //     S.unload()                    the document closed: its results and history go
 //     S.persist · S.model · S.history · S.derived · S.results · S.ops · S.refs · S.backend()
+//     S.results.edited              when the document was last edited: the store's updatedAt on load, then now at each
+//                                   edit here (persist onEdit: a keystroke, an op) and each change record (one followed too)
 //     S.follow                      what other tabs write to the document, followed while it is open (doc/follow.ts)
 //   hooks: { saveChanged(), saveFailed(e), unplaced(id), beforeUndo(entry, how), afterUndo(entry, how), ops: (doc/ops.ts hooks),
 //            gone() (the document was deleted in another tab: nothing more is written) }
@@ -64,11 +66,14 @@ export function createDocSession({ store, ids, refs, backend, nest, salt, bibpan
   const getDoc = () => doc;
   const results = createResults();
   const persist = createPersist({ store, ids, doc: getDoc, readOnly: () => readOnly(doc), beforeDestructive,
-    onChange: () => hooks.saveChanged(), onError: (e) => hooks.saveFailed(e), onConflict: (id, stored) => follow.conflict(id, stored) });
+    onChange: () => hooks.saveChanged(), onError: (e) => hooks.saveFailed(e), onConflict: (id, stored) => follow.conflict(id, stored),
+    onEdit: () => { results.edited.value = Date.now(); } });
   const model = createModel({ ids, persist, doc: getDoc, onUnplace: (id) => hooks.unplaced(id) });
   const history = createHistory({ before: (u, how) => hooks.beforeUndo(u, how), after: (u, how) => hooks.afterUndo(u, how) });
   const derived = createDerived({ doc: getDoc, blockById: model.blockById, nest, refs, backend, salt, bibpane, recallsOf, results });
   const ops = createOps({ model, persist, history, doc: getDoc as () => Doc, ids, nest, hooks: hooks.ops });
+  // when it was last edited (results.edited): the store's time on open, then every change here or followed from another tab
+  ops.onChange(() => { results.edited.value = Date.now(); });
   const follow = createFollow({ store, doc: getDoc, model, persist, history, derived, nest, ops,
     hooks: { unplaced: (id) => hooks.unplaced(id), edits: hooks.ops.edits, toast: (t, a, o) => hooks.ops.toast(t, a, o), meta: hooks.ops.meta ? (f, v, o) => hooks.ops.meta?.(f, v, o) : undefined, gone: () => hooks.gone?.() } });
 
@@ -82,6 +87,7 @@ export function createDocSession({ store, ids, refs, backend, nest, salt, bibpan
     const rep = nest.repair(opened.blocks);
     opened.blocks = nest.order(rep.blocks);
     doc = opened;
+    results.edited.value = typeof opened.updatedAt === 'number' ? opened.updatedAt : 0;
     persist.start();
     follow.start(id);                                    // from here on, what another tab writes to it is followed
     if (rep.changed.length) { console.warn(`nesting: repaired ${rep.changed.length} block(s) of ${id}`); persist.repaired(rep.changed); }

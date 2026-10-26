@@ -1,6 +1,6 @@
 // The page's scrolling keys, done the far-scroll way (far.js): End and Home (fn+→/← on a Mac, ⌘↓/⌘↑ too)
 // jump and animate only the last pane height; End brings the document's end to the pane's bottom (far.js endOf), from
-// wherever the pane is, not the empty space below it (the end space, app.css). PageDown and PageUp step 7/8 of a pane
+// wherever the pane is, not the space below it (the end space, docview/end-space.ts). PageDown and PageUp step 7/8 of a pane
 // height (jump, then animate the last third); PageDown steps on into the end space, as the wheel scrolls, so the last
 // sections can reach the reading line. A key held down adds to the step under way instead of starting a scroll over
 // a long way. The browser's own smooth scroll for these keys passes every block on the way, and the viewer painted

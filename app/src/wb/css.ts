@@ -34,10 +34,9 @@ body.wb-fitted .rtx-editor.rtx-wb { bottom: 0; }
 .rtx-wb .wb-view[data-view="document"] { overflow: hidden; padding-top: 0; }
 .rtx-wb .rtx-tab { position: absolute; inset: 0; }
 .rtx-wb .rtx-tab > main.rtx-pane[data-pane] { position: absolute; inset: 0; overflow: auto; overflow-x: hidden; overscroll-behavior: contain;
-  --pane-lead: 24px; padding: calc(var(--wb-inset-top, 0px) + var(--pane-lead)) ${PANE_PAD}px 0; scroll-padding-top: var(--wb-inset-top, 0px); box-sizing: border-box; outline: none; }
-/* the end space (app.css: THE END SPACE): the pane's visible height, below the strip: its content box (100 %: the
-   height less the strip and the lead) and the lead */
-.rtx-wb .rtx-tab > main.rtx-pane[data-pane]::after { content: ''; display: block; height: calc(100% + var(--pane-lead)); }
+  --pane-lead: 24px; --end-h: calc(100% + var(--pane-lead)); padding: calc(var(--wb-inset-top, 0px) + var(--pane-lead)) ${PANE_PAD}px 0; scroll-padding-top: var(--wb-inset-top, 0px); box-sizing: border-box; outline: none; }
+/* --end-h: the end space's height (app.css: THE END SPACE), the pane's visible height below the strip: its content box
+   (100 %: the height less the strip and the lead) and the lead */
 /* the strip's variables (and the frame's, viewport.ts: set on <body> while a keyboard is up) stop at the pane: the pane reads them (its padding, scroll-padding-top), nothing in
    it does. A group's strip switching between one line and two sets them on the group (data-form), and every element of
    its pane was restyled with them (4,732 in a 30-block article, 23 ms; four times in a drop between two groups) */

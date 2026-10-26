@@ -2,7 +2,7 @@
 //   Outline   headings in order, numbered (refs' numbers, else counted: \appendix switches to letters)
 //   Problems  errors, undefined references, unknown citations, duplicate and unused labels
 //   TODOs \todo and the preamble's macros on it, by author
-//   the word count under them
+//   the word count under them (and at the foot of its panes' end space: docview/end-space.ts)
 //   labelOptions / citeOptions (completion), hoverCard, marksFor
 //
 // The panels themselves are registered views with Components (outline/index.ts,
@@ -160,9 +160,12 @@ export function createPanels(c: PanelsContext) {
   }
 
   // ── Word count ─────────────────────────────────────────────────────────────
+  // counted whether or not the document is the current one (its panes' end space shows it: docview/end-space.ts); the
+  // footer shows the current one's
+  function count() { if (doc()) c.words.value = c.counts(); }
   function drawCount() {
     if (!doc()) return;
-    c.words.value = c.counts();                       // the footer is a Preact component (chrome/sidebar-chrome.ts)
+    count();                                          // the footer is a Preact component (chrome/sidebar-chrome.ts)
     showWordCount(root, c.words);                     // this document's count is the one shown
   }
 
@@ -174,7 +177,7 @@ export function createPanels(c: PanelsContext) {
     lastProblems = probs;
     const nProb = probs.filter((x) => x.kind !== 'unused-label').length;
     const td = todos();
-    if (!isActive()) { markers(probs, td); return; }        // another document is the current one: its lists stay
+    if (!isActive()) { markers(probs, td); count(); return; }   // another document is the current one: its lists stay
     preSource.value = doc()!.preamble.source;
     bibInfo.value = c.bibInfo();
     // the tabs' counts: the views' badges (chrome/sidebar-chrome.ts draws them)

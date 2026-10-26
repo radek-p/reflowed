@@ -14,7 +14,7 @@
 //                         only that (PageDown/PageUp: a third of the pane)
 //   endOf(P) -> End's place: the scroll position at which the document's end (its last block, "Add a block" after it)
 //                         meets the pane's bottom (0 for a document shorter than the pane). Below the end the pane has one
-//                         pane height of empty space (app.css: the end space), which End does not bring into view
+//                         pane height of space (docview/end-space.ts: the end space), which End does not bring into view
 //   P: { scroller: Element | null (null: the window), top(): the pane's top y, keeper?, el?, view?, box()? (panes/pane.ts) }
 import { reduced } from '../motion/reduced.ts';
 import { appScroll } from '../perf/anchor.js';

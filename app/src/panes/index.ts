@@ -11,7 +11,8 @@
 //   const panes = createPanes({ root, layout, docView, keeperFor, host })
 //     docView: pane 'a''s DocumentView (made on the container's [data-part=doc-view-host])
 //     keeperFor(o) -> anchor keeper | null       o: { list(), inset?(), scroller?, lines? (view/line-anchor.ts) }
-//     host: { makeView(paneId, blockId), blocks(), opened(pane, { near, heights }), closing(pane), toggled(split), hasDoc(), closeSplit?(keepId) }
+//     host: { makeView(paneId, blockId), blocks(), opened(pane, { near, heights }), closing(pane), toggled(split), hasDoc(), closeSplit?(keepId),
+//             end?: { title, words, edited } (signals: the document's; every pane made gets its end space: docview/end-space.ts) }
 //   panes.list() · panes.get(id) · panes.focused() (the Pane) · panes.paneOf(node) -> id | null
 //   panes.viewOf(paneId, blockId) · panes.viewsOf(blockId) (layout order) · panes.isSplit
 //   panes.open(id = 'b') · panes.close(id = 'b') · panes.toggle() · panes.sync() · panes.start() · panes.stop()
@@ -41,6 +42,7 @@ import { createWidths } from './widths.js';
 import { relayout, laidAt } from '../view/viewer-host.ts';
 import { lineAnchor } from '../view/line-anchor.ts';
 import { mountViewPane } from './view-pane.js';
+import { mountEndSpace, endTextOf, type EndSources } from '../docview/end-space.ts';
 import type { EditorRoot } from '../app/editor-root.ts';
 import type { BlockRef, BlockView, DocView, Keeper, Layout, LayoutEntry, Owned, Pane, Widths } from './types.ts';
 import { reduced } from '../motion/reduced.ts';
@@ -58,6 +60,8 @@ export interface PanesHost {
   toggled(split: boolean): void;
   hasDoc(): boolean;
   closeSplit?(keep: string): void;
+  /** the document's title, word count and last edit: the foot of every pane's end space (docview/end-space.ts) */
+  end?: EndSources;
 }
 export interface Guests { open(id: string, chrome: { pane: HTMLElement; host: HTMLElement; add: HTMLElement | null }): Pane | null; close(id: string): void }
 /** lines: the reader's line, held across a width change (view/line-anchor.ts) */
@@ -111,6 +115,7 @@ export function createPanes({ root, layout, docView, keeperFor = () => null, hos
   const shellEl = () => root.part('view');
   const ownScroll = !root.windowScroll;            // an embedded editor's first pane scrolls itself, alone too
   const alone = (p: Pane) => (ownScroll ? p.el : null);
+  const endText = host.end ? endTextOf(host.end) : null;    // one foot for all of this registry's panes
 
   // the first pane: the container's [data-part=page] and its DocumentView (a guest registry: its one pane)
   const firstEl = only ? only.el : root.part('page');
@@ -138,6 +143,7 @@ export function createPanes({ root, layout, docView, keeperFor = () => null, hos
     const p = createPane({ id, el, docView: view, keeper, owned, inset: () => root.inset() });
     p.onFocus((pid) => layout.focus(pid));
     panes.set(id, p);
+    if (endText) p.onDispose(mountEndSpace(el, endText));    // its last element: the end space
     return p;
   }
 

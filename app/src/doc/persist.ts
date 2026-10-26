@@ -2,7 +2,9 @@
 // log, the typing timers, the safety snapshots and `settled`. No DOM: Node unit tests run it on a Memory store
 // (tests/test-doc-units.ts).
 //
-//   const persist = createPersist({ store, ids, doc, readOnly, beforeDestructive, onChange, onError, onConflict, clock })
+//   const persist = createPersist({ store, ids, doc, readOnly, beforeDestructive, onChange, onError, onConflict, onEdit, clock })
+//     onEdit()                               the document was edited here: an op made (an edit, insert, delete, move, meta),
+//                                            a keystroke in a block, the title typed (the store bumps its updatedAt)
 //     persist.write(fn, key)                 a store write, in order; refused while the document is read-only
 //     persist.op(t, payload, blockId)        an op of the log (contracts.d.ts DocStore.appendOps)
 //     persist.logOps(ops)
@@ -62,6 +64,8 @@ export interface PersistOptions {
   /** this tab's write of block `id` found another source stored than the one it last wrote (another tab's), or no
    *  block: nothing was written (doc/follow.ts decides) */
   onConflict?: (id: string, stored: StoredBlock | null) => void;
+  /** the document was edited here (an op, a keystroke, the title): its last-edited time is now */
+  onEdit?: () => void;
   clock?: PersistClock;
 }
 
@@ -76,7 +80,7 @@ export function splice(a: string, b: string): [number, number, string] {
 
 const globalClock: PersistClock = { setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (t) => clearTimeout(t as ReturnType<typeof setTimeout>) };
 
-export function createPersist({ store, ids, doc: docOf, readOnly = () => false, beforeDestructive = null, onChange = () => {}, onError = () => {}, onConflict = () => {}, clock = globalClock }: PersistOptions) {
+export function createPersist({ store, ids, doc: docOf, readOnly = () => false, beforeDestructive = null, onChange = () => {}, onError = () => {}, onConflict = () => {}, onEdit = () => {}, clock = globalClock }: PersistOptions) {
   const writer = createWriter({ onChange: () => onChange(), onError: (e) => onError(e) });
   const doc = () => docOf()!;                // (every write is of the open document)
   const typingTimers = new Map<string, unknown>();
@@ -92,7 +96,7 @@ export function createPersist({ store, ids, doc: docOf, readOnly = () => false, 
   }
   // The store sets rev and updatedAt; the op log is ours (contracts.d.ts DocStore.appendOps): insert, delete,
   // move, edit (a splice), meta. Every attr the app does not own (attrs.before: export) travels with the block.
-  const op = (t: string, payload: unknown, blockId?: string): PersistOp => ({ id: ids.ulid(), docId: doc().id, blockId, t, payload, at: Date.now(), actor: store.actor ?? 'local' });
+  const op = (t: string, payload: unknown, blockId?: string): PersistOp => { onEdit(); return { id: ids.ulid(), docId: doc().id, blockId, t, payload, at: Date.now(), actor: store.actor ?? 'local' }; };
   function logOps(ops: PersistOp[]) { if (ops.length) { const id = doc().id; write(() => store.appendOps(id, ops)); } }
   function saveBlock(b: PersistBlock, { typing = false, ops = null as PersistOp[] | null } = {}) {
     const docId = doc().id;
@@ -118,7 +122,7 @@ export function createPersist({ store, ids, doc: docOf, readOnly = () => false, 
       if (list.length) write(() => (lost ? null : store.appendOps(docId, list)));   // (not logged when it was not written)
     };
     clock.clearTimeout(typingTimers.get(b.id));
-    if (typing) { typingTimers.set(b.id, clock.setTimeout(flush, TYPING_MS)); onChange(); } else flush();
+    if (typing) { typingTimers.set(b.id, clock.setTimeout(flush, TYPING_MS)); onEdit(); onChange(); } else flush();
   }
   // a title typed and not yet written is written now too (it was dropped here: after an export, a
   // pagehide or a close right after a rename, the store kept the old title)
@@ -134,7 +138,7 @@ export function createPersist({ store, ids, doc: docOf, readOnly = () => false, 
   function saveMeta(patch: Record<string, unknown>) { const id = doc().id; write(() => store.putMeta(id, patch), `meta:${id}:${Object.keys(patch).sort().join()}`); logOps([op('meta', patch)]); }
   function setTitle() {
     clock.clearTimeout(titleTimer);
-    typingTimers.set('title', 1); onChange();
+    typingTimers.set('title', 1); onEdit(); onChange();
     titleTimer = clock.setTimeout(() => { typingTimers.delete('title'); saveMeta({ title: doc().title }); }, TYPING_MS);
   }
   /** a safety snapshot before a destructive change (beforeDestructive), at most one a minute unless forced */

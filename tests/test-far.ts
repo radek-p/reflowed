@@ -16,6 +16,9 @@
 //     and after a window resize; scrolled to the end, the last section's heading can be at the reading line, and the
 //     crumb names it until References' heading reaches the line (no rule of its own for the end of the scroll); End from
 //     the very end comes back to the document's end at the pane's bottom
+//   - what the end space holds (docview/end-space.ts), here and after the resize: a hairline down the column's middle
+//     (±1 px), from below the document's end to above the foot, and at the foot the document's title and word count;
+//     the count follows a word typed (live), the space's height unchanged; printed, no end space
 //   - End in a text field (the find bar) is left to the field
 // Each document starts from the default layout (?fresh): its tab alone, pane A.
 // Waits on events (nav:jumped, nav:back, nav:scrolled), whenIdle() and frames; never on fixed times. Long tasks are
@@ -121,6 +124,19 @@ const END_AT = (s: string) => {
   return { y: sc.scrollTop, max: sc.scrollHeight - sc.clientHeight, end: end - (r.top + sc.clientHeight), fromTop: end - (r.top + pad),
     space: sc.scrollHeight - (end - r.top + sc.scrollTop), seenH: sc.clientHeight - pad };
 };
+// what pane s's end space holds: its hairline (its centre against the column's, its top against the document's end,
+// its bottom against the foot), the foot's text and place, the space's height and whether it is shown
+const END_LOOK = (s: string) => {
+  const sc = document.querySelector(s) as HTMLElement, sp = sc.querySelector(':scope > .end-space') as HTMLElement | null;
+  if (!sp) return null;
+  const rule = sp.querySelector('.end-rule')?.getBoundingClientRect(), meta = sp.querySelector('.end-meta')?.getBoundingClientRect();
+  const col = sc.querySelector('.blocks')!.getBoundingClientRect(), end = sc.querySelector(':scope > .add-end-host')!.getBoundingClientRect().bottom;
+  return { shown: getComputedStyle(sp).display !== 'none', last: sc.lastElementChild === sp, h: sp.getBoundingClientRect().height, hidden: sp.getAttribute('aria-hidden'), select: getComputedStyle(sp).userSelect,
+    ruleX: rule ? rule.left + rule.width / 2 : null, colX: col.left + col.width / 2, ruleW: rule?.width ?? 0,
+    belowEnd: rule ? rule.top - end : null, aboveMeta: rule && meta ? meta.top - rule.bottom : null, ruleH: rule?.height ?? 0,
+    title: sp.querySelector('.end-title')?.textContent ?? '', line: sp.querySelector('.end-line')?.textContent ?? '' };
+};
+const wordsOf = (line: string) => Number((/([\d,]+) words?/.exec(line)?.[1] ?? 'NaN').replace(/,/g, ''));
 // pane sel's crumb (its tab's section: one line or two); a heading put dy px under the pane's visible top (where it went)
 const crumbOf = (s: string) => page.evaluate((t: string) => document.querySelector(`[data-tab="${t}"] :is(.wb-tab-sec, .wb-tab-sub-label)`)?.textContent?.trim() ?? '', idOf(s));
 const scrollHeadingTo = (s: string, id: string, dy: number) => page.evaluate(([q, i, d]: any) => {
@@ -201,6 +217,12 @@ for (const doc of docsHere(['long', 'intro'])) {
       if (size) { await page.setViewportSize(size); await idle(); await frames(4); }
       const e = await page.evaluate(END_AT, sel);
       check(`${tag}: the end space is the pane's visible height (±1 px)${size ? `, after a resize to ${size.width}×${size.height}` : ''}`, Math.abs(e.space - e.seenH) <= 1, e);
+      const look = await page.evaluate(END_LOOK, sel);
+      const want = await page.evaluate(() => ({ words: (window as any).editorAPI.wordCount().words as number, title: (window as any).editorAPI.currentDoc()?.title as string }));
+      check(`${tag}: … the end space is the pane's last element, quiet (aria-hidden, not selectable); its hairline down the column's middle (±1 px), 1 px wide, from below the document's end (≥ 24 px) to above the foot (≥ 8 px)${size ? ', after the resize' : ''}`,
+        !!look && look.shown && look.last && look.hidden === 'true' && look.select === 'none' && look.ruleX != null && Math.abs(look.ruleX - look.colX) <= 1 && look.ruleW === 1
+        && look.belowEnd! >= 24 && look.aboveMeta! >= 8 && look.ruleH > 100, look);
+      check(`${tag}: … at its foot the document's title and word count (${want.words})`, !!look && look.title === (want.title || 'Untitled') && wordsOf(look.line) === want.words && /blocks? · edited /.test(look.line), { look, want });
     }
     await page.setViewportSize({ width: 1440, height: 900 }); await idle(); await frames(4);
     // scrolled to the end: the last section's heading at the reading line is the crumb's section; References' heading
@@ -225,6 +247,24 @@ for (const doc of docsHere(['long', 'intro'])) {
     await onEvent('nav:scrolled', () => page.keyboard.press('End'));
     const back = await page.evaluate(END_AT, sel);
     check(`${tag}: End from the very end: the document's end at the pane's bottom (±2 px)`, Math.abs(back.end) <= 2 && back.y < back.max - 100, back);
+    // the foot follows a word typed (live), the space's height the same; printed, no end space (pane A, once)
+    if (p === 'a') {
+      const before = await page.evaluate(END_LOOK, sel);
+      // the caret at the end of a paragraph (a real typing: the editor's keys, its word count refreshed when typing pauses)
+      await page.evaluate(() => { const api = (window as any).editorAPI, b = api.blocks().find((x: any) => x.kind === 'paragraph' && x.source.length > 40); api.edit(b.id, b.source.length); });
+      await page.waitForFunction(() => !!(window as any).editorAPI.caret());
+      await page.keyboard.type(' zebra');
+      await page.keyboard.press('Escape');
+      await idle();
+      await page.waitForFunction(([s, n]: [string, number]) => { const t = document.querySelector(s)!.querySelector(':scope > .end-space .end-line')?.textContent ?? ''; return t.includes(`${(n + 1).toLocaleString('en-GB')} words`); }, [sel, wordsOf(before!.line)] as [string, number], { timeout: 5000 }).catch(() => {});
+      const after = await page.evaluate(END_LOOK, sel);
+      check(`${tag}: the foot follows a word typed (${before?.line} → ${after?.line}), the end space's height the same`, !!before && !!after && wordsOf(after.line) === wordsOf(before.line) + 1 && Math.abs(after.h - before.h) < 0.5 && /edited today/.test(after.line), { before, after });
+      await page.evaluate(() => (window as any).editorAPI.undo()); await idle();
+      await page.emulateMedia({ media: 'print' });
+      const printed = await page.evaluate(END_LOOK, sel);
+      await page.emulateMedia({ media: null });
+      check(`${tag}: printed: no end space`, !!printed && !printed.shown, printed);
+    }
     if (p === 'b') { await closePane(page, SEL.b); await idle(); }
   }
   // End in a text field is the field's

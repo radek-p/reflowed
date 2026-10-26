@@ -255,6 +255,7 @@ export function createDocEditor(ctx) {
     host: {
       hasDoc: () => !!S.doc,
       blocks: () => S.doc?.blocks ?? [],
+      end: { title, words: results.words, edited: results.edited },     // every pane's end space: its foot's title, counts, last edit
       makeView: (paneId, id) => blocks.makeView(paneId, id),
       // a pane opened: its views of every block, painted as the others, the results delivered (views of them)
       opened(p, o = {}) {

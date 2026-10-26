@@ -52,6 +52,7 @@ export const SUITES: Suite[] = [
   S('site-intro', 'unit', 1, () => node('website/tools/prepare-intro.test.ts'), FAST),   // the website's copy of the intro (website/tools/prepare-intro.ts)
   S('w15-units', 'unit', 5, () => node('tests/test-w15-units.ts'), FAST),
   S('in-view', 'unit', 1, () => node('app/src/docview/in-view.test.ts'), FAST),   // the section in view: the crumbs' and the Outline's one rule (docview/in-view.ts)
+  S('end-meta', 'unit', 1, () => node('app/src/docview/end-meta.test.ts'), FAST),   // the end space's foot as text: title, words, blocks, the day of the last edit (docview/end-meta.ts)
   S('arch-units', 'unit', 2, () => node('tests/test-arch-units.ts'), FAST),   // the refactor's ratchets
   S('doc-units', 'unit', 2, () => node('tests/test-doc-units.ts'), FAST),     // (6–8) app/src/doc/ on a Memory store
   S('loading-units', 'unit', 1, () => node('loading/loading.test.ts'), FAST),   // loading/: both trees' indexes, the fetch front ends, the status store   // the TeX resource server: ls-R, the provider chain, the HTTP provider
@@ -182,7 +183,7 @@ export const seeded = (s: Suite) => s.group === 'dev' && !s.cold && s.name !== '
 /** Seconds per suite in the last full runs (both logs): estimates until test-all has history of its own.
  *  The suites added since (chrome, files, inspector, widths, select) are guessed. */
 export const EST_SECONDS: Record<string, number> = {
-  typecheck: 1, select: 1, browsers: 1, 'static-server': 1, 'engine-stamp': 1, 'engine-build-id': 1, 'seed-title-form': 1, 'intro-versions': 1, 'site-intro': 1, 'w15-units': 1, 'in-view': 1, 'arch-units': 1, 'doc-units': 1, 'commands-units': 1, kit: 3,
+  typecheck: 1, select: 1, browsers: 1, 'static-server': 1, 'engine-stamp': 1, 'engine-build-id': 1, 'seed-title-form': 1, 'intro-versions': 1, 'site-intro': 1, 'w15-units': 1, 'in-view': 1, 'end-meta': 1, 'arch-units': 1, 'doc-units': 1, 'commands-units': 1, kit: 3,
   'pdf-svg': 1, 'file-deps': 1, 'loading-units': 1, resources: 40, 'resources-setting': 25, 'resources-origin': 90, 'workbench-units': 2, workbench: 120, keys: 1, 'motion-units': 1, 'view-units': 1, minify: 1, tex: 1, 'tex-lex': 1, 'tex-calls': 1,
   provenance: 1, brand: 1, 'w4-units': 1, 'cite-units': 1, 'cite-engine': 38, 'bundle-cache': 3, 'engine-node': 90,
   'app-bundle': 1, 'dev-seed': 12, 'webkit-open': 11, 'fmt-early': 60, 'fewer-requests': 30, 'fewer-requests-release': 40, 'fmt-early-release': 180, 'fixture-cache': 20, recovery: 18, 'fonts-dump': 2, 'editor-frame': 3, 'refnav-host': 6, 'page-fonts': 25, 'live-preview': 30, 'colour-maps': 15, home: 2, 'offered-kinds': 15, 'reset-dev': 1, 'home-samples-dev': 29, w10: 37, w3: 27, 'e2e-dev': 140,
@@ -242,7 +243,7 @@ export const RULES: Rule[] = [
   { why: 'notes, view', paths: ['app/src/notes/**', 'app/src/view/**'], suites: ['notes', 'view-units', 'view', 'ios-zoom', 'zoom-caret'] },
   { why: 'figures', paths: ['app/src/svgfig/**', 'app/src/figures/**'], suites: ['pdf-svg'] },
   { why: 'the kit and page UI', paths: ['app/src/design/**', 'app/src/settings/**', 'app/src/sidebar/**', 'app/src/chrome/**', 'app/src/inspector/**', 'app/src/files/**'], suites: UI },
-  { why: 'the document view, outline', paths: ['app/src/docview/**', 'app/src/outline/**'], suites: ['w15-units', 'in-view', 'far-dev', 'anchor'] },
+  { why: 'the document view, outline', paths: ['app/src/docview/**', 'app/src/outline/**'], suites: ['w15-units', 'in-view', 'end-meta', 'far-dev', 'anchor'] },
   { why: 'editing', paths: ['app/src/edit/**'], suites: EDIT },
   { why: 'motion, navigation, panes', paths: ['app/src/motion/**', 'app/src/nav/**', 'app/src/panes/**'], suites: ['motion-units', 'motion', 'popover-hold', 'far-dev', 'panes', 'widths', 'chrome', 'sheets', 'selection-dev', 'cite-card-dev'] },
   { why: 'perf probes', paths: ['app/src/perf/**'], suites: ['anchor', 'anchor-motion', 'widths'] },
