@@ -20,9 +20,11 @@
 //     slice lets them all go in one write (one change of the scroll height, one correction by the panes' anchor keepers,
 //     perf/anchor.js); one the reader comes near (it enters the observer's margin) goes at once.
 //
-// A re-break is the viewer's own layout at the element's new width (view/viewer-host.ts relayout: Block.relayout), run at once in
-// our task, so its ResizeObserver then finds nothing to do. The width a block would have is read from its render
-// (the column: never pinned), so finding which blocks changed costs one layout read, no writes. Fitted blocks
+// A re-break is the viewer's own layout at the element's new width (view/viewer-host.ts relayout: Block.relayout), begun
+// in our task, so its ResizeObserver then finds nothing to do; what of it is off the screen the viewer lays out in its
+// own idle slices (Block.layoutDone), so the old heights go once it has, for every block re-broken out of view (they
+// went with the last slice while the viewer still had the last blocks to do: the page's height changed twice).
+// The width a block would have is read from its render (the column: never pinned), so finding which blocks changed costs one layout read, no writes. Fitted blocks
 // are never pinned: their editor lays them out. A block being edited is held like the others (its lines, and so its
 // mirrored caret, stay as they are while a column slides; it re-breaks once at the end: it was laid out mid-slide and
 // again at the end before).
@@ -37,7 +39,8 @@
 //   - the justification switch (view/index.js): every block needs a new layout, its width unchanged: each is marked
 //     (nothing pinned), and settled the same way: those in view first within the budget, the rest in idle slices.
 //
-//   const widths = createWidths({ panes: () => Pane[], relayout(el), laidAt?(el) -> { widthPt, align } | null, reduced?() })
+//   const widths = createWidths({ panes: () => Pane[], relayout(el), layoutDone?(el) -> Promise, laidAt?(el) -> { widthPt, align } | null,
+//                                 reduced?() })
 //   widths.pin(paneList?)                  pin every shown block in those panes (default: all) at its width now
 //   widths.resized()                       (the window's resize listener; also for tests) a window resize step
 //   widths.restyle() -> Promise            every shown block laid out again (the justification switch), lazily
@@ -73,8 +76,8 @@ const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
 const ric = (fn) => idle(fn, { timeout: 250, budget: BUDGET_MS });
 const cancelRic = cancelIdle;
 
-/** @param {{ panes: () => object[], relayout: (el: Element) => unknown, laidAt?: ((el: Element) => { widthPt: number, align: string } | null) | null, reduced?: () => boolean, state?: { widths: { value: { moving: boolean } } } | null }} o */
-export function createWidths({ panes, relayout, laidAt = null, state = null, reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches }) {
+/** @param {{ panes: () => object[], relayout: (el: Element) => unknown, layoutDone?: ((el: Element) => Promise<unknown>) | null, laidAt?: ((el: Element) => { widthPt: number, align: string } | null) | null, reduced?: () => boolean, state?: { widths: { value: { moving: boolean } } } | null }} o */
+export function createWidths({ panes, relayout, layoutDone = null, laidAt = null, state = null, reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches }) {
   // viewer element -> { pane, px (its CSS width), zoom, render, blk, near, held (its width set inline), cached (px from
   // the viewer's last layout: a block the viewer would leave alone within half a px), force (laid out again whatever
   // its width: the alignment changed) }
@@ -356,7 +359,17 @@ export function createWidths({ panes, relayout, laidAt = null, state = null, red
   function nextFrameSchedule() { if (!nextH && !disposed) nextH = requestAnimationFrame(() => { nextH = 0; schedule(); }); }
   // nothing pinned or held tall any more: the observers go too (each held its pane and the blocks it watched: a pane
   // closed after its change kept its detached blocks alive until the next pin); the next change makes them again
+  let ending = 0;                   // done() waiting for the viewer: the latest call's token
   function done() {
+    // the blocks held at their old heights, laid out by the viewer to their end first (its slices: Block.layoutDone), so
+    // their heights go together, once
+    const t = ++ending;
+    const els = layoutDone ? [...tall.keys()].map((r) => r.querySelector(':scope > .latex-block:not(.rtx-w-ghost)')).filter(Boolean) : [];
+    if (!els.length) { finish(); return; }
+    Promise.all(els.map((el) => layoutDone(el))).then(() => { if (t === ending && !pinned.size && !held && !disposed) finish(); });
+  }
+  function finish() {
+    ending++;
     letHeights();
     for (const io of ios.values()) io.disconnect();
     ios.clear();

@@ -39,7 +39,7 @@ import { createDocumentView } from '../docview/document-view.js';
 import { mountSplitChrome } from '../docview/split-chrome.js';
 import { createPane } from './pane.ts';
 import { createWidths } from './widths.js';
-import { relayout, laidAt } from '../view/viewer-host.ts';
+import { relayout, layoutDone, laidAt } from '../view/viewer-host.ts';
 import { lineAnchor } from '../view/line-anchor.ts';
 import { mountViewPane } from './view-pane.js';
 import { mountEndSpace, endTextOf, type EndSources } from '../docview/end-space.ts';
@@ -127,7 +127,7 @@ export function createPanes({ root, layout, docView, keeperFor = () => null, hos
   if (!only) shellEl()?.classList.toggle('scrolls', !!first.scroller);
   const guestList = () => [...guestPanes.values()].map((g) => g.pane).filter((p): p is Pane => !!p);
   // a change of the panes' widths re-breaks what is in view once, the rest lazily (panes/widths.js); one per editor
-  const widths: Widths = shared ?? createWidths({ panes: () => [...panes.values(), ...guestList()], relayout, laidAt, state: root.state });
+  const widths: Widths = shared ?? createWidths({ panes: () => [...panes.values(), ...guestList()], relayout, layoutDone, laidAt, state: root.state });
   if (only) return guestRegistry();
   const EASE = 'cubic-bezier(0.2, 0, 0, 1)', SLIDE_MS = 220;
   /** the first pane's column slides from where it was to where it is now (its lines kept: pinned) */

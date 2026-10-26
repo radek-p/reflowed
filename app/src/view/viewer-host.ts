@@ -6,6 +6,7 @@
 //   segmentsOf(el)                                      a block's segments (Block.segments): kind, svg, painted, walk
 //   documentOf(el)                                      its decoded document (Block.document)
 //   sourceWidthPt(el) · laidAt(el) · relayout(el)       the width TeX set it at; how it was last laid out; again now
+//   layoutDone(el)                                      that layout done (the viewer lays out what is off the screen later)
 //   layoutGeneration(el)                                bumped on every layout of the block and every paint of more of
 //                                                       its lines (its 'layout' event): what a cache of its geometry keys on
 //   spToPx(of?) · whenIdle(of?)                         CSS px per sp; the viewer settled (host.idle), of el's window
@@ -29,6 +30,7 @@ export interface ViewerBlock {
   readonly document: Readonly<Record<string, any>>;
   layout(): { widthPt: number; align: string; sourceWidthPt: number } | null;
   relayout(): void;
+  layoutDone(): Promise<void>;
   segments(): readonly ViewerSegment[];
   on(event: 'layout', fn: () => void): () => void;
 }
@@ -62,6 +64,11 @@ export function laidAt(el: Element | null | undefined): { widthPt: number; align
 }
 /** lay the block out again (after a change the viewer cannot see, like --latex-align) */
 export function relayout(el: Element | null | undefined): void { try { blockOf(el)?.relayout(); } catch { /* gone */ } }
+/** resolved once the viewer has laid out all of the block's last layout (what is off the screen it lays out in its idle
+ *  slices: Block.layoutDone); at once when nothing is under way or the block is gone */
+export function layoutDone(el: Element | null | undefined): Promise<void> {
+  try { return blockOf(el)?.layoutDone() ?? Promise.resolve(); } catch { return Promise.resolve(); }
+}
 
 const generations = new WeakMap<ViewerBlock, { n: number }>();
 export function layoutGeneration(el: Element | null | undefined): number {

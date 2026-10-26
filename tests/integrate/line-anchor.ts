@@ -4,7 +4,7 @@
 // paragraph being edited, the caret's line where it was. Every block's height changes in the reflow, the one across the
 // top included, so holding a block's top (the keeper's anchor before) let the line itself move by up to a block. And the
 // page's height changes once for the blocks out of view (each keeps its old height until the last idle slice), not once
-// a slice (the scrollbar flickered for a second or two).
+// a slice (the scrollbar flickered for a second or two). At a busy machine's pace (CPU throttled 4×).
 //   a section of tests/test-integrate.ts: node tests/test-integrate.ts [base] --only '^line-anchor$'
 import type { Harness } from './harness.ts';
 
@@ -16,6 +16,11 @@ const PARA = 'The reader keeps their place while the column changes width. Every
 export default async function (h: Harness): Promise<void> {
   const { check, open, idle, browser } = h;
   const { ctx, page } = await open('#/doc/sample', { width: 960, ctx: await browser.newContext({ viewport: { width: 960, height: 900 }, reducedMotion: 'no-preference' }) });
+  // at a busy machine's pace (the CPU throttled 4×, as Chromium's DevTools do), where the viewer's own slices (it lays
+  // out a re-broken block's part off the screen in idle time) lag the width governor's: its last re-broken blocks were
+  // laid out after it had let the old heights go, a second change of the page's height
+  const cdp = await ctx.newCDPSession(page);
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   const id = await page.evaluate(async (p: string) => {
     const blocks = [{ kind: 'heading', source: '\\section{Long}' }, ...Array.from({ length: 100 }, () => ({ kind: 'paragraph', source: `${p} ${p}` }))];
     return (window as any).editorAPI.store().createDoc({ title: 'Long', preamble: '\\documentclass{article}\n\\usepackage{amsmath}', blocks });

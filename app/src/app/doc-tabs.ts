@@ -33,7 +33,7 @@ import { docHost } from './doc-host.js';
 import { createLayout } from '../panes/layout.js';
 import { createWidths } from '../panes/widths.js';
 import { createPerf } from '../perf/index.js';
-import { relayout, laidAt } from '../view/viewer-host.ts';
+import { relayout, layoutDone, laidAt } from '../view/viewer-host.ts';
 import { createBibPane } from '../bibpane/index.js';
 import { installRefNav } from '../refnav/index.ts';
 import { installControls, controlsChanged } from '../docview/controls.js';
@@ -134,7 +134,7 @@ export function createDocTabs(root: EditorRoot, services: EditorServices, o: Doc
   // blocks cost a hold 38 ms with four 60-block tabs; its layout is skipped while hidden, and the viewer lays it out at
   // its width when it is shown again)
   const shownPanes = (): Pane[] => allPanes().filter((p) => !p.el.closest('.wb-panel--hidden'));
-  const widths: Widths = createWidths({ panes: shownPanes, relayout, laidAt, state: root.state });
+  const widths: Widths = createWidths({ panes: shownPanes, relayout, layoutDone, laidAt, state: root.state });
   let shown: DocEditor | null = null;
   const current = (): DocEditor | null => (focusedPane.peek() ? byPane.get(focusedPane.peek()!) ?? null : null) ?? [...byPane.values()][0] ?? null;
 
