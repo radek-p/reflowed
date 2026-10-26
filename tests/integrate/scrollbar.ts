@@ -1,8 +1,8 @@
 // ── the document's scrollbar: its track starts below the bar and the strip (the glass), in each form
-// and browser: where ::-webkit-scrollbar applies, the track's margin is the pane's glass inset; elsewhere (Firefox) the
-// pane itself starts below the glass. That style is a classic bar's (a styled ::-webkit-scrollbar always is one), so it
-// applies where the platform's bars are classic (workbench/src/scrollbars.ts); overlay bars (WebKit here,
-// as macOS) are the platform's own, over the content (overlay-scrollbars.ts checks they take no room) ──
+// and browser. Where the platform's bars are classic (workbench/src/scrollbars.ts), a styled ::-webkit-scrollbar whose
+// track's margin is the pane's glass inset; where they are overlay ones (WebKit here, as macOS) and in Firefox, the
+// workbench's own bar (workbench/src/overlay-scrollbar.ts: the native one hidden), its track inside the pane's
+// scroll-padding (overlay-scrollbars.ts checks that no bar takes room) ──
 //   a section of tests/test-integrate.ts: node tests/test-integrate.ts [base] --only '^scrollbar$'
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
@@ -33,14 +33,44 @@ export default async function (h: Harness): Promise<void> {
       const trackTop = track == null ? r.top : r.top + track;
       return { trackTop: Math.round(trackTop), glass: Math.round(glass), inset, track };
     }));
+    // the workbench's own bar (overlay bars, or no ::-webkit-scrollbar): brought up as the user does (a wheel over the
+    // pane), its vertical track's top, and the room a native bar takes (0: hidden)
+    const own = await page.evaluate(() => document.documentElement.dataset.wbScrollbars === 'overlay' || !CSS.supports('selector(::-webkit-scrollbar)'));
+    const ownBars = async () => {
+      const out: { trackTop: number | null; glass: number; native: number }[] = [];
+      const n = await page.locator('main.rtx-pane').count();
+      for (let i = 0; i < n; i++) {
+        const b = await page.locator('main.rtx-pane').nth(i).boundingBox();
+        await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+        await page.mouse.wheel(0, 3);
+        await page.waitForFunction((k: number) => document.querySelectorAll('main.rtx-pane')[k]?.nextElementSibling?.matches('.wb-sb.wb-sb--on'), i, { timeout: 5000 }).catch(() => {});
+        out.push(await page.evaluate((k: number) => {
+          const m = document.querySelectorAll<HTMLElement>('main.rtx-pane')[k]!, t = m.nextElementSibling?.matches('.wb-sb') ? m.nextElementSibling.querySelector('.wb-sb-track--y') : null;
+          const g = m.closest('.wb-group'), strip = g?.querySelector('.wb-strip:not(.wb-strip--inbar)') as HTMLElement | null;
+          const glass = Math.max(document.querySelector('.wb-bar')!.getBoundingClientRect().bottom, strip ? strip.getBoundingClientRect().bottom : 0);
+          return { trackTop: t ? Math.round(t.getBoundingClientRect().top) : null, glass: Math.round(glass), native: m.offsetWidth - m.clientWidth };
+        }, i));
+      }
+      return out;
+    };
+    const split = async () => {
+      await page.evaluate(() => (window as any).editorAPI.workbench().run('splitRight'));
+      await page.waitForFunction(() => Object.keys((window as any).editorAPI.editors()).length === 2);
+      await idle(page);
+    };
     const mode = await page.evaluate(() => document.documentElement.dataset.wbScrollbars);
-    const one = await measure();
-    await page.evaluate(() => (window as any).editorAPI.workbench().run('splitRight'));
-    await page.waitForFunction(() => Object.keys((window as any).editorAPI.editors()).length === 2);
-    await idle(page);
-    const two = await measure();
-    if (mode === 'overlay' && name !== 'firefox') check(`scrollbar (${name}): overlay bars are the platform's own (no styled track)`, [...one, ...two].every((x) => !x.track), { mode, one, two });
-    else check(`scrollbar (${name}, ${mode ?? 'no ::-webkit-scrollbar'}): the track starts below the bar and the strip (one group, side by side)`, [...one, ...two].every((x) => x.trackTop >= x.glass - 1), { mode, one, two });
+    if (own) {
+      const one = await ownBars();
+      await split();
+      const two = await ownBars();
+      check(`scrollbar (${name}, ${mode ?? 'no ::-webkit-scrollbar'}): the workbench's own bar, its track at the bottom of the bar and the strip (±1 px; one group, side by side), the native one taking no room`,
+        [...one, ...two].every((x) => x.trackTop != null && Math.abs(x.trackTop - x.glass) <= 1 && x.native === 0), { mode, one, two });
+    } else {
+      const one = await measure();
+      await split();
+      const two = await measure();
+      check(`scrollbar (${name}, ${mode}): the track starts below the bar and the strip (one group, side by side)`, [...one, ...two].every((x) => x.trackTop >= x.glass - 1), { mode, one, two });
+    }
     await ctx.close();
     await b.close();
   }
