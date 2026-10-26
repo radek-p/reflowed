@@ -4,10 +4,10 @@
 //   - split on, the sidebar in split view (off, on), the split dragged across its whole range, split off from pane A,
 //     a pane hidden (split closed from pane B), the sidebar in one pane at a narrow window (off, on);
 //   - each: no long task (> 50 ms) from the action until its work is done; per frame, the blocks the viewer laid out
-//     again (not new views) at most the blocks in view; the reading point (the first block starting below each pane's
-//     top) within 1 px of where it was, measured from the pane's visible top (below its tab strip); afterwards nothing
-//     pinned, no old lines left, every block at a fresh layout's height for its width (laid out again from scratch:
-//     equal) and laid out at its element's width;
+//     again (not new views) at most the blocks in view; the reading point (the anchor keeper's: the first line
+//     below each pane's top, view/line-anchor.ts) within 1 px of where it was, measured from the pane's visible top
+//     (below its tab strip); afterwards nothing pinned, no old lines left, every block at a fresh layout's height for
+//     its width (laid out again from scratch: equal) and laid out at its element's width;
 //   - a motion of the workbench (the sidebar sliding, the split dragged: resizestart .. resizeend, the hosts locked at
 //     their widths): no block laid out again during it, the reading point within 1 px in each of its frames; then each
 //     block re-broken at most once, with no cross-fade;
@@ -85,6 +85,19 @@ const RECORDER = () => {
   // a pane's box: below the glass bar (its scroll padding), to its bottom
   const boxOf = (pane: HTMLElement) => { const r = pane.getBoundingClientRect(); return { top: r.top + (parseFloat(getComputedStyle(pane).scrollPaddingTop) || 0), bottom: r.top + pane.clientHeight }; };
   const paneOf = (el: Element) => el.closest('main.rtx-pane') as HTMLElement;
+  // a block's shown typeset lines (view/shown.ts: not the cross-fade's ghost): their nodes and baselines' client y
+  const linesOf = (blk: Element) => {
+    const out: { nodes: readonly any[]; y: number }[] = [];
+    const lb = blk.querySelector('.blk-render > .latex-block:not(.incoming):not(.rtx-w-ghost)');
+    const b = lb && w.reflowtex.host?.block(lb);
+    for (const sg of b?.segments() ?? []) {
+      const M = sg.svg?.getScreenCTM();
+      if (M) sg.walk({ line: (_j: number, nodes: readonly any[], _x: number, by: number) => { out.push({ nodes, y: M.d * by + M.f }); } });
+    }
+    return out;
+  };
+  // each pane's reading line, by a node of it (anchors())
+  const marks = new Map<string, { id: string; node: unknown }>();
   addEventListener('resize', () => { w.__resizes = (w.__resizes ?? 0) + 1; });
   w.__wt = {
     start() {
@@ -136,24 +149,42 @@ const RECORDER = () => {
       w.__wtStop = () => { stop = true; po.disconnect(); document.removeEventListener('reflowtex:layout', on, true); for (const off of offs) off(); return { frames: out, long: lt, quick, over, ghosts, anims, motion: { ...mo, drift: Math.round(mo.drift * 10) / 10 } }; };
     },
     stop: () => w.__wtStop(),
-    /** each pane's reading point: the first block in the flow that starts at or below the pane's top, and its y from
-     *  that top (the visible area's: a second tab strip, the split's, moves the pane's top down, not the text in it) */
+    /** each pane's reading point, by the anchor keeper's rule for a width change (view/line-anchor.ts): the first
+     *  line below the pane's top, in the block across the top, else in the next block laid out (a block below the top
+     *  with no line of its own: its top); its y from that top (the visible area's: a second tab strip, the split's,
+     *  moves the pane's top down, not the text in it). A line is known by one of its glyph nodes (the viewer re-breaks
+     *  the same nodes), read through the viewer's host API. As the keeper does, a line taken at one change is the one
+     *  read at the next, until the reader scrolls (forget(): scrollMid) */
     anchors() {
       const out: Record<string, { id: string; y: number }> = {};
       for (const p of panesNow()) {
-        const b = boxOf(p);
+        const b = boxOf(p), pane = p.dataset.pane ?? p.id, m = marks.get(pane);
+        const kept = m && p.querySelector(`.blocks > .blk[data-id="${CSS.escape(m.id)}"]`);
+        const ky = kept ? linesOf(kept).find((l) => l.nodes.includes(m.node))?.y : undefined;
+        if (ky != null) { out[pane] = { id: m!.id, y: ky - b.top }; continue; }
+        marks.delete(pane);
         for (const el of p.querySelector('.blocks')!.children as any) {
           if (el.offsetParent === null || getComputedStyle(el).position === 'absolute') continue;
           const r = el.getBoundingClientRect();
-          if (r.top >= b.top - 0.5) { out[p.dataset.pane ?? p.id] = { id: el.dataset.id, y: r.top - b.top }; break; }
+          if (r.bottom <= b.top) continue;
+          if (r.top > b.bottom) break;
+          const line = linesOf(el).find((l) => l.y > b.top), node = line?.nodes.find((n: any) => n.type === 'glyph');
+          if (line && node) { marks.set(pane, { id: el.dataset.id, node }); out[pane] = { id: el.dataset.id, y: line.y - b.top }; break; }
+          if (r.top >= b.top - 0.5) { out[pane] = { id: el.dataset.id, y: r.top - b.top }; break; }
         }
       }
       return out;
     },
+    forget() { marks.clear(); },
+    /** where pane's reading point (anchors()) is now: its line's y, else block id's top, from the pane's top */
     yOf(pane: string, id: string) {
-      const p = document.querySelector(`main.rtx-pane[data-pane="${pane}"]`);
+      const p = document.querySelector(`main.rtx-pane[data-pane="${pane}"]`) as HTMLElement | null;
       const el = p?.querySelector(`.blocks > .blk[data-id="${CSS.escape(id)}"]`);
-      return el ? el.getBoundingClientRect().top - boxOf(p as HTMLElement).top : null;
+      if (!p || !el) return null;
+      const m = marks.get(pane);
+      if (m?.id !== id) return el.getBoundingClientRect().top - boxOf(p).top;
+      const line = linesOf(el).find((l) => l.nodes.includes(m.node));
+      return line ? line.y - boxOf(p).top : null;
     },
     /** after the change: nothing pinned, no old lines left; each block laid out at its element's width; its height
      *  that of a layout from scratch (the viewer's relayout) */
@@ -185,6 +216,7 @@ async function resizeTo(page: any, width: number) {
   await page.waitForFunction((k: number) => ((window as any).__resizes ?? 0) > k, n);
 }
 const scrollMid = (page: any) => page.evaluate(() => {
+  (window as any).__wt.forget();                               // the reader moved: the keepers take the line at the top again
   for (const p of document.querySelectorAll('main.rtx-pane') as NodeListOf<HTMLElement>) p.scrollTop = (p.scrollHeight - p.clientHeight) * 0.45;
 });
 const sidebarBtn = (page: any) => page.evaluate(() => (window as any).editorAPI.workbench().toggleSide('left'));   // the left column (its hide button, Ctrl/⌘B)
