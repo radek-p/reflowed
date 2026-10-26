@@ -321,8 +321,8 @@ group('side open/close: the main area and the top bar follow the column' + "'" +
 });
 
 // ── a closable panel (panel.onClose): the close on its own tab and Close in its menu call it (the host takes the panel
-//    away: unregisters its type); registered again, it comes back where it was; a panel with a default width (panel.width)
-//    gives its column that width ──
+//    away: unregisters its type); registered again, it comes back where it was (a panel docked below whose own group went
+//    with it: below again, a group of its own); a panel with a default width (panel.width) gives its column that width ──
 group('closable panel: the close on its tab and in its menu, back where it was; a panel\'s default width', async () => {
   const page = await fresh({ sides: true, w: 1500 });
   await settled(page);
@@ -347,5 +347,15 @@ group('closable panel: the close on its tab and in its menu, back where it was; 
   await page.click('[role="menu"][aria-label="Panel actions"] [data-item="close-panel"]');
   await waitSide(page, 'right', 'references');
   check('its tab\'s menu has Close; it closes it', true);
+  // docked below: its own group at the column's bottom; closed, that group goes with it; registered again: below again
+  const addBelow = () => page.evaluate(() => { const w = window as any, d = w.demo;
+    w.__offLow = d.wb.registerView({ id: 'low', title: () => 'Low', icon: 'files', panel: { side: 'right', below: true, onClose: () => w.__offLow() }, Component: () => null }); });
+  await addBelow();
+  await waitSide(page, 'right', 'references | low');
+  await page.click('[data-ptab="low"] [data-action="close-panel"]');
+  await waitSide(page, 'right', 'references');
+  await addBelow();
+  await waitSide(page, 'right', 'references | low');
+  check('a panel docked below, closed and registered again: below again, a group of its own (not into the top group)', await sideModel(page, 'right') === 'references | low');
   await page.close();
 });

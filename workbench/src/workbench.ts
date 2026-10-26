@@ -168,14 +168,14 @@ export function createWorkbench({ layout: init = null, home = 'home', keymap = {
     const t = type as unknown as ViewType;     // the registry holds every type alike; a type's own functions narrow its state
     if (!t?.id) throw new Error('registerView: an id');
     const m = new Map(types.peek()); m.set(t.id, t); types.value = m;
-    // a sidebar panel: docked where it was when its type left (this session: its group, else its side), else on its
-    // default side, unless the layout has it somewhere already: into the column's top group, or (below: true) as its own
-    // group at the column's bottom
+    // a sidebar panel: docked where it was when its type left (this session: its group), else as it docks by default on
+    // the side it was on (this session) or its default side, unless the layout has it somewhere already: into the
+    // column's top group, or (below: true) as its own group at the column's bottom
     if (t.panel && !M.sideOf(L.peek(), t.id)) {
       const was = left.get(t.id), l = L.peek();
       const back = was ? M.addPanel(l, t.id, was.side, was.index, was.group) : l;
       const side = was?.side ?? t.panel.side ?? 'left';
-      set(back !== l ? back : was ? M.addPanel(l, t.id, side) : t.panel.below ? M.splitPanel(l, t.id, side, null, 'bottom', nid('g'), nid('s')) : M.addPanel(l, t.id, side, t.panel.index ?? null), 'panel');
+      set(back !== l ? back : t.panel.below ? M.splitPanel(l, t.id, side, null, 'bottom', nid('g'), nid('s')) : M.addPanel(l, t.id, side, t.panel.index ?? null), 'panel');
     }
     // a panel unregistered leaves its column (a host's panel that comes and goes: the editor's Files panel, advanced);
     // where it was is remembered for its return
