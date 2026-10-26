@@ -83,7 +83,11 @@ if (haveTree) symlinkSync(TREE, join(SITE, 'texlive'));
 const AWKWARD = { root: WWW, types: { '.wasm': null, '.bin': null } };
 const MB = 1 << 20;
 const slowed = (p: string) => (p.startsWith(`${BASE}engine/`) ? 3 * MB : p.startsWith(`${BASE}app/`) || p.startsWith(`${BASE}seed/`) ? MB : 0);
-const GZIP = await staticServer({ ...AWKWARD, port: PORT, gzip: true, rate: slowed });
+// the engine's wasm pack (only typesetting waits for it) held on the first server until the page's UI is on screen, so
+// that something is still loading at the hand-off to the status line however fast the rest came (on a busy machine
+// the boot took longer than the downloads, and nothing was left to show there)
+let wasmHeld: Promise<void> | null = null;
+const GZIP = await staticServer({ ...AWKWARD, port: PORT, gzip: true, rate: slowed, hold: (p) => (/\/engine\/wasm-[0-9a-f]+\.bin(\?|$)/.test(p) ? wasmHeld : null) });
 const PLAIN_SERVER = await staticServer({ ...AWKWARD, port: PLAIN });
 
 // what the page shows of its loading, recorded from the DOM as it changes (no timers)
@@ -133,10 +137,15 @@ async function run(b: 'chromium' | 'firefox' | 'webkit', server: StaticServer, f
   page.on('console', (m: any) => { if (m.type() === 'error' || m.type() === 'warning') console.log(`  [${label} console.${m.type()}] ${m.text().slice(0, 300)}`); });
   const step = (s: string) => console.log(`  … ${label}: ${s}`);
   const n0 = server.log.length;
+  let letGo = () => {};
+  wasmHeld = server === GZIP ? new Promise<void>((r) => { letGo = r; }) : null;
   await page.goto(`${origin}${BASE}#/`);
+  // (let go once the UI is on screen; the wait failing lets it go too, and the checks below then say why)
+  const shown = page.waitForFunction(() => (window as any).__rec?.bootGone).then(() => letGo(), () => letGo());
   await page.waitForFunction(() => (window as any).editorAPI?.route?.().name);
   step('the app is up');
   // the overlay gone, and the status line's part gone once everything is in
+  await shown;
   await page.waitForFunction(() => (window as any).__rec.bootGone && !(window as any).__rtxFiles.busy());
   await page.waitForFunction(() => !(window as any).__rec.statusAtHandoff || (window as any).__rec.statusGone);
   const rec = await page.evaluate(() => (window as any).__rec);

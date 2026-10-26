@@ -16,6 +16,7 @@
 //   types   per extension ('.wasm') or file name ('ls-R'): the Content-Type, over the defaults; null: none sent
 //   gzip    every body gzipped for a client that accepts it, streamed: chunked, no Content-Length
 //   rate    rate(path): bytes per second for that path's body (0 or undefined: as fast as it goes)
+//   hold    hold(path): a promise the body waits for (its headers sent), or none: a file still coming at a given moment
 //   cors    Access-Control-Allow-Origin: * on every answer, and OPTIONS answered 204
 // A log entry: method, path (as asked, the query included), status, bytes (the body as sent: compressed, 0 for a 304
 // or HEAD), length (the Content-Length sent, null for none), encoding (the Content-Encoding sent, or null), type
@@ -34,6 +35,7 @@ export interface StaticServerOptions {
   types?: Record<string, string | null>;
   gzip?: boolean;
   rate?: (path: string) => number | undefined;
+  hold?: (path: string) => Promise<unknown> | null | undefined;
   cors?: boolean;
 }
 export interface Logged { method: string; path: string; status: number; bytes: number; length: string | null; encoding: string | null; type: string | null }
@@ -118,7 +120,9 @@ export async function staticServer(o: StaticServerOptions): Promise<StaticServer
     head(200, headers);
     if (method === 'HEAD') { res.end(); return; }
     const steps: NodeJS.ReadWriteStream[] = zip ? [createGzip()] : [];
-    pipeline([createReadStream(file), ...steps, meter(entry, o.rate?.(path) ?? 0), res], () => { /* a client gone mid-body: nothing to do */ });
+    const send = () => { pipeline([createReadStream(file), ...steps, meter(entry, o.rate?.(path) ?? 0), res], () => { /* a client gone mid-body: nothing to do */ }); };
+    const held = o.hold?.(path);
+    if (held) held.then(send, send); else send();
   };
 
   const server = createServer(answer);
