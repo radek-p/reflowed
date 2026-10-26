@@ -445,13 +445,13 @@ export function createWidths({ panes, relayout, laidAt = null, state = null, red
 
   /** @param {() => unknown} change @param {{ animate?: boolean, motion?: (() => Promise<unknown>) | null, cached?: boolean, always?: boolean }} [o] */
   async function transition(change, { animate = true, motion = null, cached = false, always = false } = {}) {
-    // each pane's reading point now: put back where it is at the end (the change may move it a fraction: a scroll
-    // offset rounded, a scroller switched), then held by the keeper while the blocks re-break. A window resize: no
-    // press started it, so the keepers' anchors from before stand (the new viewport's layout has moved the page
-    // already: a reading point taken now would keep that move); its blocks pinned first, before any layout read.
-    let marks = [];
+    // each pane's reading point now (its reader's line: view/line-anchor.ts): put back where it is at the end (the
+    // change may move it a fraction: a scroll offset rounded, a scroller switched), then held by the keeper while the
+    // blocks re-break. A window resize: its blocks pinned first, before any layout read (the page is at the new
+    // viewport already), so the line is read where the old lines still are
     if (cached) pinCached();
-    else { marks = panes().map((p) => ({ p, m: p.keeper?.resume?.() ?? null })); pin(); }
+    const marks = panes().map((p) => ({ p, m: p.keeper?.resume?.() ?? null }));
+    if (!cached) pin();
     emit(true);
     held++;
     gen++;                                    // a settle under way stops: this one's settle takes its blocks over
@@ -469,7 +469,7 @@ export function createWidths({ panes, relayout, laidAt = null, state = null, red
     // tasks, neither long
     await nextFrame();
     held--;
-    if (!cached) for (const p of panes()) p.keeper?.resume?.();
+    for (const p of panes()) p.keeper?.resume?.();
     for (const { p, m } of marks) if (m && panes().includes(p) && p.contains(m.el)) p.keeper?.holdAt?.(m);
     pin();                                    // a pane opened by the change: its views too
     await settle({ fade: animate });
