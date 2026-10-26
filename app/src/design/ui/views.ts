@@ -6,10 +6,14 @@
 //   registerView({ id, title, icon?, panel?: { side, order }, badge?, Component?({ ctx, close? }), mount?(host, ctx) })
 //     title       a string, or (state) -> string
 //     panel       a side panel: no document of its own, it follows the container's CURRENT document (ctx.current);
-//                 { side: 'left' | 'right', order, width?, onClose? }; width: its column's default width, { share, min?,
-//                 max? } (a share of the window, within px bounds; a container with columns uses it); onClose: it is
-//                 closable (its container offers a close on its tab that calls it). (The older slot: 'sidebar' and order
-//                 mean the same: panel left)
+//                 { side: 'left' | 'right', order, width?, below?, onDemand?, keys?, onClose? }; width: its column's
+//                 default width, { share, min?, max? } (a share of the window, within px bounds; a container with columns
+//                 uses it); below: docked as a group of its own at its column's bottom; onClose: it is closable (its
+//                 container offers a close on its tab that calls it). onDemand: OFFERED, not shown until asked for: it is
+//                 in its slot only while open (openPanel), its close closes it (closePanel, then its onClose), and a
+//                 container's View menu lists it (offered()); keys: the key that opens and closes it (as shortcutLabel
+//                 reads it: 'mod+,'), shown beside that menu's row. (The older slot: 'sidebar' and order mean the same:
+//                 panel left)
 //     Component   the content, a Preact component of { ctx } (and close, in a sheet)
 //     mount       or, for content that is not a component (an island, a pane of its own DOM): mount(host, ctx) ->
 //                 { unmount(), focus?() }; a host element the container owns and never re-parents
@@ -18,7 +22,11 @@
 //
 // The page's (definitions, one set per page, like VS Code's contributed views):
 //   registerView(def) -> unregister()                 slot: where a view lives by default ('sheet', 'sidebar')
-//   views(slot?)                                      the registered views (a signal's value: components re-render)
+//   views(slot?)                                      the registered views in their slots now (an on-demand panel only
+//                                                     while open; a signal's value: components re-render)
+//   offered()                                         the on-demand panels registered, open or not (a View menu's rows)
+//   openPanel(id) · closePanel(id) · panelOpen(id)     an on-demand panel opened, closed, open now (a signal's value);
+//                                                     a view unregistered is closed
 //   view(id)                                          one view, or null
 //   defineSlot(slot, { host(v, owner) })              how a slot makes a view's host element (in that container)
 //   openView(id, props, { in: 'sheet' })               the view's content in a container; returns { close, el }
@@ -69,8 +77,9 @@ export interface ViewDef {
   title?: string | ((state: unknown) => string);
   icon?: string;
   /** a side panel: it follows the container's current document; width: its column's default width (a share of the window);
-   *  onClose: closable, and what closing it does */
-  panel?: { side: 'left' | 'right'; order?: number; width?: { share: number; min?: number; max?: number }; onClose?(): void } | null;
+   *  below: a group of its own at its column's bottom; onDemand: offered, open only when asked for (closable); keys: the
+   *  key that opens and closes it (shortcutLabel's notation); onClose: closable, and what closing it does */
+  panel?: { side: 'left' | 'right'; order?: number; width?: { share: number; min?: number; max?: number }; below?: boolean; onDemand?: boolean; keys?: string; onClose?(): void } | null;
   slot?: string | null;
   order?: number;
   label?: string;
@@ -93,10 +102,16 @@ export interface SlotOwner { readonly doc: Document; id(name: string): string; o
 
 const registry = signal(new Map<string, ViewDef>());
 const open = new Map<string, { close(): void; el: HTMLElement | null }>();
+/** the on-demand panels open now (their ids): the registry's state (a change is a new registry value: its readers follow) */
+const opened = new Set<string>();
+const changed = () => { registry.value = new Map(registry.peek()); };
 
-/** one shape: `panel` and the older `slot: 'sidebar'` + `order` are the same thing (a left side panel) */
+/** one shape: `panel` and the older `slot: 'sidebar'` + `order` are the same thing (a left side panel); an on-demand
+ *  panel's close closes it (then does what its own onClose does) */
 function normal(v: ViewDef): ViewDef {
-  const panel = v.panel ?? (v.slot === 'sidebar' ? { side: 'left' as const, order: v.order ?? 0 } : null);
+  const p = v.panel ?? (v.slot === 'sidebar' ? { side: 'left' as const, order: v.order ?? 0 } : null);
+  const own = p?.onClose;
+  const panel = p?.onDemand ? { ...p, onClose: () => { closePanel(v.id); own?.(); } } : p;
   return { ...v, slot: panel ? 'sidebar' : v.slot ?? null, order: panel?.order ?? v.order, panel };
 }
 export function registerView(v: ViewDef): () => void {
@@ -106,12 +121,27 @@ export function registerView(v: ViewDef): () => void {
   const m = new Map(registry.peek());
   m.set(v.id, def);
   registry.value = m;
-  return () => { const n = new Map(registry.peek()); if (n.get(v.id) === def) n.delete(v.id); registry.value = n; };
+  return () => { const n = new Map(registry.peek()); if (n.get(v.id) !== def) return; n.delete(v.id); opened.delete(v.id); registry.value = n; };   // (unregistered: closed)
 }
 /** a view's title, given its state */
 export const titleOf = (v: ViewDef, state: unknown = null): string => (typeof v.title === 'function' ? v.title(state) : v.title ?? v.id);
 export const view = (id: string): ViewDef | null => registry.value.get(id) ?? null;
-export const views = (slot?: string | null): ViewDef[] => [...registry.value.values()].filter((v) => slot == null || v.slot === slot).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+const byOrder = (a: ViewDef, b: ViewDef) => (a.order ?? 0) - (b.order ?? 0);
+/** in its slot now: an on-demand panel only while it is open */
+const placed = (v: ViewDef) => !v.panel?.onDemand || opened.has(v.id);
+export const views = (slot?: string | null): ViewDef[] => [...registry.value.values()].filter((v) => (slot == null || v.slot === slot) && placed(v)).sort(byOrder);
+export const offered = (): ViewDef[] => [...registry.value.values()].filter((v) => !!v.panel?.onDemand).sort(byOrder);
+export function panelOpen(id: string): boolean { void registry.value; return opened.has(id); }   // (read through the registry: its readers follow)
+/** on-demand panel `id` opened (its containers dock it); false: no such panel registered */
+export function openPanel(id: string): boolean {
+  if (!registry.peek().get(id)?.panel?.onDemand) return false;
+  if (!opened.has(id)) { opened.add(id); changed(); }
+  return true;
+}
+/** on-demand panel `id` closed (out of its containers) */
+export function closePanel(id: string): void {
+  if (opened.delete(id)) changed();
+}
 export const isOpen = (id: string): boolean => open.has(id);
 
 type FrameComponent = (props: Props) => VNode | null;

@@ -102,7 +102,7 @@ const focusPane = (p: string) => page.evaluate((id: string) => document.querySel
 async function viewMenu(): Promise<{ advanced: boolean; inspector: boolean; checked: boolean }> {
   await page.click('#btn-main-menu');
   await page.click('.main-menu [data-action="view"]');
-  const v = await page.evaluate(() => { const row = document.querySelector('.main-menu [data-action="inspector"]');
+  const v = await page.evaluate(() => { const row = document.querySelector('.main-menu [data-action="panel-inspector"]');
     return { advanced: (window as any).editorAPI.advanced(), inspector: !!row, checked: row?.getAttribute('aria-checked') === 'true' }; });
   await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('.main-menu'));
@@ -247,10 +247,23 @@ let s0 = await state();
   // the main menu's View › Inspector opens it
   await page.click('#btn-main-menu');
   await page.click('.main-menu [data-action="view"]');
-  await page.click('.main-menu [data-action="inspector"]');
+  await page.click('.main-menu [data-action="panel-inspector"]');
+  await page.waitForFunction(() => (window as any).editorAPI.inspector().on.peek());   // (the row opens its view; the inspector follows)
   await ready();
   const t = await state();
   check('the main menu\'s View › Inspector opens it again, on the right, a third wide, on the focused pane', t.on && t.open && t.side === 'right' && third(t) && t.target === P.b, t);
+  const vc = await viewMenu();
+  check('... its row checked now', vc.inspector && vc.checked, vc);
+  // the row again closes it (as its close does), and once more opens it
+  for (const want of [false, true]) {
+    await page.click('#btn-main-menu');
+    await page.click('.main-menu [data-action="view"]');
+    await page.click('.main-menu [data-action="panel-inspector"]');
+    await page.waitForFunction((w: boolean) => (window as any).editorAPI.inspector().on.peek() === w, want);
+    await settle();
+    const r = await state();
+    check(want ? '... and once more opens it' : 'View › Inspector, checked, closes it', want ? r.on && r.side === 'right' : gone(r), r);
+  }
   // closable: its tab's close button
   await page.click('[data-ptab="inspector"] .wb-ptab-close');
   await settle();

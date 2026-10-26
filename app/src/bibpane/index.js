@@ -40,7 +40,7 @@ const PRINTS_BIB = /\\(printbibliography|bibliography\s*\{|printbibheading)/;
 // the References pane is a registered side panel (the page's type); its content is each
 // container's own pane (installDom(root)), drawn into the host its container gives (mount): one per editor
 const panesOf = new WeakMap();                    // editor container -> its References pane
-registerView({ id: 'references', title: 'Refs', label: 'References', tip: 'References: search, cite, add', panel: { side: 'left', order: 40 }, count: true,
+registerView({ id: 'references', title: 'Refs', label: 'References', icon: 'book', tip: 'References: search, cite, add', panel: { side: 'left', order: 40 }, count: true,
   mount: (host, ctx) => panesOf.get(ctx.owner)?.mountInto(host) ?? { unmount() {} } });
 
 export function createBibPane({ h }) {

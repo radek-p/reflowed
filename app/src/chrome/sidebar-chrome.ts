@@ -41,9 +41,9 @@ defineSlot('sidebar', {
     return el;
   },
 });
-registerView({ id: 'outline', title: 'Outline', panel: { side: 'left', order: 10 }, Component: OutlinePanel });
-registerView({ id: 'problems', title: 'Problems', panel: { side: 'left', order: 20 }, count: true, Component: ProblemsPanel });
-registerView({ id: 'todos', title: 'TODOs', panel: { side: 'left', order: 30 }, count: true, Component: TodosPanel });
+registerView({ id: 'outline', title: 'Outline', icon: 'outline', panel: { side: 'left', order: 10 }, Component: OutlinePanel });
+registerView({ id: 'problems', title: 'Problems', icon: 'problems', panel: { side: 'left', order: 20 }, count: true, Component: ProblemsPanel });
+registerView({ id: 'todos', title: 'TODOs', icon: 'todos', panel: { side: 'left', order: 30 }, count: true, Component: TodosPanel });
 
 type Ids = (name: string) => string;
 /** the sidebar container's Frame: the tab is the title, so a view's content goes in as it is (no header, no Close) */

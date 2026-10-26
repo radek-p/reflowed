@@ -1,6 +1,7 @@
-// The Files panel: a side panel behind "Show advanced features". With the switch on it is a registered
-// side panel (its container draws its tab and its content); off, it is unregistered and its tab goes (each
-// editor showing it shows its Outline). The content (panel.js) lists the CURRENT document's files (ctx.current: the
+// The Files panel: a side panel behind "Show advanced features". With the switch on it is a registered side panel
+// offered on demand (panel.onDemand, design/ui/views.ts: not shown until opened from the main menu's View › Files, closed
+// by the close on its tab; docked as a group of its own at the left column's bottom); off, it is unregistered (closed,
+// its View row gone; each editor showing it shows its Outline). The content (panel.js) lists the CURRENT document's files (ctx.current: the
 // document's panel host, app/panel-host.ts), only while its tab is shown (it lists them when drawn).
 import { effect, untracked } from '@preact/signals';
 import { html } from '../design/ui/core.js';
@@ -11,7 +12,7 @@ import { FilesContent } from './panel.js';
 import { installFilesStyle } from './style.js';
 import type { PanelHost } from '../app/panel-host.ts';
 
-registerAdvanced({ id: 'files-panel', label: 'The Files panel (every file the document uses)', where: 'Sidebar' });
+registerAdvanced({ id: 'files-panel', label: 'The Files panel (every file the document uses)', where: 'Main menu, View' });
 
 const ID = 'files';
 
@@ -29,7 +30,8 @@ let unregister: (() => void) | null = null;
 function on() {
   if (unregister) return;
   installFilesStyle();
-  unregister = registerView({ id: ID, title: 'Files', label: 'Files', tip: 'Every file the document uses (as Export .zip writes them)', panel: { side: 'left', order: 50 }, count: true, Component: FilesPanel });
+  unregister = registerView({ id: ID, title: 'Files', label: 'Files', icon: 'files', tip: 'Every file the document uses (as Export .zip writes them)',
+    panel: { side: 'left', order: 50, below: true, onDemand: true }, count: true, Component: FilesPanel });
 }
 function off() {
   if (!unregister) return;

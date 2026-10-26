@@ -8,15 +8,17 @@
 //
 // View types: 'document' ({ doc, at? }: a pane of document `doc`; `at`, the section in view, restored on reload),
 // 'home' (the editor's Documents view, home/screen.js, in the group's home panel), and one side panel per editor
-// panel (design/ui/views.ts: Outline, Problems, TODOs, References, Files; on the right, closable, the Inspector on the dev
-// page and Settings) drawn with the editor's ViewContext, on the side and at the default column width the view gives.
+// panel (design/ui/views.ts: Outline, Problems, TODOs, References; offered on demand, open only when asked for and
+// closable: Files, the Inspector on the dev page, Settings) drawn with the editor's ViewContext, with the icon, the side,
+// the place (below) and the default column width the view gives; an on-demand panel opened is shown.
 // The window bar: at its left the main menu (the Re button: chrome/main-menu.ts, the current document's commands and
-// the page's actions), at its right the View options' button. Page commands (the key table's rows that act on the page,
-// not on a document): app.settings, Ctrl/⌘ , (the Settings panel shown, or closed when it is).
+// the page's actions; its View › rows for the two side columns and the panels offered, from the workbench's sides and
+// the registry), at its right the View options' button. Page commands (the key table's rows that act on the page, not
+// on a document): app.panel <id>, an on-demand panel shown, or closed when it is (Ctrl/⌘ , for Settings).
 import { effect, untracked } from '@preact/signals';
 import { useLayoutEffect, useMemo, useRef } from 'preact/hooks';
 import { createWorkbench, Workbench, html, render, kit, openRowMenu, ownViewport, VIEWPORT_CSS, model as M, sideOverlay, isIconName, Icon,
-  type ViewContext as WbContext, type Tab, type Subtitle, type WorkbenchStore, type SelectRow, type IconName } from '../../../workbench/src/index.ts';
+  type ViewContext as WbContext, type Tab, type Subtitle, type WorkbenchStore, type SelectRow } from '../../../workbench/src/index.ts';
 import { createEditorRoot, editorRoots } from '../app/editor-root.ts';
 import { createPageServices, pageReady } from '../app/services.ts';
 import { createDocTabs, type DocTabs } from '../app/doc-tabs.ts';
@@ -30,7 +32,7 @@ import { openResetDialog } from '../home/reset-dialog.js';
 import { connectResources } from '../settings/resources.ts';
 import { buildVersion } from '../app/build-version.js';
 import { page, dispatchForTests } from '../app/page-state.ts';
-import { views as editorViews, FrameContext, slotsOf, type ViewDef } from '../design/ui/views.ts';
+import { views as editorViews, view as editorView, offered, openPanel, panelOpen, FrameContext, slotsOf, type ViewDef } from '../design/ui/views.ts';
 import { panelContext } from '../app/view-context.ts';
 import { crumbsOf } from '../docview/crumbs.ts';
 import { WordCountStatus } from '../chrome/sidebar-chrome.ts';
@@ -40,9 +42,8 @@ import { installTestSurface, setLastHome } from './test-surface.ts';
 import { createStatusHold } from './status-hold.ts';
 import ICON_SVG from '../chrome/wordmark/icon.svg';   // the app's icon (ReIcon.svg): the main menu's button, no word
 import { openMenu, type MenuHandle } from '../chrome/menu.ts';
-import { mainMenu } from '../chrome/main-menu.ts';
-import { SETTINGS_PANEL, openSettings, closeSettings, settingsOpen } from '../settings/panel.ts';
-import { advanced } from '../settings/advanced.js';
+import { mainMenu, panelToggles } from '../chrome/main-menu.ts';
+import { SETTINGS_PANEL, openSettings } from '../settings/panel.ts';
 import { shortcutLabel } from '../../../workbench/src/keys.ts';
 import type { ComponentChildren } from 'preact';
 import type { Router } from '../app/mount.ts';
@@ -57,7 +58,7 @@ const LAYOUT_KEY = 'rtx-editor.workbench';
 export const KEY_ROWS = [
   { key: 'ctrl+b', mac: 'meta+b', command: 'editor.bold', when: 'reflowed.field', hosts: ['standalone', 'vscode'] as ('standalone' | 'vscode')[] },
   { key: 'ctrl+alt+\\', mac: 'meta+alt+\\', command: 'workbench.splitRight', hosts: ['standalone'] as ('standalone' | 'vscode')[] },
-  { key: 'ctrl+,', mac: 'meta+,', command: 'app.settings', hosts: ['standalone'] as ('standalone' | 'vscode')[] },
+  { key: 'ctrl+,', mac: 'meta+,', command: 'app.panel', args: SETTINGS_PANEL as string, hosts: ['standalone'] as ('standalone' | 'vscode')[] },
 ];
 type DocState = { doc?: string; at?: string | null };
 const safeGet = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -224,34 +225,38 @@ export async function startWorkbench({ el, params }: { el: HTMLElement; params: 
   function openMainMenu(anchor: HTMLElement, focus: boolean) {
     if (menu?.open) { menu.close(); return; }
     const ed = T().currentEditor(), d = ed?.doc;
-    const insp = services.inspector as InspectorToggle | null;
     const view = services.view as { open?(): void } | null;
     const S = M.sides(wb.layout.peek());
     menu = openMenu({ anchor, cls: 'main-menu', label: 'Main menu', focus, items: mainMenu({
       doc: ed && d ? { commands: ed.commands, preamble: d.preamble?.source ?? '' } : null,
       documents: { run: () => wb.toggleHome(undefined, true), shortcut: wb.shortcut('home') ?? '' },
       viewOptions: { run: () => view?.open?.(), shortcut: shortcutLabel('mod+alt+v') },
-      sidebar: { run: () => { wb.toggleSide('left'); }, on: !S.left.collapsed && M.sidePanels(S.left).length > 0, shortcut: wb.shortcut('toggleSide', 'left') ?? '' },
-      settings: { run: showSettings, shortcut: wb.shortcut('app.settings') ?? '' },
+      // the side columns (shown: open with a panel in it) and the panels offered (shown: open and in view)
+      sides: M.SIDEBARS.map((side) => ({ side, on: !S[side].collapsed, empty: !M.sidePanels(S[side]).length, shortcut: wb.shortcut('toggleSide', side) ?? '', run: () => { wb.toggleSide(side); } })),
+      panels: panelToggles(offered(), { shown: panelShown, keys: (k) => shortcutLabel(k), toggle: togglePanel }),
+      settings: { run: () => { openSettings('general'); showPanel(SETTINGS_PANEL); }, shortcut: keyOf(SETTINGS_PANEL) },   // (on General)
       about: { run: () => openAbout() },
-      inspector: insp?.toggle && advanced.peek() && insp.available?.() ? { run: () => insp.toggle!(), on: !!insp.on?.peek(), shortcut: shortcutLabel('alt+shift+i') } : null,
       focusMode: root.has('focus-mode'),
       splitKey: wb.shortcut('splitRight') ?? '',
     }), onClosed: () => { anchor.setAttribute('aria-expanded', 'false'); } });
     if (menu.open) anchor.setAttribute('aria-expanded', 'true');
   }
-  /** the Settings panel opened on General (registered: docked on its side) and shown, focused */
-  const showSettings = () => { openSettings('general'); wb.showPanel(SETTINGS_PANEL, { focus: true }); };
-  /** the Settings panel shown in its column now (its column open, its tab the active one) */
-  const settingsShown = () => {
-    const l = wb.layout.peek(), d = M.dockOf(l, SETTINGS_PANEL);
-    return settingsOpen() && !!d && !M.sides(l)[d.side].collapsed && M.sideGroups(M.sides(l)[d.side]).some((g) => g.active === SETTINGS_PANEL);
+  /** an on-demand panel's key, as people read it (its view's keys), or none */
+  const keyOf = (id: string) => { const k = editorView(id)?.panel?.keys; return k ? shortcutLabel(k) : ''; };
+  /** an on-demand panel opened (docked on its side) and shown, focused */
+  const showPanel = (id: string) => { if (openPanel(id)) wb.showPanel(id, { focus: true }); };
+  /** an on-demand panel shown in its column now (open, its column open, its tab the active one) */
+  const panelShown = (id: string) => {
+    const l = wb.layout.peek(), d = M.dockOf(l, id);
+    return panelOpen(id) && !!d && !M.sides(l)[d.side].collapsed && M.sideGroups(M.sides(l)[d.side]).some((g) => g.active === id);
   };
+  /** shown: closed, as the close on its tab closes it; else opened and shown */
+  const togglePanel = (id: string) => { if (panelShown(id)) editorView(id)?.panel?.onClose?.(); else showPanel(id); };
   /** the page's commands: what a key row runs on the page, not on the current document */
-  const pageCommands: Record<string, () => void> = { 'app.settings': () => { if (settingsShown()) closeSettings(); else showSettings(); } };
-  function runCommand(command: string, _args: unknown): boolean {
+  const pageCommands: Record<string, (args: unknown) => void> = { 'app.panel': (id) => { if (typeof id === 'string') togglePanel(id); } };
+  function runCommand(command: string, args: unknown): boolean {
     const own = pageCommands[command];
-    if (own) { own(); return true; }
+    if (own) { own(args); return true; }
     const ed = T().currentEditor();
     if (!ed) return false;
     return ed.run(command, {}, 'key') !== false;
@@ -380,16 +385,15 @@ function registerHome(wb: WorkbenchStore, store: StoreLike, io: unknown, mountHo
 function registerPanels(wb: WorkbenchStore, root: ReturnType<typeof createEditorRoot>) {
   const mine = new Map<string, { def: ViewDef; off: () => void }>();
   const Frame = ({ children }: { children?: ComponentChildren }) => html`${children}`;
-  const ICONS: Record<string, IconName> = { outline: 'outline', problems: 'problems', todos: 'todos', references: 'book', files: 'files' };
   const slots = slotsOf(root);
   function add(v: ViewDef) {
     const off = wb.registerView({
-      id: v.id, title: () => (typeof v.title === 'function' ? v.title(null) : v.title ?? v.id), icon: ICONS[v.id] ?? (isIconName(v.icon) ? v.icon : 'list'),
+      id: v.id, title: () => (typeof v.title === 'function' ? v.title(null) : v.title ?? v.id), icon: isIconName(v.icon) ? v.icon : 'list',
       // a count on its tab (the Problems, the TODOs): the badge its content sets (app/panels.ts)
       ...(v.count ? { badge: () => { const b = slots.badge(v.id).value; return b?.n ? { n: b.n, ...(b.title ? { title: b.title } : {}), ...(b.tone === 'danger' ? { tone: 'danger' as const } : {}) } : null; } } : {}),
-      // its side, its column's default width (a share of the window: the workbench's sideWidth) and its close (a closable
-      // panel) as the view gives them
-      panel: { side: v.panel?.side ?? 'left', ...(v.panel?.width ? { width: v.panel.width } : {}), ...(v.panel?.onClose ? { onClose: v.panel.onClose } : {}), ...(v.id === 'files' ? { below: true } : {}) },
+      // its side, its place (below: a group of its own at the column's bottom), its column's default width (a share of the
+      // window: the workbench's sideWidth) and its close (a closable panel: an on-demand one's closes it) as the view gives them
+      panel: { side: v.panel?.side ?? 'left', ...(v.panel?.below ? { below: true } : {}), ...(v.panel?.width ? { width: v.panel.width } : {}), ...(v.panel?.onClose ? { onClose: v.panel.onClose } : {}) },
       Component: ({ ctx }: { tab: Tab; ctx: WbContext }) => {
         const ref = useRef<HTMLDivElement>(null);
         const ectx = useMemo(() => panelContext(root, v.id, { visible: ctx.visible, openAt: (doc, at) => openSectionTab(wb, doc, at) }), []);
@@ -408,8 +412,9 @@ function registerPanels(wb: WorkbenchStore, root: ReturnType<typeof createEditor
       },
     });
     mine.set(v.id, { def: v, off });
+    if (v.panel?.onDemand) wb.showPanel(v.id);     // (an on-demand panel is here because it was opened: it is shown)
   }
-  // the registry may change (the Files panel comes and goes with the advanced switch)
+  // the registry may change (an on-demand panel opened or closed; the Files panel offered with the advanced switch)
   const stop = effect(() => {
     const list = editorViews('sidebar');
     untracked(() => {
@@ -419,17 +424,16 @@ function registerPanels(wb: WorkbenchStore, root: ReturnType<typeof createEditor
       for (const id of [...M.sidePanels(M.sides(wb.layout.peek()).left), ...M.sidePanels(M.sides(wb.layout.peek()).right)]) if (!wb.viewType(id)) wb.removePanel(id);
     });
   });
-  // a request to show a panel (slots.show: the References pane from a citation or the Settings panel's Open References): the workbench
-  // shows it where it is docked; the request is consumed, so the same one later shows it again
+  // a request to show a panel (slots.show: the References pane from a citation or the Settings panel's Open References; an
+  // on-demand one is opened first): the workbench shows it where it is docked; the request is consumed, so the same one
+  // later shows it again
   const want = slots.active('sidebar');
-  const stopShow = effect(() => { const id = want.value; if (!id) return; untracked(() => { want.value = null; if (wb.viewType(id)) wb.showPanel(id); }); });
+  const stopShow = effect(() => { const id = want.value; if (!id) return; untracked(() => { want.value = null; openPanel(id); if (wb.viewType(id)) wb.showPanel(id); }); });
   return () => { stop(); stopShow(); for (const m of mine.values()) m.off(); mine.clear(); };
 }
 
 // ── the window bar: the main menu (the Re button) at its left, the View options' button at its right (a split is the
 //    tab's context menu, its key or the main menu's View › Split view: no button) ──
-/** the inspector (inspector/index.js), as the main menu toggles it */
-type InspectorToggle = { toggle?(): void; available?(): boolean; on?: { peek(): boolean } };
 function barSpec(onMenu: (anchor: HTMLElement, focus: boolean) => void) {
   return {
     label: 'ReflowEd',

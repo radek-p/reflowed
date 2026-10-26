@@ -3,7 +3,10 @@
 // one; download saves <title>.pdf, open opens a tab); Settings… and Ctrl/⌘ , open the panel (on the right, a third of the window
 // within its bounds) on General, the key again and the close on its tab close it; its sections in order, a hairline
 // between them; a setting changed there applies; an advanced setting (line ends) is drawn only with advanced features
-// on, its default in force while they are off; the View options keep only what a reader changes while reading ──
+// on, its default in force while they are off; View's generated rows: Left sidebar / Right sidebar (check rows with the
+// workbench's keys, the right one disabled while its column has no panel) toggle the columns and follow a toggle made
+// elsewhere (Ctrl/⌘B), View › Settings opens and closes the panel; on a phone the sidebar rows open the column over the
+// documents; the View options keep only what a reader changes while reading ──
 //   a section of tests/test-integrate.ts: node tests/test-integrate.ts [base] --only '^main-menu$'
 import type { Harness } from './harness.ts';
 import { fileName } from '../../app/src/io/download.ts';
@@ -44,10 +47,20 @@ export default async function (h: Harness): Promise<void> {
   await page.keyboard.press('ArrowRight');
   await page.waitForFunction(() => document.querySelectorAll('.main-menu[role="menu"]').length === 2);
   s = await menuState();
-  check('→ on View opens its submenu, its first row focused: View options…, Focus mode, Split view, Sidebar', s.subLabel === 'View' && s.focus === 'view-options'
-    && s.sub.join() === 'view-options,focus,split,sidebar', s);
-  const checks = await page.evaluate(() => [...document.querySelectorAll('.main-menu.menu-sub [role="menuitemcheckbox"]')].map((b: any) => `${b.dataset.action}:${b.getAttribute('aria-checked')}`));
-  check('the toggles are checkbox rows with their state (Focus mode off, Sidebar on)', checks.join() === 'focus:false,sidebar:true', checks);
+  check('→ on View opens its submenu, its first row focused: View options…, Focus mode, Split view, Left sidebar, Right sidebar, Settings (the panels offered)', s.subLabel === 'View' && s.focus === 'view-options'
+    && s.sub.join() === 'view-options,focus,split,side-left,side-right,panel-app-settings', s);
+  const checks = await page.evaluate(() => [...document.querySelectorAll('.main-menu.menu-sub [role="menuitemcheckbox"]')].map((b: any) => `${b.dataset.action}:${b.getAttribute('aria-checked')}${b.disabled ? ':disabled' : ''}`));
+  check('the toggles are checkbox rows with their state (Focus mode off, Left sidebar on, Right sidebar off and disabled: no panel in it, Settings off)',
+    checks.join() === 'focus:false,side-left:true,side-right:false:disabled,panel-app-settings:false', checks);
+  const sideKeys = await page.evaluate(() => ['side-left', 'side-right'].map((k) => document.querySelector(`.main-menu.menu-sub [data-action="${k}"] .mi-key`)?.textContent ?? ''));
+  check('the sidebar rows show the workbench\'s keys (Ctrl/⌘B, Ctrl/⌘⌥B)', /B$/.test(sideKeys[0]!) && /B$/.test(sideKeys[1]!) && sideKeys[0] !== sideKeys[1], sideKeys);
+  for (let k = 0; k < 4; k++) await page.keyboard.press('ArrowDown');
+  s = await menuState();
+  check('↓ walks the View rows, skipping the disabled Right sidebar: Settings after Left sidebar', s.focus === 'panel-app-settings', s);
+  await page.keyboard.press('ArrowUp');
+  s = await menuState();
+  check('… ↑ back on Left sidebar', s.focus === 'side-left', s);
+  await page.keyboard.press('Home');
   await page.keyboard.press('ArrowLeft');
   await page.waitForFunction(() => document.querySelectorAll('.main-menu[role="menu"]').length === 1);
   s = await menuState();
@@ -165,6 +178,52 @@ export default async function (h: Harness): Promise<void> {
   await page.waitForFunction(() => !document.querySelector('[data-panel-view="app-settings"]'));
   check('Ctrl/⌘ , again closes it', !(await panel()).open);
 
+  // ── View's generated rows: the sidebars and the panels offered ──
+  const viewRows = async () => {
+    await page.click('#btn-main-menu');
+    await page.click('.main-menu [data-action="view"]');
+    await page.waitForSelector('.main-menu.menu-sub[aria-label="View"]');
+    const r: Record<string, string> = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.main-menu.menu-sub [data-action]')].map((b: any) => [b.dataset.action, `${b.getAttribute('aria-checked')}${b.disabled ? ':disabled' : ''}`])));
+    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('.main-menu'));
+    return r;
+  };
+  const choose = async (row: string) => {
+    await page.click('#btn-main-menu');
+    await page.click('.main-menu [data-action="view"]');
+    await page.click(`.main-menu [data-action="${row}"]`);
+    await page.waitForFunction(() => !document.querySelector('.main-menu'));
+    await idle(page);
+  };
+  const cols = () => page.evaluate(() => { const S = (window as any).editorAPI.workbench().sides.peek(); return { left: !S.left.collapsed, right: !S.right.collapsed, rightAside: !!document.querySelector('aside[data-side="right"]') }; });
+  await choose('side-left');
+  let c = await cols(), r = await viewRows();
+  check('View › Left sidebar (checked) hides the left column; its row unchecked', !c.left && r['side-left'] === 'false', { c, r });
+  await choose('side-left');
+  c = await cols(); r = await viewRows();
+  check('… chosen again shows it; its row checked', c.left && r['side-left'] === 'true', { c, r });
+  await page.locator('[data-side="left"] .wb-ptab').first().focus();   // (outside a LaTeX field: Ctrl/⌘B is the sidebar's)
+  await page.keyboard.press('ControlOrMeta+b');
+  await page.waitForFunction(() => (window as any).editorAPI.workbench().sides.peek().left.collapsed);
+  r = await viewRows();
+  check('… its check follows a toggle made elsewhere (the workbench\'s Ctrl/⌘B)', r['side-left'] === 'false', r);
+  await choose('side-left');
+  await choose('panel-app-settings');
+  await page.waitForSelector('[data-panel-view="app-settings"] .rtx-settings');
+  c = await cols(); r = await viewRows();
+  check('View › Settings opens the Settings panel (on the right); its row checked; Right sidebar now enabled and checked', (await panel()).open && (await panel()).side === 'right' && c.right
+    && r['panel-app-settings'] === 'true' && r['side-right'] === 'true', { c, r });
+  await choose('side-right');
+  c = await cols(); r = await viewRows();
+  check('View › Right sidebar hides the right column (Settings still open in it, not in view: its row unchecked)', !c.right && r['side-right'] === 'false' && r['panel-app-settings'] === 'false', { c, r });
+  await choose('side-right');
+  c = await cols(); r = await viewRows();
+  check('… chosen again shows it, Settings in view again', c.right && r['side-right'] === 'true' && r['panel-app-settings'] === 'true', { c, r });
+  await choose('panel-app-settings');
+  await page.waitForFunction(() => !document.querySelector('[data-panel-view="app-settings"]'));
+  r = await viewRows();
+  check('View › Settings (checked) closes it; the right column has no panel: Right sidebar off and disabled', !(await panel()).open && r['panel-app-settings'] === 'false' && r['side-right'] === 'false:disabled', r);
+
   // ── the View options: a reader's options only ──
   await page.click('#btn-view');
   await page.waitForFunction(() => !document.getElementById('rtx-view-pop')!.hidden);
@@ -189,5 +248,14 @@ export default async function (h: Harness): Promise<void> {
   await p2.waitForSelector('[data-panel-view="app-settings"] .rtx-settings');
   const pw = await p2.evaluate(() => Math.round(document.querySelector('[data-panel-view="app-settings"]')!.closest('aside')!.getBoundingClientRect().width));
   check('a phone: the Settings panel is the window\'s whole width', pw === 390, pw);
+  await p2.click('[data-ptab="app-settings"] [data-action="close-panel"]');
+  await p2.waitForFunction(() => !document.querySelector('[data-panel-view="app-settings"]'));
+  await p2.click('#btn-main-menu');
+  await p2.click('.main-menu [data-action="view"]');
+  const leftRow = await p2.evaluate(() => document.querySelector('.main-menu.menu-sub [data-action="side-left"]')?.getAttribute('aria-checked'));
+  await p2.click('.main-menu [data-action="side-left"]');
+  await p2.waitForFunction(() => !(window as any).editorAPI.workbench().sides.peek().left.collapsed);
+  const ov = await p2.evaluate(() => { const a = document.querySelector('aside[data-side="left"]'); return { overlay: !!a?.classList.contains('wb-side--overlay'), w: a ? Math.round(a.getBoundingClientRect().width) : 0 }; });
+  check('a phone: Left sidebar unchecked (the columns closed there); chosen, the column opens over the documents', leftRow === 'false' && ov.overlay && ov.w > 0, { leftRow, ov });
   await c2.close();
 }

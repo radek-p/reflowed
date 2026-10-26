@@ -1,8 +1,9 @@
-// The Files panel: hidden by default; the "Show advanced features" switch (the Settings panel's Advanced section) shows its tab;
-// its list is the Export .zip's files (names and sizes, read from the downloaded zip) for the intro (its figures) and the tests' biblatex document (its .bbl); a click
+// The Files panel: hidden by default; the "Show advanced features" switch (the Settings panel's Advanced section) offers it
+// (the main menu's View › Files, unchecked: the panel not open); chosen there it opens (its tab, with a close, at the left
+// column's bottom; the row checked); its close closes it (the row unchecked), the row again opens it; its list is the Export .zip's files (names and sizes, read from the downloaded zip) for the intro (its figures) and the tests' biblatex document (its .bbl); a click
 // on a figure reveals its first use; the switch off takes the tab away again. The intro places its figures through a
 // macro (\shot): each is used where its block's compile opened it (the engine's record, doc/block-files.ts), and a
-// figure replaced in place typesets its block again. On the engine (the intro from the dev seed), the browser's own
+// figure replaced in place typesets its block again; the switch off takes its View row away too. On the engine (the intro from the dev seed), the browser's own
 // store (a reload keeps the document). Waits on DOM state and the app's idle.
 //
 //   node tests/test-files.ts [http://localhost:8158/]
@@ -76,17 +77,50 @@ const setAdvanced = async (on: boolean) => {
   await page.waitForFunction(() => !document.querySelector('[data-panel-view="app-settings"]'));
 };
 
+/** the main menu's View rows: [action, checked, disabled] (the menu closed again) */
+const viewRows = async () => {
+  await page.click('#btn-main-menu');
+  await page.click('.main-menu [data-action="view"]');
+  await page.waitForSelector('.main-menu.menu-sub[aria-label="View"]');
+  const r: [string, string | null, boolean][] = await page.$$eval('.main-menu.menu-sub [data-action]', (els: any[]) => els.map((e) => [e.dataset.action, e.getAttribute('aria-checked'), e.getAttribute('aria-disabled') === 'true' || e.disabled]));
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('.main-menu'));
+  return r;
+};
+const filesRow = async () => (await viewRows()).find((x) => x[0] === 'panel-files') ?? null;
+/** View › Files chosen (the menu by the pointer) */
+const chooseFiles = async () => {
+  await page.click('#btn-main-menu');
+  await page.click('.main-menu [data-action="view"]');
+  await page.click('.main-menu [data-action="panel-files"]');
+};
+
 // ── hidden by default ───────────────────────────────────────────────────────
 {
   const st = await page.evaluate(() => ({ adv: (window as any).editorAPI.advanced(), panel: !!document.getElementById('panel-files'), stored: localStorage.getItem('rtx-editor.advanced') }));
   check('hidden by default: no Files tab, no panel, advanced features off', !(await tab()) && !st.panel && st.adv === false && st.stored === null, st);
 }
-// ── the switch shows it ─────────────────────────────────────────────────────
+{
+  const row = await filesRow();
+  check('... and no View › Files row', row === null, row);
+}
+// ── the switch offers it; the View menu opens it ────────────────────────────
 await setAdvanced(true);
+{
+  const row = await filesRow();
+  check('"Show advanced features" on: the Files panel is not open (no tab), offered in the main menu\'s View (a check row, unchecked)',
+    !(await tab()) && !(await page.$('#panel-files')) && !!row && row[1] === 'false' && !row[2], row);
+}
+await chooseFiles();
 await page.waitForSelector('[data-side] [data-ptab="files"]');
 {
   const order = await page.$$eval('[data-side="left"] [role="tab"][data-ptab]', (b: any[]) => b.map((x) => x.dataset.ptab));
-  check('"Show advanced features" on: the Files tab, after the others', order[order.length - 1] === 'files' && (await (await tab())!.textContent())!.includes('Files'), order);
+  const where = await page.evaluate(() => { const S = (window as any).editorAPI.workbench().sides.peek().left; const panelsOf = (n: any): string[][] => (n.kind === 'split' ? n.children.flatMap(panelsOf) : [n.panels]);
+    return { groups: panelsOf(S.root), collapsed: S.collapsed, active: document.querySelector('[data-ptab="files"]')?.getAttribute('aria-selected'), close: document.querySelectorAll('[data-ptab="files"] [data-action="close-panel"]').length }; });
+  check('View › Files opens it: its tab, after the others, shown, in a group of its own at the left column\'s bottom, with a close on its tab',
+    order[order.length - 1] === 'files' && (await (await tab())!.textContent())!.includes('Files') && !where.collapsed && where.active === 'true' && where.groups.at(-1)?.join() === 'files' && where.close === 1, { order, where });
+  const row = await filesRow();
+  check('... its View row checked', row?.[1] === 'true', row);
   const fit = await page.$$eval('[data-side="left"] .wb-ptabs', (all: any[]) => all.map((e: any) => { const r = e.getBoundingClientRect(); return { sw: e.scrollWidth, cw: e.clientWidth, inside: [...e.children].every((b: any) => { const q = b.getBoundingClientRect(); return q.left >= r.left - 0.5 && q.right <= r.right + 0.5; }) }; })).then((a: any[]) => ({ sw: Math.max(...a.map((x) => x.sw - x.cw)), cw: 0, inside: a.every((x) => x.inside) }));
   check('every tab fits the sidebar (none clipped)', fit.sw <= fit.cw + 1 && fit.inside, fit);
 }
@@ -171,13 +205,28 @@ check('biblatex: its own files (not the intro\'s), its .bbl among them', example
   await page.screenshot({ path: join(OUT, 'files-light.png'), clip: { x: 0, y: 0, width: 360, height: 900 } });
 }
 
-// ── off again: the tab goes, the Outline is shown ──────────────────────────
+// ── its close closes it; the View row again opens it ────────────────────────
+await page.click('[data-ptab="files"] [data-action="close-panel"]');
+await page.waitForFunction(() => !document.querySelector('[data-side] [data-ptab="files"]'));
+{
+  const row = await filesRow();
+  check('the close on its tab closes it (no tab, no panel); its View row unchecked, still offered', !(await page.$('#panel-files')) && row?.[1] === 'false', row);
+}
+await chooseFiles();
+await page.waitForSelector('#panel-files');
+check('View › Files opens it again', !!(await tab()) && (await filesRow())?.[1] === 'true');
+// ── off again: the tab goes, the Outline is shown, the View row goes ────────
 await setAdvanced(false);
 await page.waitForFunction(() => !document.querySelector('[data-side] [data-ptab="files"]'));
 {
   const st = await page.evaluate(() => ({ panel: !!document.getElementById('panel-files'), shown: [...document.querySelectorAll('[data-side] [data-panel-view]')].filter((p: any) => !p.closest('.wb-panel--hidden')).map((p) => p.id) }));
   check('the switch off: no Files tab or panel; the Outline is shown', !st.panel && st.shown.join() === 'panel-outline', st);
+  const row = await filesRow();
+  check('... and no View › Files row', row === null, row);
 }
+await setAdvanced(true);
+check('the switch on again: Files offered, not open (closed with the switch)', !(await tab()) && (await filesRow())?.[1] === 'false');
+await setAdvanced(false);
 // ── a figure placed by a macro, replaced in place: its block typesets again, with the new file ──
 await page.evaluate(() => { location.hash = '#/doc/intro'; });
 await page.waitForFunction(() => (window as any).editorAPI.route().name === 'doc' && (window as any).editorAPI.currentDoc()?.title?.includes('Introduction'));

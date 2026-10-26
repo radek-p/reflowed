@@ -3,6 +3,9 @@
 //
 //   mainMenu(host) -> entries
 //     Documents · Find and replace · View › · Document › · Export › · Settings… · Keyboard shortcuts · About ReflowEd
+//     View ›: View options… · Focus mode · Split view | Left sidebar · Right sidebar | one row per panel offered
+//   panelToggles(offered, { shown, keys, toggle }) -> PanelToggle[]   the View menu's panel rows from the registry's
+//                                                   on-demand panels (design/ui/views.ts offered), in their order
 //   documentGroups(doc) -> { document, exports }    the Document and Export submenus' entries (Export › PDF: the row opens
 //                                                   it in a new tab; its actions open it so, or download it)
 //
@@ -24,17 +27,23 @@ export interface DocCommands {
 export interface MenuDoc { commands: DocCommands; preamble: string }
 /** a page action: what it does, its key (as people read it), on: a toggle's state */
 export interface PageAction { run(): void; shortcut?: string; on?: boolean }
+/** a side column, as the View menu shows and hides it: on, shown; empty, no panel in it (its row disabled) */
+export interface SideToggle extends PageAction { side: 'left' | 'right'; empty?: boolean }
+/** a panel the View menu opens and closes (an on-demand view): on, open and in view */
+export interface PanelToggle extends PageAction { id: string; title: string }
+/** an on-demand view, as its row needs it (design/ui/views.ts ViewDef) */
+export interface OfferedPanel { id: string; title?: string | ((state: unknown) => string); panel?: { keys?: string } | null }
 export interface MainMenuHost {
   /** null: no document is current (its entries disabled) */
   doc: MenuDoc | null;
   documents: PageAction;
   viewOptions: PageAction;
-  /** the left side column shown (on) */
-  sidebar: PageAction;
+  /** the side columns, left then right */
+  sides: readonly SideToggle[];
+  /** the panels offered on demand (Files, the Inspector, Settings: as the registry has them now) */
+  panels: readonly PanelToggle[];
   settings: PageAction;
   about: PageAction;
-  /** the inspector (the dev page, with advanced features on); none: no row */
-  inspector?: PageAction | null;
   /** the document's focus mode is on (its row's check) */
   focusMode?: boolean;
   /** the split's key on this page (the host's key table) */
@@ -59,7 +68,14 @@ function cmd(doc: MenuDoc | null, id: string, o: Opts = {}): MenuCommand {
   if (!d) throw new Error(`main menu: no command ${id}`);
   return { label: o.label ?? d.label, key: d.key ?? id, disabled: true, shortcut: d.shortcut ?? '', ...(d.icon ? { icon: d.icon } : {}), ...extra };
 }
-const page = (label: string, key: string, a: PageAction, icon?: IconName) => item(label, key, () => a.run(), { shortcut: a.shortcut ?? '', ...(icon ? { icon } : {}), ...(a.on != null ? { checked: a.on } : {}) });
+const page = (label: string, key: string, a: PageAction, icon?: IconName, disabled = false) => item(label, key, () => a.run(), { shortcut: a.shortcut ?? '', disabled, ...(icon ? { icon } : {}), ...(a.on != null ? { checked: a.on } : {}) });
+const SIDE_LABEL = { left: 'Left sidebar', right: 'Right sidebar' } as const;
+
+/** the View menu's panel rows: one per on-demand panel registered, its title, checked while it is shown, its key */
+export function panelToggles(offered: readonly OfferedPanel[], o: { shown(id: string): boolean; keys(spec: string): string; toggle(id: string): void }): PanelToggle[] {
+  return offered.map((v) => ({ id: v.id, title: typeof v.title === 'function' ? v.title(null) : v.title ?? v.id, on: o.shown(v.id),
+    shortcut: v.panel?.keys ? o.keys(v.panel.keys) : '', run: () => o.toggle(v.id) }));
+}
 
 /** the Document and Export submenus: Reset only for a document that has an original, the plain-title archive only with
  *  the title package */
@@ -86,8 +102,9 @@ export function mainMenu(h: MainMenuHost): MenuEntry[] {
     page('View options…', 'view-options', h.viewOptions),
     cmd(h.doc, 'view.focusMode', { checked: !!h.focusMode }),
     cmd(h.doc, 'view.split', { ...(h.splitKey ? { shortcut: h.splitKey } : {}) }),
-    page('Sidebar', 'sidebar', h.sidebar),
-    ...(h.inspector ? [page('Inspector', 'inspector', h.inspector)] : []),
+    SEP,
+    ...h.sides.map((s) => page(SIDE_LABEL[s.side], `side-${s.side}`, { ...s, on: !s.empty && !!s.on }, undefined, !!s.empty)),
+    ...(h.panels.length ? [SEP, ...h.panels.map((p) => page(p.title, `panel-${p.id}`, { ...p, on: !!p.on }))] : []),
   ];
   return [
     page('Documents', 'documents', h.documents, 'home'),

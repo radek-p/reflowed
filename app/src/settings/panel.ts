@@ -1,7 +1,7 @@
 // THE SETTINGS PANEL: the preferences of this browser and the current document's own settings in one side panel, a
-// view (design/ui/views.ts) registered while it is open (openSettings: the main menu's Settings… and Ctrl/⌘ , open it
-// on General, app/wb/host.ts; a document's entry points on the document tab: doc.settings, app/app.js) and closable
-// (panel.onClose: the close on its tab, Close in its menu: closeSettings), on the right, its column a third of the
+// view (design/ui/views.ts) offered on demand (panel.onDemand: open only when asked for: the main menu's Settings…,
+// its View › Settings row and Ctrl/⌘ , in app/wb/host.ts, on General; a document's entry points on the document tab:
+// doc.settings, app/app.js; closed by the close on its tab or Close in its menu), on the right, its column a third of the
 // window wide by default (between 380 and 560 px; a phone's whole width). Its content is apart from its container as
 // the other panels' is (the workbench's right column; an embedded editor's sidebar: a tab of it).
 // Two tabs at its top (the kit's Tabs: tablist, tab, tabpanel; ← → Home End):
@@ -14,15 +14,15 @@
 //   the document   named after the current document (the focused pane's: ctx.current, as the other panels follow it;
 //                  its full title in the tab's tooltip, "Document" while none is open): its preamble and its
 //                  bibliography (settings/document.ts), the preamble's problems counted on the tab
-// The tab shown is the panel's (one for the page): Settings… shows General, a document's entry point the document tab
+// The tab shown is the panel's (one for the page): General each time it opens, a document's entry point the document tab
 // (and the preamble, its line selected: the request is taken once, by the container that asked).
 // Each General section's rows are registrations (settings/registry.ts: a module adds a row with registerSetting, the
 // panel is not edited); a section with no row drawn is left out. A row's context is a SettingsCtx (the page's
 // preferences, `detail`). The panel follows the preferences' signals (the view's `changed`, the advanced switch); the
 // notes' two switches keep their own state (only they change those settings).
 //
-//   SETTINGS_PANEL                       its view id
-//   openSettings(tab?, landing?) · closeSettings() · settingsOpen()
+//   SETTINGS_PANEL                       its view id (design/ui/views.ts openPanel, closePanel, panelOpen)
+//   openSettings(tab?, landing?)         opened on a tab
 //     tab      'general' | 'document' (default: the one it shows); its container shows it (the workbench's showPanel,
 //              an embedded editor's sidebar: the editor's shell.showPanel, app/mount.ts)
 //     landing  { owner, line }: the document tab's preamble focused, line selected, by the panel in container owner
@@ -32,7 +32,7 @@ import { signal, type ReadonlySignal } from '@preact/signals';
 import { useState } from 'preact/hooks';
 import { html } from '../design/ui/core.js';
 import { Tabs } from '../design/ui/index.js';
-import { registerView, type SlotOwner, type ViewContext, type ViewDef } from '../design/ui/views.ts';
+import { registerView, openPanel, type SlotOwner, type ViewContext, type ViewDef } from '../design/ui/views.ts';
 import { registerSetting, visibleAt, type Where } from './registry.ts';
 import { advanced, setAdvanced, advancedFeatures } from './advanced.js';
 import { SwitchRow } from './rows.ts';
@@ -133,19 +133,18 @@ function SettingsPanel({ ctx }: { ctx: ViewContext<PanelHost> }) {
 }
 
 const VIEW = { id: SETTINGS_PANEL, title: 'Settings', icon: 'settings', tip: 'Settings: general, and the document’s own', Component: SettingsPanel,
-  panel: { side: 'right', order: 90, width: { share: 1 / 3, min: 380, max: 560 }, onClose: () => closeSettings() } } satisfies ViewDef;
-let off: (() => void) | null = null;
-/** the panel registered (its containers dock it: the workbench's right column), on `tab` (by default the one it
+  // (closed, it opens on General next time)
+  panel: { side: 'right', order: 90, width: { share: 1 / 3, min: 380, max: 560 }, onDemand: true, keys: 'mod+,',
+    onClose: () => { if (place.peek().tab !== 'general') place.value = { tab: 'general', n: place.peek().n }; } } } satisfies ViewDef;
+registerView(VIEW);
+/** the panel opened (its containers dock it: the workbench's right column), on `tab` (by default the one it
  *  shows); landing: on the document tab, the preamble focused (its line selected) by the panel in container `owner`.
  *  Its container shows it (the workbench's showPanel; an embedded editor's shell.showPanel: app/mount.ts) */
 export function openSettings(tab?: SettingsTab, landing?: { owner: SlotOwner; line: number | null }): void {
-  off ??= registerView(VIEW);
+  openPanel(SETTINGS_PANEL);
   if (landing) request = { owner: landing.owner, at: { line: landing.line } };
   if (tab && (tab !== place.peek().tab || landing)) place.value = { tab, n: place.peek().n + 1 };
 }
-/** the panel gone (unregistered: out of its column) */
-export function closeSettings(): void { const o = off; off = null; o?.(); }
-export const settingsOpen = (): boolean => !!off;
 
 // the panel's CSS (tokens only; a <style> of its own: the builds need no CSS loader). One rhythm for both tabs: a section
 // is a heading (more space above it than below) and its rows, a hairline between sections; a row is its label, its

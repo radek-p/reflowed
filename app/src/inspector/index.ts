@@ -1,14 +1,14 @@
 // INSPECTOR: the public Reflow TeX inspector (reflowtex src/inspector: boxes and glue, resources, colours) inside
 // ReflowEd, on ONE pane, as a SIDE PANEL. Behind "Show advanced features" (settings/advanced.js); the dev page only (the
 // single file has no files beside it for the panel to load): app/services.ts imports this module outside a release
-// only, so a release has none of what it installs at import (its key listener, its style element; its view
-// is registered only while it is shown).
+// only, so a release has none of what it installs at import (its key listener, its style element, its view).
 // The shortcut ⌥⇧I / Alt+Shift+I toggles it with the advanced switch on; otherwise the key goes on (inspector/shortcut.ts).
 //
-// The panel is a registered side-panel view (design/ui/views.ts, panel: right, a third of the window wide, closable),
-// registered while it is open and unregistered when it closes (as the Files panel comes and goes): its container draws
-// its tab and its content (the workbench's side column: app/src/wb/host.ts; the user moves and resizes it there, and
-// the workbench keeps the place and the width). Its content: a bar (which pane: Focused, or one picked by its place) and
+// The panel is a registered side-panel view (design/ui/views.ts, panel: right, a third of the window wide), offered on
+// demand while the advanced switch is on (panel.onDemand: open only when asked for: ⌥⇧I, the main menu's View ›
+// Inspector, a block's Inspect; closed by the close on its tab): its container draws its tab and its content (the
+// workbench's side column: app/src/wb/host.ts; the user moves and resizes it there, and the workbench keeps the place
+// and the width). Its content: a bar (which pane: Focused, or one picked by its place) and
 // an element the public panel is hosted in.
 //
 // The public panel is used as it is, through its host API (window.reflowtex.inspector: dock(el) puts the panel inside an
@@ -26,7 +26,7 @@
 //                                   agent on window.reflowtex.inspect): it inspects one editor at a time, the one
 //                                   attached last (the editor the reader works in: main.js, the mount)
 //   inspector.available()           the files are beside the page (not in a release)
-//   inspector.on                    computed: shown (its view registered and shown in its container)
+//   inspector.on                    computed: shown (its view open and shown in its container)
 //   inspector.target                computed: the pane inspected: the one picked in its bar, else the focused one
 //   inspector.pinned                signal: the pane picked in its bar (null: follow the focused pane)
 //   inspector.open({ block?, pane? }) · inspector.close() · inspector.toggle() · inspector.pick(paneId | null)
@@ -38,7 +38,7 @@
 import { signal, computed, effect, untracked, type ReadonlySignal } from '@preact/signals';
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import { html, Segmented, Frame } from '../design/ui/index.js';
-import { registerView, slotsOf, type ViewContext } from '../design/ui/views.ts';
+import { registerView, slotsOf, openPanel, closePanel, panelOpen, type ViewContext } from '../design/ui/views.ts';
 import { advanced, registerAdvanced } from '../settings/advanced.js';
 import { isRelease } from '../app/release-mode.js';
 import { editorRoots, type EditorRoot } from '../app/editor-root.ts';
@@ -76,7 +76,7 @@ export function blockElIn(pane: string | null, id: string | null): Element | nul
 
 function createInspector() {
   let layout: LayoutLike | null = null;
-  const docked = signal(false);                          // its view registered (its container has it)
+  const docked = computed(() => panelOpen(VIEW_ID));     // its view open (its container has it)
   const at = signal<HTMLElement | null>(null);           // the element of the container showing it now (none: hidden)
   const on = computed(() => docked.value && !!at.value);
   const pinned = signal<string | null>(null);
@@ -86,7 +86,7 @@ function createInspector() {
   /** the pane the panel lists (null: none: it is hidden) */
   const live = () => (on.peek() ? target.peek() : null);
   let api: PanelApi | null = null, loading: Promise<PanelApi> | null = null, ready: Promise<unknown> = Promise.resolve();
-  let shownOn: string | null = null, hostEl: HTMLElement | null = null, stopEffects: (() => void) | null = null, unregister: (() => void) | null = null;
+  let shownOn: string | null = null, hostEl: HTMLElement | null = null, stopEffects: (() => void) | null = null;
 
   // ── loading: the panel's script, and the agent installed on the shown pane's blocks ──
   function loadScript(src: string) {
@@ -122,19 +122,11 @@ function createInspector() {
     })().catch((e: unknown) => { loading = null; throw e; });
   }
 
-  // ── its view: registered while it is open ──
-  function dock() {
-    if (unregister) return;
-    unregister = registerView({ id: VIEW_ID, title: 'Inspector', label: 'Inspector', icon: 'inspect',
-      tip: 'The boxes and glue behind the blocks of one pane (the Reflow TeX inspector; ⌥⇧I)',
-      panel: { side: 'right', order: 60, width: WIDTH, onClose: () => { void queue(hide); } }, Component: InspectorView });
-    docked.value = true;
-  }
+  // ── its view closed (it is offered below, opened in show) ──
   function undock() {
-    if (!unregister) return;
+    if (!docked.peek()) return;
     for (const r of editorRoots()) { const a = slotsOf(r).active('sidebar'); if (a.peek() === VIEW_ID) a.value = 'outline'; }
-    unregister(); unregister = null;
-    docked.value = false;
+    closePanel(VIEW_ID);
   }
   /** the container's element showing it (its content's), or none */
   function shownIn(el: HTMLElement, shown: boolean) {
@@ -173,7 +165,7 @@ function createInspector() {
     if (!available() || !advanced.peek() || !scope) return false;
     if (pane && pane !== target.peek()) pinned.value = pane;
     await load();                             // (its script before the view: its key listener after ours)
-    dock();
+    openPanel(VIEW_ID);
     slotsOf(scope).show(VIEW_ID);             // its container shows it (the workbench: its column opened, its tab active)
     if (!(await until(() => on.value))) return false;
     await sync();
@@ -214,6 +206,17 @@ function createInspector() {
     void queue(hide);
   }
   const available = () => !isRelease();
+  // ── its view: offered while it can show (the advanced switch on, its files beside the page), open while it is ──
+  let unregister: (() => void) | null = null;
+  effect(() => {
+    const can = advanced.value && available();
+    untracked(() => {
+      if (can) unregister ??= registerView({ id: VIEW_ID, title: 'Inspector', label: 'Inspector', icon: 'inspect',
+        tip: 'The boxes and glue behind the blocks of one pane (the Reflow TeX inspector; ⌥⇧I)',
+        panel: { side: 'right', order: 60, width: WIDTH, onDemand: true, keys: 'alt+shift+i', onClose: () => { void queue(hide); } }, Component: InspectorView });
+      else { unregister?.(); unregister = null; }
+    });
+  });
 
   return {
     on, pinned, target, attach, available, shownIn,
