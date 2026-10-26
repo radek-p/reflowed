@@ -351,6 +351,11 @@ await step('displays: tags flush right', async () => {
     timings[`tagsFlush${w}`] = `${e.length - bad.length}/${e.length} (worst ${worst.toFixed(1)} px, column ${e[0]?.colW ?? '?'} px)`;
     check(`window ${w} px: every equation number flush right (±1 px)`, e.length >= 1 && bad.length === 0,
       `${e.length - bad.length}/${e.length} flush; column ${e[0]?.colW} px; worst ${worst.toFixed(1)} px; hanging past the box ${e.map((x: any) => x.hang).join(', ')} px; overflowing displays ${e.filter((x: any) => x.overflow).length}; e.g. ${bad.slice(0, 4).map((x: any) => `${x.delta}`).join(', ')}`);
+    // a ")" that hangs past the number's box is not overflow: TeX lets it hang, and the viewer mounts such a
+    // display bare (no scroll box, no right fade dimming the ")"); only boxes running past the column scroll
+    const scrolled = e.filter((x: any) => x.overflow).length;
+    check(`window ${w} px: no numbered display gets a scroll box (a hanging ")" is not overflow)`, e.length >= 1 && scrolled === 0,
+      `overflowing displays ${scrolled} of ${e.length}`);
     if (w === 600 && bad[0]) { await reveal(bad[0].id); await shot(page, '04c-tag-600'); }
     if (w === 1280 && bad[0]) { await reveal(bad[0].id); await shot(page, '04b-tag-1280'); }
   }

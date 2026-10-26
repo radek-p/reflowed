@@ -142,10 +142,15 @@ function testBlock(name: string, b: Case & { hangs?: boolean }) {
     const hangs = ds.map((d) => ink(d).hang / PT);
     check(`${name}: ${b.hangs ? 'every number\'s ")" hangs past its box (microtype\'s protrusion, captured)' : 'nothing hangs (no number)'}`,
       hangs.every((h) => (b.hangs ? h > 0.5 : h === 0)), `hang ${hangs.map((h) => h.toFixed(3)).join(', ')} pt`);
-    // the viewer's surface for it at the compile width: past the column by the hang (its scroll-box rule
-    // compares the surface with the column plus a 2 px tolerance)
+    // the viewer at the compile width: its surface (W) covers the ink, so it reaches past the column by the
+    // hang; whether the display overflows (gets a scroll box) is decided by where its boxes end (fitW), which
+    // a hanging ")" does not move: 0 px past the column
     const g = layoutDisplaySegment(c.output.fonts ?? {}, { kind: 'display', isAlign: b.route === 2, rows: ds.map((item) => ({ item })) }, W0(ds) / PT, { sourceWidthSp: W0(ds), minSpacePt: 10 });
-    console.log(`info ${name}: the viewer's surface is ${(g.W - (W0(ds) / PT) * 2).toFixed(2)} px wider than the column`);
+    const columnPx = (W0(ds) / PT) * 2;              // the viewer's ZOOM: 1 pt = 2 px
+    const past = (g.fitW ?? g.W) - Math.ceil(columnPx);
+    console.log(`info ${name}: the viewer's surface is ${(g.W - columnPx).toFixed(2)} px wider than the column`);
+    check(`${name}: the viewer's boxes end at the column (no scroll box): ${past.toFixed(2)} px past it`, past === 0,
+      `fitW ${g.fitW} px, surface ${g.W} px, column ${columnPx.toFixed(2)} px`);
   }
   if (modelled.length !== ds.length) return;
   const W = ds[0].display_width;
