@@ -194,8 +194,8 @@ button { font: inherit; color: inherit; }
 .gutter .g-handle { cursor: grab; touch-action: none; }
 .gutter .g-handle svg { fill: currentColor; }
 .gutter button:hover { background: color-mix(in srgb, currentColor 8%, transparent); color: #6f6e69; }
-.blk.dragging { opacity: 0.35; }
-#drop-line { position: absolute; display: none; height: 3px; border-radius: 2px; background: rgba(35, 131, 226, 0.55); pointer-events: none; z-index: 30; }
+.blk.dragging { opacity: 0.35; }   /* a block being dragged: in its place, in every pane (docview/drag.ts; its preview follows the pointer) */
+#drop-line { position: fixed; left: 0; top: 0; visibility: hidden; height: 3px; border-radius: 2px; background: rgba(35, 131, 226, 0.55); pointer-events: none; z-index: var(--ui-z-drag); will-change: transform; }   /* placed by transform (docview/drag.ts) */
 
 /* editing: the source, in a quiet box */
 .blk.editing .blk-main { background: var(--editor-bg); border-radius: 5px; margin: 0 -10px; padding: 4px 10px; }

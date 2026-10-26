@@ -35,10 +35,6 @@ const CSS = `
 /* folded: the first paragraph shows its first line */
 .blk.nest-folded > .blk-main > .blk-render { max-height: var(--nest-line, 1.6em); overflow: hidden; }
 .blk.nest-hidden { display: none; }
-/* a dragged block: lifted (full strength, a soft shadow), above the others */
-.blk.dragging.lifted { opacity: 1; z-index: 25; background: var(--bg, #fff); border-radius: 6px;
-  box-shadow: 0 1px 2px rgba(15, 15, 15, 0.06), 0 6px 18px rgba(15, 15, 15, 0.12); cursor: grabbing; }
-.blk.dragging.lifted > .gutter { opacity: 0 !important; }
 .blk.nest-head.dragging .nest-bracket, .blk.nest-head.dragging .nest-toggle { visibility: hidden; }
 #drop-line.nest-inside { border-radius: 2px; }
 .rtx-editor[data-dragging] .nest-toggle { visibility: hidden; }

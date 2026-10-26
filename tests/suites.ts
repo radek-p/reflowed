@@ -52,6 +52,7 @@ export const SUITES: Suite[] = [
   S('site-intro', 'unit', 1, () => node('website/tools/prepare-intro.test.ts'), FAST),   // the website's copy of the intro (website/tools/prepare-intro.ts)
   S('w15-units', 'unit', 5, () => node('tests/test-w15-units.ts'), FAST),
   S('in-view', 'unit', 1, () => node('app/src/docview/in-view.test.ts'), FAST),   // the section in view: the crumbs' and the Outline's one rule (docview/in-view.ts)
+  S('drag-rules', 'unit', 1, () => node('app/src/docview/drag-rules.test.ts'), FAST),   // a block drag's rules: the drop pane, the autoscroll's speed and dwell, the places offered, a cancel's landing (docview/drag-rules.ts)
   S('end-meta', 'unit', 1, () => node('app/src/docview/end-meta.test.ts'), FAST),   // the end space's foot as text: title, words, blocks, the day of the last edit (docview/end-meta.ts)
   S('arch-units', 'unit', 2, () => node('tests/test-arch-units.ts'), FAST),   // the refactor's ratchets
   S('doc-units', 'unit', 2, () => node('tests/test-doc-units.ts'), FAST),     // (6–8) app/src/doc/ on a Memory store
@@ -104,6 +105,7 @@ export const SUITES: Suite[] = [
   S('offered-kinds', 'dev', 5, (c) => node('tests/test-offered-kinds.ts', `${c.dev}/`)),   // the slash menu and the kind switcher list only the kinds the preamble and class define
   S('e2e-dev', 'dev', 30, (c) => node('tests/test-e2e.ts', 'dev', `${c.dev}/`, '--no-shots'), { cold: true, note: 'acceptance from a first open: every block compiles' }),
   S('panes', 'dev', 20, (c) => node('tests/test-panes.ts', `${c.dev}/`), { alone: true, note: 'the leak check reads the heap' }),   // the two panes are equal
+  S('block-drag', 'dev', 25, (c) => node('tests/test-block-drag.ts', `${c.dev}/`), { alone: true, note: 'long tasks and layouts per move; autoscroll by frames' }),   // a block dragged by its handle: in a pane, between panes, no-drop places, Esc, undo; Chromium, WebKit, Firefox
   S('public-bundles', 'unit', 1, () => node('tests/test-public-bundles.ts')),   // the public checkout (REFLOWTEX, else a sibling checkout); its bundles built on demand (a fresh clone builds the app)
   S('integrate', 'dev', 10, (c) => node('tests/test-integrate.ts', `${c.dev}/`)),   // the editor on the workbench: tabs, splits, two documents, panels, home, status, keys, reload
   S('two-editors', 'dev', 10, (c) => node('tests/test-two-editors.ts', `${c.dev}/`), { alone: true, note: 'the leak check reads listener and node counts' }),   // two editors in two divs, apart; one unmounted leaves nothing
@@ -183,11 +185,11 @@ export const seeded = (s: Suite) => s.group === 'dev' && !s.cold && s.name !== '
 /** Seconds per suite in the last full runs (both logs): estimates until test-all has history of its own.
  *  The suites added since (chrome, files, inspector, widths, select) are guessed. */
 export const EST_SECONDS: Record<string, number> = {
-  typecheck: 1, select: 1, browsers: 1, 'static-server': 1, 'engine-stamp': 1, 'engine-build-id': 1, 'seed-title-form': 1, 'intro-versions': 1, 'site-intro': 1, 'w15-units': 1, 'in-view': 1, 'end-meta': 1, 'arch-units': 1, 'doc-units': 1, 'commands-units': 1, kit: 3,
+  typecheck: 1, select: 1, browsers: 1, 'static-server': 1, 'engine-stamp': 1, 'engine-build-id': 1, 'seed-title-form': 1, 'intro-versions': 1, 'site-intro': 1, 'w15-units': 1, 'in-view': 1, 'drag-rules': 1, 'end-meta': 1, 'arch-units': 1, 'doc-units': 1, 'commands-units': 1, kit: 3,
   'pdf-svg': 1, 'file-deps': 1, 'loading-units': 1, resources: 40, 'resources-setting': 25, 'resources-origin': 90, 'workbench-units': 2, workbench: 120, keys: 1, 'motion-units': 1, 'view-units': 1, minify: 1, tex: 1, 'tex-lex': 1, 'tex-calls': 1,
   provenance: 1, brand: 1, 'w4-units': 1, 'cite-units': 1, 'cite-engine': 38, 'bundle-cache': 3, 'engine-node': 90,
   'app-bundle': 1, 'dev-seed': 12, 'webkit-open': 11, 'fmt-early': 60, 'fewer-requests': 30, 'fewer-requests-release': 40, 'fmt-early-release': 180, 'fixture-cache': 20, recovery: 18, 'fonts-dump': 2, 'editor-frame': 3, 'refnav-host': 6, 'page-fonts': 25, 'live-preview': 30, 'colour-maps': 15, home: 2, 'offered-kinds': 15, 'reset-dev': 1, 'home-samples-dev': 29, w10: 37, w3: 27, 'e2e-dev': 140,
-  panes: 82, 'two-editors': 60, follow: 40, 'popover-keys': 40, 'kept-docs': 1, motion: 142, widths: 240, notes: 19, settings: 18, view: 7, files: 10, chrome: 60,
+  panes: 82, 'block-drag': 240, 'two-editors': 60, follow: 40, 'popover-keys': 40, 'kept-docs': 1, motion: 142, widths: 240, notes: 19, settings: 18, view: 7, files: 10, chrome: 60,
   sidebar: 11, inspector: 10, 'refs-panel': 30, 'selection-dev': 21, 'cref-dev': 3, 'popover-hold': 45, 'ios-zoom': 30, 'mobile-fit': 60, 'far-dev': 100, 'cite-card-dev': 226,
   'cite-dev': 76, sheets: 4, 'caret-bounds': 1289, boot: 54,
   'doc-header': 3, 'meta-dev': 125, 'readonly-dev': 2, 'older-core-dev': 4, 'replay-dev': 12, 'quota-dev': 1, 'caret-math-dev': 7,
@@ -238,7 +240,8 @@ export const RULES: Rule[] = [
   { why: 'TeX scanning', paths: ['app/src/tex/**'], suites: ['tex', 'tex-lex', 'tex-calls', 'keys', 'engine-node', 'caret-math-dev'] },
   { why: 'references, bibliography', paths: ['app/src/refs/**', 'app/src/bib/**', 'app/src/bibpane/**'], suites: ['refs-panel', 'w4-units', 'cite-units', 'cite-engine', 'cref-dev', 'cite-dev', 'cite-card-dev', 'panes'] },
   { why: 'reference navigation', paths: ['app/src/refnav/**'], suites: ['w10', 'cite-card-dev', 'refnav-hit', 'refnav-host'] },
-  { why: 'nesting', paths: ['app/src/nesting/**'], suites: ['nested-seed', 'panes'] },
+  { why: 'nesting', paths: ['app/src/nesting/**'], suites: ['nested-seed', 'panes', 'block-drag'] },
+  { why: 'dragging a block', paths: ['app/src/docview/drag*.ts', 'app/src/nesting/drag-motion.ts'], suites: ['drag-rules', 'block-drag', 'panes', 'typecheck'] },
   { why: 'the title form', paths: ['app/src/meta/**'], suites: ['seed-title-form', 'meta-dev'] },
   { why: 'notes, view', paths: ['app/src/notes/**', 'app/src/view/**'], suites: ['notes', 'view-units', 'view', 'ios-zoom', 'zoom-caret'] },
   { why: 'figures', paths: ['app/src/svgfig/**', 'app/src/figures/**'], suites: ['pdf-svg'] },

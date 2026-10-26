@@ -13,10 +13,23 @@
 // so tests settle after them.
 //
 // prefers-reduced-motion: reduce -> the change only (after() still runs).
+//
+// staticCopy(el): that copy of one element (also a dragged block's preview, docview/drag-preview.ts).
 import { reduced } from '../motion/reduced.ts';
 
 export const DURATION = 180;
 const EASING = 'cubic-bezier(0.2, 0, 0, 1)';
+
+/** A static copy of a render (cloned DOM): what it shows, without the viewer's data, ids or an incoming render. The
+ *  morph's ghost and a dragged block's preview (docview/drag-preview.ts). */
+export function staticCopy(el) {
+  const copy = el.cloneNode(true);
+  copy.querySelectorAll('.incoming').forEach((e) => e.remove());
+  copy.querySelectorAll('[data-nodelist-b64]').forEach((e) => e.removeAttribute('data-nodelist-b64'));
+  copy.querySelectorAll('[id]').forEach((e) => e.removeAttribute('id'));
+  copy.removeAttribute('id');
+  return copy;
+}
 
 export function morph(box, change, { after = null, fade = true } = {}) {
   box._morph?.finish();
@@ -32,11 +45,7 @@ export function morph(box, change, { after = null, fade = true } = {}) {
     ghost.className = 'morph-ghost';
     ghost.setAttribute('aria-hidden', 'true');
     shown.forEach((c, i) => {
-      const copy = c.cloneNode(true);
-      copy.querySelectorAll('.incoming').forEach((e) => e.remove());
-      copy.querySelectorAll('[data-nodelist-b64]').forEach((e) => e.removeAttribute('data-nodelist-b64'));
-      copy.querySelectorAll('[id]').forEach((e) => e.removeAttribute('id'));
-      copy.removeAttribute('id');
+      const copy = staticCopy(c);
       copy.style.cssText += `;position:absolute;margin:0;left:${boxes[i].left - old.left}px;top:${boxes[i].top - old.top}px;width:${boxes[i].width}px;`;
       ghost.append(copy);
     });

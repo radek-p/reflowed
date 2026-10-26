@@ -31,7 +31,7 @@ import { createFind } from './find.js';
 import { errorReport } from '../view/copy-errors.js';                         // copyable errors
 import { createEditing, createUndo, renderClick, renderDblclick } from '../edit/index.js';   // editing: a session per pane, two at once; a render's click rule
 import { renderErrors } from '../edit/panel.js';                               // error rows (Preact)
-import { createBlockDrag } from '../docview/drag.js';                          // drag a block, in and between panes
+import { createBlockDrag } from '../docview/drag.ts';                          // drag a block, in and between panes
 import { createPanes, createPaneStates, closeSplitKeeping } from '../panes/index.ts';                               // the panes: equal views of the document
 import { createLayout } from '../panes/layout.js';                             // the layout as data
 import { createBlocks } from '../panes/blocks.js';                             // what each block shows, in every pane
@@ -235,7 +235,7 @@ export function createDocEditor(ctx) {
     },
     focusIcon: (e, v) => { e.stopPropagation(); focusIn(v.pane, v.id); },
     action: (v) => ui.get(v.id)?.action.peek()?.run(v),            // the block's action button (a feature's)
-    attachHandle: (handle, v) => drag.attach(handle, v.id),                         // docview/drag.js
+    attachHandle: (handle, v) => drag.attach(handle, v.id),                         // docview/drag.ts
   };
   const blocks = createBlocks({
     blocks: () => S.doc?.blocks ?? [], state: root.state, ui, get panes() { return panes; }, get edits() { return edits; }, nest, viewState: (p, id, el) => paneStates.applyTo(p, id, el), view: () => ctx.view, perf, counters, cache,
@@ -438,14 +438,14 @@ export function createDocEditor(ctx) {
   const editorKey = createEditorKeys({ command: (...a) => command(...a), doc: () => S.doc, indexOf, blockById, enterEdit: (...a) => enterEdit(...a),
     openSlashMenu: (...a) => openSlashMenu(...a), focusEditor: (pane) => edits.session(pane).editor?.view.focus() });
 
-  // ── Drag to reorder (the handle), or click it for the block's menu (docview/drag.js, in and between panes) ──
+  // ── Drag to reorder (the handle), or click it for the block's menu (docview/drag.ts, in and between panes) ──
   const drag = createBlockDrag({
     root, nest, leaveAll: () => edits.leaveAll(), openMenu: (handle, id) => openBlockMenu(handle, id),
     panes: () => panes.list().map((p) => p.id),
     paneOf: (el) => panes.paneOf(el),
     box: (p) => panes.get(p)?.view.container ?? null,
     scroller: (p) => panes.get(p)?.scroller ?? null,
-    elementIn: (p, id) => panes.viewOf(p, id)?.root ?? null,
+    elementIn: (p, id) => panes.viewOf(p, id)?.root ?? null, hold: (p, dy) => panes.get(p)?.scrollBy(dy, { hold: true }),
   });
 
   // ── Menus (app/doc-menus.ts): the block's, the document's, the slash menu; features add their entries here ──

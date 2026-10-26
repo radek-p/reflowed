@@ -66,6 +66,7 @@ export default `
   /* ── stacking: the one overlay layer (ui/layers.js) adds a layer's place in its tier; the page's own chrome
      (top bar 20, sidebar 30, drop lines 40) stays below every tier; native modal dialogs are in the top layer ── */
   --ui-z-pill: 45;      /* the Back pill */
+  --ui-z-drag: 48;      /* a dragged block's preview and its drop line (docview/drag.ts): above the workbench, below menus */
   --ui-z-float: 50;     /* menus, popovers, the reference card */
   --ui-z-toast: 80;     /* toasts */
   --ui-z-tip: 90;       /* tooltips */

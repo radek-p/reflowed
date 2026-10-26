@@ -8,7 +8,7 @@
 // createNesting(host) -> {
 //   order(blocks), isContainer(b), compileSource(b), contextView(blocks), extraContext(b), treeSig(), pass(fn),
 //   display(b, u), decorate(), refreshHeads(), split(id, offset, o), merge(id, o), remove(id), duplicate(id),
-//   moveBy(id, dir), moveTo(id, index, parentId), dragTargets(id), drop(id, target), menuItems(id, menuItem),
+//   moveBy(id, dir), moveTo(id, index, parentId), dragTargets(id), moves(id, target), drop(id, target), menuItems(id, menuItem),
 //   visibleStep(i, dir), reveal(id), flatten(blocks), spacingPrev(k), nestBlock(id), join(id), collapse(id, on), state()
 // }
 // host: the app's internals it needs (app.js createDocEditor passes them):
@@ -525,14 +525,17 @@ export function createNesting(host) {
     if (same.length > 1) return same.find((t) => t.indent === (x > colLeft + 18)) ?? best;
     return best;
   }
-  function drop(id, t) {
+  /** a drop at target `t` moves the block (it is not the block's own place) */
+  function moves(id, t) {
     if (!t) return false;
     const list = blocks();
     const unit = unitOf(id);
     const rest = list.filter((b) => !unit.includes(b.id));
     const i = list.findIndex((x) => x.id === id);
-    // dropped where it was: nothing to do
-    if (rest[t.index - 1] === list[i - 1] && (t.parentId ?? null) === (parentOf(id) ?? null) && rest[t.index] === list[i + unit.length]) return false;
+    return !(rest[t.index - 1] === list[i - 1] && (t.parentId ?? null) === (parentOf(id) ?? null) && rest[t.index] === list[i + unit.length]);
+  }
+  function drop(id, t) {
+    if (!moves(id, t)) return false;                                    // dropped where it was: nothing to do
     return moveTo(id, t.index, t.parentId, 'move block');
   }
 
@@ -575,7 +578,7 @@ export function createNesting(host) {
 
   return {
     order: (list) => treeOrder(list).order, repair: (list) => repairTree(list), isContainer, compileSource, contextView, extraContext, treeSig, pass,
-    display, attachView, unwatch, decorate, refreshHeads, layoutHeads, selected, split, merge, remove, duplicate, moveBy, moveTo, dragTargets, pickTarget, drop,
+    display, attachView, unwatch, decorate, refreshHeads, layoutHeads, selected, split, merge, remove, duplicate, moveBy, moveTo, dragTargets, pickTarget, moves, drop,
     menuItems, visibleStep, reveal, flatten: (list) => flattenForExport(list), spacingPrev, spacingTarget, parentAt,
     nestBlock, join, collapse, isCollapsed, state, parentOf, moveOut, moveIndex, unit: unitOf,
   };

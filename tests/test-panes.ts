@@ -85,7 +85,7 @@ const identity = (page: any) => page.evaluate((sels: string[]) => {
   return { moved: out, kept, mirrors: document.querySelectorAll('.blk-mirror').length };
 }, [SEL.a, SEL.b]);
 /** each block's decor in a pane: its classes and data that are the block's (not the view's own) */
-const VIEW_ONLY = /^(selected|editing|g-hot|rtx-float|sf-out|dragging|lifted|nest-active|nest-show|landed|flash|incoming|morphing)$/;
+const VIEW_ONLY = /^(selected|editing|g-hot|rtx-float|sf-out|dragging|nest-active|nest-show|landed|flash|incoming|morphing)$/;
 const decor = (page: any, p: string) => page.evaluate(([s, re]: string[]) => {
   const rx = new RegExp(re);
   return [...document.querySelectorAll(`${s} .blocks > .blk`)].map((el: any) => [el.dataset.id, [...el.classList].filter((c: string) => !rx.test(c)).sort().join(' '),
