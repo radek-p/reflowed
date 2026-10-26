@@ -10,7 +10,7 @@ latexTitle: true
 \bigskip
 \noindent A ReflowEd document is a list of blocks: a paragraph, a heading, a
 theorem, a figure. Each block is typeset on its own by a \TeX{} engine that
-runs in your browser, and drawn by the Reflow\,\TeX{} viewer, which breaks
+runs in your browser, and drawn by the Reflow\TeX{} viewer, which breaks
 its lines for the width of the window. This page follows a block from its
 source to the screen.
 
@@ -34,7 +34,7 @@ typesetting. Errors and warnings are reported on the block's own lines.
 The engine is patched so that it makes no pages. Where \TeX{} would break a
 paragraph into lines, the engine records the paragraph's list of boxes, glue
 and penalties instead. The worker encodes these lists in the format the
-Reflow\,\TeX{} viewer reads and sends them to the page, with the fonts the
+Reflow\TeX{} viewer reads and sends them to the page, with the fonts the
 block uses; a font is sent again only when a block needs a glyph it did not
 have yet. To export a PDF, the engine compiles the whole document in one
 run.
@@ -55,11 +55,11 @@ them, so opening one typesets nothing.
 {{< latex preamble="site" >}}
 \section*{Drawing}
 The page draws each block with the viewer of
-\href{https://radek-p.github.io/reflowtex/}{Reflow\,\TeX}, which also sets
+\href{https://radek-p.github.io/reflowtex/}{Reflow\TeX}, which also sets
 the pages of this site. It breaks each paragraph into lines for the width it
 is given, with the Knuth--Plass algorithm and \TeX's hyphenation, and draws
 the lines as SVG. When a pane becomes narrower or wider, the lines are
-broken again and nothing is typeset. Reflow\,\TeX's
+broken again and nothing is typeset. Reflow\TeX's
 \href{https://radek-p.github.io/reflowtex/docs/project/accuracy/}{Accuracy}
 page says how closely the browser follows \TeX.
 {{< /latex >}}

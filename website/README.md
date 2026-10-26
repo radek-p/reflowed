@@ -1,7 +1,7 @@
 # ReflowEd – the site
 
 The project's site (Hugo), published on GitHub Pages (`baseURL` in
-`hugo.toml`). It is built like the Reflow TeX site (`params.reflowtexSite`),
+`hugo.toml`). It is built like the ReflowTeX site (`params.reflowtexSite`),
 with the same templates, and its prose is set through the reflowtex pipeline. Its home page is the intro document,
 `samples/intro/source/main.tex`, with its figures, as it is at build time.
 
@@ -32,7 +32,7 @@ checkout in a directory above this repository.
 | `content/docs/features/` | the feature pages (the sidebar's Features group) |
 | `content/docs/reflowed/` | the first group of the sidebar: the home page and About |
 | `content/about/` | licence, privacy, source and contact |
-| `layouts/` | the Reflow TeX site's templates; `partials/head.html` holds the palette |
+| `layouts/` | the ReflowTeX site's templates; `partials/head.html` holds the palette |
 | `layouts/shortcodes/` | `open-editor` (the calls to action), `shot` (a screenshot), `siteurl` |
 | `browser/` | the site's scripts, in TypeScript: the privacy note, the intro's `\todo` notes drawn as the editor draws them (`notes.ts`, on the viewer's public API; `prepare-intro.ts` adds `tex/rtx-notes.sty` to the intro's copy), the screenshots' rounded corners and shadow in typeset pictures (`shots.ts`), and the reference card: pointing at a cross-reference or a citation, or focusing it, shows its target typeset again, with a Back pill after a jump (`refcard.ts`, on the same API) |
 | `latex-preambles/site.tex` | the preamble of every page's prose |
@@ -40,7 +40,7 @@ checkout in a directory above this repository.
 | `tools/stage-app.ts` | puts a release and its TeX Live tree into `static/app/`: `node tools/stage-app.ts <release dir> <tree dir>` |
 | `static/icon.svg` | the ReIcon (from `app/src/chrome/wordmark/icon.svg`) |
 
-The one deliberate difference from the Reflow TeX site is the accent colour:
+The one deliberate difference from the ReflowTeX site is the accent colour:
 the ReIcon's purple, `#a232c1`, with a lighter or deeper value per theme
 (`layouts/partials/head.html`).
 
@@ -59,7 +59,7 @@ node website/tools/stage-app.ts dist/reflowtex-editor build/resources/www/texliv
 
 `.github/workflows/website.yml` runs on every push to `main` (or by hand): it
 builds the editor's release from the engine release `engine/reflow-tectonic.json`
-names, stages it with its TeX Live tree, builds the site inside Reflow TeX's CI
+names, stages it with its TeX Live tree, builds the site inside ReflowTeX's CI
 image with a checkout of the reflowtex repository, and publishes `website/public`
 to GitHub Pages. The repository's Pages source must be set to "GitHub Actions"
 (Settings › Pages).

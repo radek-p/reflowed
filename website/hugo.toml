@@ -14,7 +14,7 @@ enableInlineShortcodes = true
   # The sister project, linked from the header and the footer.
   reflowtexSite = "https://radek-p.github.io/reflowtex/"
   # AGPL-3.0 §13 source offer, read by the viewer partial's footer (the
-  # viewer's own source: the pages are rendered with Reflow TeX).
+  # viewer's own source: the pages are rendered with ReflowTeX).
   reflowtexSource = "https://github.com/radek-p/reflowtex"
   tagline = "A LaTeX editor in your browser: each block is typeset by TeX and reflowed to fit the window."
   # Where "Open ReflowEd" goes: the editor published with the site, a release

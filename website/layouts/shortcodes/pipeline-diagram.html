@@ -5,7 +5,7 @@
 <figure class="pipeline-diagram">
 <svg viewBox="0 0 360 334" role="img" aria-labelledby="pd-title pd-desc">
   <title id="pd-title">From source to screen</title>
-  <desc id="pd-desc">The document's blocks, drawn as a stack of cards, go into one TeX engine, which runs in a worker beside the page and typesets them one at a time. Out of it comes a stack of results, boxes and glue, one per block. They go to the Reflow TeX viewer, which breaks the lines for the width and draws them as SVG, and to a cache in the browser's storage, from which a block that has not changed is shown again without typesetting.</desc>
+  <desc id="pd-desc">The document's blocks, drawn as a stack of cards, go into one TeX engine, which runs in a worker beside the page and typesets them one at a time. Out of it comes a stack of results, boxes and glue, one per block. They go to the ReflowTeX viewer, which breaks the lines for the width and draws them as SVG, and to a cache in the browser's storage, from which a block that has not changed is shown again without typesetting.</desc>
   <defs>
     <marker id="pd-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 1 L9 5 L0 9 z" fill="currentColor"/>
@@ -44,7 +44,7 @@
     <text x="46" y="128">one block after another, off the page</text>
     <text x="262" y="198" class="pd-head">Results</text>
     <text x="262" y="216">one per block</text>
-    <text x="14" y="286" class="pd-head">Reflow TeX viewer</text>
+    <text x="14" y="286" class="pd-head">ReflowTeX viewer</text>
     <text x="14" y="306">breaks lines for the</text>
     <text x="14" y="322">width, draws SVG</text>
     <text x="212" y="286" class="pd-head">Cache</text>

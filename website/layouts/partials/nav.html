@@ -14,6 +14,6 @@
   {{- with .Page }}{{ $href = .RelPermalink }}{{ end }}
   <a class="navlink" href="{{ $href }}"{{ with .Page }}{{ if or (eq .RelPermalink $here.RelPermalink) (and (not $here.IsHome) (eq .CurrentSection.Path $here.CurrentSection.Path)) }} aria-current="page"{{ end }}{{ end }}>{{ .Name }}</a>
   {{- end }}
-  <a class="navlink sister" href="{{ site.Params.reflowtexSite }}">Reflow&nbsp;TeX</a>
+  <a class="navlink sister" href="{{ site.Params.reflowtexSite }}">ReflowTeX</a>
   <a class="navlink" href="{{ site.Params.github }}" rel="noopener">GitHub</a>
 </nav>

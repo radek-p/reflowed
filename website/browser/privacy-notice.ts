@@ -3,9 +3,9 @@
 // settings (theme, text size, column width). They are in the browser's local
 // storage, not cookies, stay on the device, and are never sent anywhere;
 // nothing on the site tracks the reader. Its OK is remembered the same way
-// (under the same key as on the Reflow TeX site, which shares the address and
+// (under the same key as on the ReflowTeX site, which shares the address and
 // the settings). Loaded by every page (layouts/_default/baseof.html) as
-// static/privacy-notice.js, which build.sh builds from this file. The Reflow TeX
+// static/privacy-notice.js, which build.sh builds from this file. The ReflowTeX
 // site's own note, with this site's accent.
 (() => {
     const KEY = 'reflowtex-privacy-notice';

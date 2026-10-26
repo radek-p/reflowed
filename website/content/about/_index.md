@@ -7,7 +7,7 @@ latexTitle: true
 \pagetitle[ReflowEd]{About}
 \bigskip
 ReflowEd is a \LaTeX{} editor that runs in the browser. It is built on
-\href{https://radek-p.github.io/reflowtex/}{Reflow\,\TeX}, which shows
+\href{https://radek-p.github.io/reflowtex/}{Reflow\TeX}, which shows
 \TeX's output on the web with the lines broken for the reader's screen:
 ReflowEd adds the editing, with a \TeX{} engine in the page that typesets
 each block as it changes.
@@ -22,7 +22,7 @@ uploaded anywhere; a document leaves your device only when you export it.
 
 This site keeps your reading settings (the colour theme, the text size and
 the column width) in your browser's storage, so that they are there on your
-next visit. They are shared with the Reflow\,\TeX{} site, which is served
+next visit. They are shared with the Reflow\TeX{} site, which is served
 from the same address. They are not cookies, they stay on your device, and
 they are never sent anywhere. The site has no analytics, adverts or other
 trackers. It is served by GitHub Pages, whose servers are covered by
