@@ -288,7 +288,9 @@ await step('citations and figures', async () => {
 });
 
 // ── 4b. Displays: equation numbers flush right at two widths ────────────────
-/** every numbered display: right edge of its rightmost glyph (the tag) vs the column's right edge */
+/** every numbered display: right edge of its rightmost glyph (the tag) vs the column's right edge, less what
+ *  TeX hangs past the number's box (microtype's eqnum patch: \rightprotrusion{)} in \tagform@, a negative kern
+ *  after the ")"; TeX sets the box flush with the measure and the ")" past it, engine/tests/displays.test.ts) */
 async function tagEdges() {
   const bs = await blocks();
   // blocks with a numbered display: equation/align/gather/multline (unstarred), not only \nonumber'd
@@ -305,15 +307,35 @@ async function tagEdges() {
       // class found none at 1280 px and only the overflowing ones at 600 px
       const cache = (window as any).reflowtex?.inspect?.state(blk)?.cache;
       const laid: any[] = cache?.layout?.laid ?? [];
-      const disp = laid.map((L: any, i: number) => (L?.seg?.kind === 'display' ? (cache.dom.segs[i]?.wrap?.contains(cache.dom.segs[i]?.svg) ? cache.dom.segs[i].wrap : cache.dom.segs[i]?.svg) : null)).filter(Boolean) as Element[];
-      return disp.map((d, i) => {
+      // how far a row's last glyph (the number's ")") hangs past the end of its box: the negative kerns after
+      // it in its list, when only those follow it (sp)
+      const lastHang = (n: any): number | null => {
+        let after = 0, clean = true;
+        for (const c of [...(n?.children ?? [])].reverse()) {
+          if (c.type === 'glyph') return clean ? after : 0;
+          if (c.type === 'hlist' || c.type === 'vlist') { const h = lastHang(c); if (h !== null) return h; continue; }
+          if (c.type === 'kern' && (c.kern ?? 0) <= 0) after -= c.kern ?? 0; else clean = false;
+        }
+        return null;
+      };
+      const disp = laid.map((L: any, i: number) => {
+        if (L?.seg?.kind !== 'display') return null;
+        const s = cache.dom.segs[i];
+        const svg = s?.svg as SVGSVGElement | undefined;
+        const el = s?.wrap?.contains(svg) ? s.wrap : svg;
+        if (!el || !svg) return null;
+        const scale = svg.getBoundingClientRect().width / (svg.viewBox.baseVal.width || 1);   // CSS px per user unit
+        const hangSp = Math.max(0, ...(L.seg.rows ?? []).map((r: any) => lastHang(r.item?.box) ?? 0));
+        return { el, hangPx: hangSp * (2 / 65536) * scale };                                    // the viewer's ZOOM: 1 pt = 2 units
+      }).filter(Boolean) as { el: Element; hangPx: number }[];
+      return disp.map(({ el: d, hangPx }, i) => {
         const ts = [...d.querySelectorAll('tspan')].filter((t) => (t.textContent ?? '').trim());
         if (!ts.length) return null;
         let right = -1e9, last = '';
         for (const t of ts) { const r = t.getBoundingClientRect(); if (r.right > right) { right = r.right; last = t.textContent ?? ''; } }
         // a tag ends in ')'; other displays are unnumbered
         if (!last.trim().endsWith(')')) return null;
-        return { id, i, delta: +(right - col.right).toFixed(2), overflow: d.classList.contains('latex-overflow-right'), colW: Math.round(col.width) };
+        return { id, i, delta: +(right - hangPx - col.right).toFixed(2), hang: +hangPx.toFixed(2), overflow: d.classList.contains('latex-overflow-right'), colW: Math.round(col.width) };
       }).filter(Boolean);
     }, b.id));
   }
@@ -328,7 +350,7 @@ await step('displays: tags flush right', async () => {
     const worst = e.reduce((m: number, x: any) => Math.max(m, Math.abs(x.delta)), 0);
     timings[`tagsFlush${w}`] = `${e.length - bad.length}/${e.length} (worst ${worst.toFixed(1)} px, column ${e[0]?.colW ?? '?'} px)`;
     check(`window ${w} px: every equation number flush right (±1 px)`, e.length >= 1 && bad.length === 0,
-      `${e.length - bad.length}/${e.length} flush; column ${e[0]?.colW} px; worst ${worst.toFixed(1)} px; overflowing displays ${e.filter((x: any) => x.overflow).length}; e.g. ${bad.slice(0, 4).map((x: any) => `${x.delta}`).join(', ')}`);
+      `${e.length - bad.length}/${e.length} flush; column ${e[0]?.colW} px; worst ${worst.toFixed(1)} px; hanging past the box ${e.map((x: any) => x.hang).join(', ')} px; overflowing displays ${e.filter((x: any) => x.overflow).length}; e.g. ${bad.slice(0, 4).map((x: any) => `${x.delta}`).join(', ')}`);
     if (w === 600 && bad[0]) { await reveal(bad[0].id); await shot(page, '04c-tag-600'); }
     if (w === 1280 && bad[0]) { await reveal(bad[0].id); await shot(page, '04b-tag-1280'); }
   }
