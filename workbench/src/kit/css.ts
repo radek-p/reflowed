@@ -119,8 +119,10 @@ html[data-wb-theme-type="hc"] { --wb-pop-ring: 1.5px; }
 .wb-row-act { flex: 0 0 auto; display: flex; }
 .wb-row-btn { opacity: 0; }
 /* the row button only on the hovered row, the keyboard-focused row (data-kbd: after a key, not the focus the menu gives when a press opens it),
-   or on touch; the current row is marked by its ground, not by its button; its room is always kept (opacity) */
-.wb-row:hover .wb-row-btn, .wb-menu[data-kbd] .wb-row:focus-within .wb-row-btn { opacity: 1; }
+   or on touch; its room is always kept (opacity). In a list of sections (tab stops, .wb-ts: the section menu) the current
+   section's row shows its buttons always (pin, new tab); elsewhere (the document switcher) the current row is marked by
+   its ground, not by its button */
+.wb-row:hover .wb-row-btn, .wb-ts .wb-row.is-active .wb-row-btn, .wb-menu[data-kbd] .wb-row:focus-within .wb-row-btn { opacity: 1; }
 @media (hover: none) { .wb-row-btn { opacity: 1; } }
 /* tab stops (kit/tabstops.ts): one tab per depth. The list is a grid; a row and the boxes down to its cells are subgrids
    of it, so every row shares the columns. A number column is auto: as wide as its depth's widest number, which ends at
@@ -136,7 +138,7 @@ html[data-wb-theme-type="hc"] { --wb-pop-ring: 1.5px; }
    focus (the list's rules); while shown, the name ellipsises before them (--wb-ts-room: --wb-ts-acts buttons, the row's) */
 .wb-ts-acts { grid-column: -3 / -1; grid-row: 1; justify-self: end; display: flex; position: relative; }
 .wb-ts-name { --wb-ts-room: max(0px, calc(var(--wb-ts-acts, 0) * var(--wb-btn-h) - var(--wb-ts-pad) + var(--ui-1))); }
-.wb-ts .wb-row:hover .wb-ts-name, .wb-menu[data-kbd] .wb-row:focus-within .wb-ts-name { padding-right: var(--wb-ts-room); }
+.wb-ts .wb-row:is(.is-active, :hover) .wb-ts-name, .wb-menu[data-kbd] .wb-row:focus-within .wb-ts-name { padding-right: var(--wb-ts-room); }
 @media (hover: none) { .wb-ts .wb-ts-name { padding-right: var(--wb-ts-room); } }
 [data-ts-depth="0"] { --wb-ts-n: n0; --wb-ts-t: t0; }
 [data-ts-depth="1"] { --wb-ts-n: n1; --wb-ts-t: t1; }

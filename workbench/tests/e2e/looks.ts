@@ -247,6 +247,15 @@ group('kit gallery: the buttons one metric in a bar; menus and selects one row m
     check(`${theme}: the theme, document and section selects: the text starts at one x; one row height (= the menu item's)`,
       top.length >= 9 && top.every((r: any) => r.x === top[0].x && r.h === top[0].h) && m.items.every((h: number) => h === top[0].h), { top: top.map((r: any) => r.x + '/' + r.h), items: m.items });
     check(`${theme}: subsections indented (their names right of the sections' names)`, s0.length > 0 && m.secs.some((r: any) => r.depth > 0 && r.name > s0[0].name), m.secs);
+    // the current section's row shows its buttons (pin, new tab) without hover; the current document's row does not
+    await page.mouse.move(2, 2);
+    const btns = await page.evaluate(() => {
+      const seen = (sel: string, active: boolean) => [...document.querySelectorAll(`[data-g="${sel}"] [role="row"]${active ? '.is-active' : ':not(.is-active)'} .wb-row-btn`)]
+        .map((b) => +getComputedStyle(b).opacity);
+      return { secOn: seen('select-sections', true), secOff: seen('select-sections', false), docOn: seen('select-docs', true), hoverNone: matchMedia('(hover: none)').matches };
+    });
+    if (!btns.hoverNone) check(`${theme}: the current section's row shows its buttons at rest; the other sections' rows and the current document's row do not`,
+      btns.secOn.length > 0 && btns.secOn.every((o: number) => o > 0.5) && btns.secOff.every((o: number) => o < 0.5) && btns.docOn.length > 0 && btns.docOn.every((o: number) => o < 0.5), btns);
     await page.close();
   }
 });

@@ -168,6 +168,15 @@ const loadMs = Date.now() - t0;
   }
   await page.locator('#panel-outline .ol-item', { hasText: 'Omitted proofs' }).locator('button.ol-link').click();
   await page.waitForFunction(() => /Omitted proofs/.test(document.querySelector('#panel-outline .ol-item.active')?.textContent ?? ''), null, { timeout: 5000 }).catch(() => {});
+  // the current section's row shows its buttons (pin, new tab) without hover or focus; another row does not
+  await page.mouse.move(700, 5); await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  const rowBtns = await page.evaluate(async () => {
+    await Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {})));
+    const ops = (sel: string) => [...document.querySelectorAll(`#panel-outline ${sel} .wb-row-btn`)].map((b) => +getComputedStyle(b).opacity);
+    return { on: ops('.ol-item.active'), off: ops('.ol-item:not(.active):not(:hover)'), hoverNone: matchMedia('(hover: none)').matches };
+  });
+  if (!rowBtns.hoverNone) check('outline: the current section\'s row shows its pin and new-tab buttons at rest; other rows do not',
+    rowBtns.on.length >= 1 && rowBtns.on.every((o) => o > 0.5) && rowBtns.off.length > 0 && rowBtns.off.every((o) => o < 0.5), JSON.stringify(rowBtns));
   await shot(page, '03-outline-scrolled');
   // drag section 3 above section 2 (through the outline), then undo
   const before = (await blocks(page)).map((b: any) => b.id);

@@ -52,8 +52,8 @@ button { font: inherit; color: inherit; }
 .ol-item.lv3 .ol-link { font-size: var(--ui-text-sm); color: var(--muted); }
 .ol-item.special .ol-link { font-style: italic; }
 .ol-item .wb-row-btn { opacity: 0; border-radius: var(--ui-r-sm); }
-.ol-item:hover .wb-row-btn, .ol-item:focus-within .wb-row-btn { opacity: 1; }
-.ol-item:hover .wb-ts-name, .ol-item:focus-within .wb-ts-name { padding-right: var(--wb-ts-room); }
+.ol-item:is(.active, :hover, :focus-within) .wb-row-btn { opacity: 1; }   /* the current section's row: always */
+.ol-item:is(.active, :hover, :focus-within) .wb-ts-name { padding-right: var(--wb-ts-room); }
 @media (hover: none) { .ol-item .wb-row-btn { opacity: 1; } .ol-item .wb-ts-name { padding-right: var(--wb-ts-room); } }
 .ol-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ol-item.dragging { opacity: 0.4; }

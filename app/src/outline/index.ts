@@ -11,9 +11,9 @@
 //                    or a higher level), with a drop line between rows; special rows (Abstract, References) do not drag
 //   the preamble     doc.settings (its entry above the sections, with its problems' count)
 //                    on the same tab stops: its icon in the level-1 number column, its name at the level-1 tab
-//   the pin (.ol-pin, on hover or focus): view.sectionFocus { id } (the focused pane on the section); on the focused
+//   the pin (.ol-pin, on the current section's row, on hover or focus): view.sectionFocus { id } (the focused pane on the section); on the focused
 //                    section's row (.pinned) pin-off, which leaves it
-//   Ctrl/Cmd+click, or the row's "Open … in a new tab" button (.ol-new, on hover or focus): ctx.openAt(doc, id), the
+//   Ctrl/Cmd+click, or the row's "Open … in a new tab" button (.ol-new, as the pin): ctx.openAt(doc, id), the
 //                    section in a new tab, as the section menu's row action; only where the container can (openBeside)
 // Classes (.outline, .ol-item.lvN, .ol-link, .ol-num, .ol-title, .ol-new, .active, .dragging, .ol-drop) are the ones
 // app.css and the tests know. The list is the workbench kit's tab-stop list (workbench/src/kit/tabstops.ts; the section
