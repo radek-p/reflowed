@@ -232,6 +232,7 @@ export const RULES: Rule[] = [
   { why: 'loading/: the page\'s files from the trees beside it (the release, the TeX tree), the boot loader, the one loading status', paths: ['loading/**'], suites: ['loading-units', 'resources', 'resources-origin', 'resources-setting', 'multifile', 'typecheck', 'arch-units'] },
   { why: 'the multi-file release and the loading status line', paths: ['app/src/boot/**', 'scripts/lib/multifile.ts'], suites: ['multifile', 'typecheck', 'boot', 'chrome'] },
   { why: 'release mode', paths: ['app/src/app/release-mode.js', 'app/src/app/build-version.js', 'app/src/app/about.js'], suites: ['release-mode', 'build-chromium', 'boot'] },
+  { why: 'the inspector in the releases: on demand in the multi-file one, none in the single file', paths: ['app/src/inspector/**', 'scripts/lib/app-bundle.ts'], suites: ['release-mode', 'inspector', 'multifile'] },
   { why: 'store, io, home', paths: ['app/src/store/**', 'app/src/io/**', 'app/src/home/**'], suites: STORE },
   { why: 'TeX scanning', paths: ['app/src/tex/**'], suites: ['tex', 'tex-lex', 'tex-calls', 'keys', 'engine-node', 'caret-math-dev'] },
   { why: 'references, bibliography', paths: ['app/src/refs/**', 'app/src/bib/**', 'app/src/bibpane/**'], suites: ['refs-panel', 'w4-units', 'cite-units', 'cite-engine', 'cref-dev', 'cite-dev', 'cite-card-dev', 'panes'] },

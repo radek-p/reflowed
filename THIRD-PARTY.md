@@ -24,4 +24,8 @@ in its About box.
 
 The public [reflowtex](https://github.com/radek-p/reflowtex) parts the build
 bundles (the viewer, the encoder, the companion package) are under
-AGPL-3.0-or-later, from that repository.
+AGPL-3.0-or-later, from that repository. The multi-file release also carries
+reflowtex's inspector (its built files, in a folder of their own: the advanced
+Inspector loads them when it is opened), AGPL-3.0-or-later as well, with the
+bundle of Preact and Preact Signals (MIT) and htm (Apache-2.0) it uses; its
+licence list names them.

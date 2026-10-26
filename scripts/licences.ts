@@ -4,6 +4,8 @@
 // metafiles), the engine (reflow-tectonic: Tectonic/XeTeX and the C libraries in the wasm), each
 // packed TeX file (its licence as the file states it), and the default documents
 // (the introduction: AGPL-3.0-or-later, the editor's licence).
+// withInspector(licences, header, roots): the same for a release that ships the public inspector too (the multi-file
+// release): reflowtex's entry names it, and the packages its vendor bundle holds (its header names them) are listed.
 import { createRequire } from 'node:module';
 import type * as E from 'esbuild';
 // esbuild lives in engine/node_modules
@@ -128,6 +130,25 @@ export async function collectLicences(o: {
     { seed: 'intro.json', title: 'An Introduction to ReflowEd', source: 'written for ReflowEd', licence: 'AGPL-3.0-or-later', url: 'https://www.gnu.org/licenses/agpl-3.0.html', changes: [] },
   ];
   return { notice: NOTICE, npm, engine, tex, documents: documents.filter((d) => !o.seeds || o.seeds.includes(d.seed)).map(({ seed: _s, ...d }) => d) };
+}
+
+/** The licences of a release that ships the public inspector (reflowtex src/inspector, AGPL-3.0-or-later like the rest
+ *  of reflowtex) beside it: reflowtex's entry names it; the packages of its vendor bundle (vendor/preact.js, whose first
+ *  line names them: "preact@10.29.8, htm@3.1.1, @preact/signals@2.11.2 – MIT licensed") are listed as in the inspector,
+ *  with their licence texts from the packages found in `roots`. */
+export function withInspector(l: Licences, vendorHeader: string, roots: string[]): Licences {
+  const engine = l.engine.map((e) => (e.name.startsWith('reflowtex (') ? { ...e, name: 'reflowtex (the viewer, the encoder, the companion package, the inspector)' } : e));
+  const named = [...vendorHeader.matchAll(/((?:@[\w.-]+\/)?[\w.-]+)@(\d[\w.-]*)/g)].map((m) => ({ name: m[1], version: m[2] }));
+  if (!named.length) throw new Error(`licences: the inspector's vendor bundle names no package (${vendorHeader.slice(0, 120)})`);
+  const npm = l.npm.map((p) => ({ ...p, where: [...p.where] }));
+  for (const v of named) {
+    const same = npm.find((p) => p.name === v.name && p.version === v.version);
+    if (same) { if (!same.where.includes('inspector')) same.where.push('inspector'); continue; }
+    const e = npmEntry(v.name, roots, ['inspector']);
+    npm.push({ ...e, version: v.version, licence: e.version === '?' ? 'MIT' : e.licence });
+  }
+  npm.sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version));
+  return { ...l, engine, npm };
 }
 
 /** The whole notice as plain text (the page's licence block and the About panel's "copy"). */

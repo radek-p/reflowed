@@ -33,7 +33,7 @@ import { fileURLToPath } from 'node:url';
 import { appBuildOptions, PUB as PUBLIC, ensurePublicBundles } from './lib/app-bundle.ts';
 import { provenance, publicProblem, generatorOf } from './lib/provenance.ts';
 import { readReflowtexLock } from './lock-reflowtex.ts';
-import { writeMultiFile, appOutputs, zstdCached } from './lib/multifile.ts';
+import { writeMultiFile, appOutputs, zstdCached, inspectorFiles } from './lib/multifile.ts';
 import * as zlib from 'node:zlib';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { execFileSync } from 'node:child_process';
@@ -170,13 +170,18 @@ const schemaB64: string = site.schemaBase64();
 writeFileSync(join(BUILD, 'viewer/schema.b64'), schemaB64);   // beside the viewer: the dev page's copy when it cannot load the public pipeline
 
 // ── The app (src/main.js; `rtx:<name>` as scripts/w3-build.ts resolves it) ─
-// scripts/lib/app-bundle.ts: the same configuration as the dev page; a missing module fails the build
+// scripts/lib/app-bundle.ts: the same configuration as the dev page; a missing module fails the build. The single file
+// has no inspector (no files beside it for its panel): its build leaves the inspector's code out (inspector: false)
 const ALLOW_STUBS = process.argv.includes('--allow-stubs');
-const { options: appOptions, which } = appBuildOptions({ minify: true, allowStubs: ALLOW_STUBS, pub: PUB });
+const { options: appOptions, which } = appBuildOptions({ minify: true, allowStubs: ALLOW_STUBS, pub: PUB, inspector: false });
 const app = await esbuild.build(appOptions as any);
 const appJs = app.outputFiles[0].text;
-// (multi-file) the same app in parts: the entry, the code it shares, the lazy features (scripts/lib/multifile.ts LAZY)
+// (multi-file) the same app in parts: the entry, the code it shares, the lazy features (scripts/lib/multifile.ts LAZY);
+// and the public inspector's files beside it (as scripts/w3-build.ts puts them beside the dev page), loaded only when
+// it is opened
 const SPLIT_DIR = join(DIST, '.split');
+const INSPECTOR_FILES = MULTI ? inspectorFiles(join(PUB, 'src/inspector')) : [];
+if (MULTI && !INSPECTOR_FILES.length) console.warn(`inspector: ${join(PUB, 'src/inspector')} has no built inspector; the multi-file release has none`);
 const appParts = MULTI ? appOutputs(await esbuild.build(appBuildOptions({ minify: true, allowStubs: ALLOW_STUBS, pub: PUB, split: SPLIT_DIR }).options as any) as any, SPLIT_DIR, HERE) : [];
 // (multi-file) its boot loader (loading/page-loader.ts), inlined in its index.html
 const loaderJs = MULTI ? (await esbuild.build({ entryPoints: [join(HERE, 'loading/page-loader.ts')], bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: MINIFY, legalComments: 'none', write: false, logLevel: 'warning' })).outputFiles[0].text : '';
@@ -203,16 +208,23 @@ const cssText = {
   app: await minCss(join(WEB, 'app.css')),
 };
 const builtAt = new Date().toISOString();
-const { collectLicences, licencesText, NOTICE } = await import('./licences.ts');
+const { collectLicences, licencesText, withInspector, NOTICE } = await import('./licences.ts');
 // the default documents this build carries: the intro always (samples/intro/, rebuilt from its source below), and
 // what --seeds=<name>.json adds (other seed files in build/seed/)
 const SEED_NAMES = [...new Set(['intro.json', ...([...args].find((a) => a.startsWith('--seeds='))?.slice(8) ?? '').split(',').filter(Boolean)])];
-const LIC = await collectLicences({ appMeta: app.metafile!, engineDir: ENGINE, pub: PUB, tc: TC, texFiles: entries, seeds: SEED_NAMES,
-  roots: [join(ENGINE, 'node_modules'), join(WEB, 'node_modules'), join(TC, 'engine/encode/node_modules'), join(PUB, 'node_modules')] });
-const LICENCES_RAW = licencesText(LIC, `reflowtex editor ${VERSION}, engine ${worker.build}, ${builtAt}`);
+const LIC_ROOTS = [join(ENGINE, 'node_modules'), join(WEB, 'node_modules'), join(TC, 'engine/encode/node_modules'), join(PUB, 'node_modules')];
+const LIC = await collectLicences({ appMeta: app.metafile!, engineDir: ENGINE, pub: PUB, tc: TC, texFiles: entries, seeds: SEED_NAMES, roots: LIC_ROOTS });
+const licenceBuild = `reflowtex editor ${VERSION}, engine ${worker.build}, ${builtAt}`;
+/** the About panel's index (names, licences; the texts are in the plain block) */
+const licencesIndex = (l: typeof LIC) => JSON.stringify({ ...l, npm: l.npm.map(({ text: _t, ...p }) => p), engine: l.engine.map(({ text: _t, ...e }) => e), build: { engine: worker.build, version: VERSION, date: builtAt } }).replace(/</g, '\\u003c');
+const LICENCES_RAW = licencesText(LIC, licenceBuild);
 const LICENCES = LICENCES_RAW.replace(/<\//g, '<\\/');
-// the About panel's index (names, licences; the texts are in the plain block above)
-const LICENCES_JSON = JSON.stringify({ ...LIC, npm: LIC.npm.map(({ text: _t, ...p }) => p), engine: LIC.engine.map(({ text: _t, ...e }) => e), build: { engine: worker.build, version: VERSION, date: builtAt } }).replace(/</g, '\\u003c');
+const LICENCES_JSON = licencesIndex(LIC);
+// (multi-file) what it ships more: the public inspector (reflowtex's) and the packages of its vendor bundle
+const vendorOf = INSPECTOR_FILES.find((f) => f.path === 'vendor/preact.js');
+const LIC_MULTI = INSPECTOR_FILES.length ? withInspector(LIC, vendorOf ? Buffer.from(vendorOf.bytes.subarray(0, 400)).toString('utf8').split('\n')[0] : '', LIC_ROOTS) : LIC;
+const LICENCES_MULTI_RAW = LIC_MULTI === LIC ? LICENCES_RAW : licencesText(LIC_MULTI, licenceBuild);
+const LICENCES_MULTI_JSON = LIC_MULTI === LIC ? LICENCES_JSON : licencesIndex(LIC_MULTI);
 console.log(`licences: ${LIC.npm.length} npm packages, ${LIC.engine.length} engine parts, ${LIC.tex.length} TeX files (${LIC.tex.filter((t) => !/not stated/.test(t.licence)).length} with a stated licence), 2 documents`);
 
 // ── Seed documents and seed cache ────────────────────────────────────────────
@@ -380,10 +392,12 @@ function emit(seedCacheGz: Buffer | null, seedCacheNote: string) {
     html: baseHtml, notice: NOTICE, version: VERSION, build: worker.build, stamp: BUILD_STAMP,
     css: [{ id: 'companion.css', text: cssText.companion }, { id: 'app.css', text: cssText.app }],
     scripts: [{ id: 'protobuf', text: protobufMin }, { id: 'viewer', text: viewerMin }],
-    app: appParts, seeds: seedFiles, worker: workerJs, packs: multiPacks, seedCacheGz, licences: LICENCES_RAW, licencesJson: LICENCES_JSON, loader: loaderJs,
+    app: appParts, seeds: seedFiles, worker: workerJs, packs: multiPacks, seedCacheGz, licences: LICENCES_MULTI_RAW, licencesJson: LICENCES_MULTI_JSON, loader: loaderJs,
+    inspector: INSPECTOR_FILES,
   }) : null;
   const multiStats = multi ? { dir: multiDirOf(out), bytes: multi.bytes, indexBytes: multi.index, files: multi.files.length,
     essentialBytes: multi.files.filter((x) => x.group === 'essential').reduce((a, x) => a + x.bytes, 0), restBytes: multi.files.filter((x) => x.group === 'rest').reduce((a, x) => a + x.bytes, 0),
+    demandBytes: multi.files.filter((x) => x.group === 'demand').reduce((a, x) => a + x.bytes, 0),
     inventory: multi.files.map(({ id, path, bytes, group }) => ({ id, path, bytes, group })) } : null;
   const stats = {
     version: VERSION, built: new Date().toISOString(), engineBuild: worker.build, bytes: size, gzipBytes: gz,
@@ -400,7 +414,7 @@ function emit(seedCacheGz: Buffer | null, seedCacheNote: string) {
   const onlyIntro = Object.keys(seedFiles).every((n) => n === 'intro.json');
   if (onlyIntro && size >= SIZE_LIMIT) { console.error(`BUILD FAILED: ${out} is ${(size / 1e6).toFixed(1)} MB with only the intro; the limit is 40 MB (docs/RESOURCES.md §4)`); process.exit(1); }
   if (multiStats && onlyIntro && multiStats.bytes >= SIZE_LIMIT) { console.error(`BUILD FAILED: ${multiStats.dir} is ${(multiStats.bytes / 1e6).toFixed(1)} MB with only the intro; the limit is 40 MB`); process.exit(1); }
-  if (multiStats) console.log(`${multiStats.dir}/: ${multiStats.files + 1} files, ${mb(multiStats.bytes)}; before the UI ${mb(multiStats.essentialBytes)} + index.html ${kb(multiStats.indexBytes)}, after it ${mb(multiStats.restBytes)}`);
+  if (multiStats) console.log(`${multiStats.dir}/: ${multiStats.files + 1} files, ${mb(multiStats.bytes)}; before the UI ${mb(multiStats.essentialBytes)} + index.html ${kb(multiStats.indexBytes)}, after it ${mb(multiStats.restBytes)}, on demand ${kb(multiStats.demandBytes)}`);
   console.log(`${out}: ${mb(size)} (${mb(gz)} gz); worker ${kb(workerJs.length)}, app ${kb(appJs.length)}, viewer ${kb(viewerMin.length + protobufMin.length)}, `
     + `seed docs ${Object.entries(seedFiles).map(([k, v]) => `${k} ${kb(v.length)}`).join(' + ') || 'none'}, seed cache ${kb(stats.seedCacheGzBytes)} gz (${seedCacheNote}); `
     + `modules ${Object.entries(which).map(([k, v]) => `${k}:${v}`).join(' ')}; ${((performance.now() - t0) / 1000).toFixed(1)} s`);

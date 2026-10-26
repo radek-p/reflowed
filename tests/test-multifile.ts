@@ -67,8 +67,9 @@ const BASE = '/~user/reflowEd/';
   t.check('app.webmanifest: every URL relative (start_url and scope "./"), its icons there (192, 512, a maskable 512)', !!wm && wm.start_url === './' && wm.scope === './'
     && urls.every((u: string) => !/^\/|^[a-z]+:|\.\./i.test(u)) && wm.icons.every((i: any) => existsSync(join(DIR, i.src)))
     && ['192x192 any', '512x512 any', '512x512 maskable'].every((k) => wm.icons.some((i: any) => `${i.sizes} ${i.purpose}` === k)), urls);
-  const hashed = manifest.files.filter((f) => !/-[0-9a-f]{8,}\.[a-z]+$|-[A-Z0-9]{8}\.js$/.test(f.path));
-  t.check('every file but index.html is named by its content', hashed.length === 0, hashed.map((f) => f.path));
+  // (or is in a folder named by its content: the public inspector's, whose files load each other by their own names)
+  const hashed = manifest.files.filter((f) => !/-[0-9a-f]{8,}\.[a-z]+$|-[A-Z0-9]{8}\.js$|^[a-z]+-[0-9a-f]{8,}\//.test(f.path));
+  t.check('every file but index.html is named by its content (or is in a folder named so)', hashed.length === 0, hashed.map((f) => f.path));
 }
 
 // ── the site and the two servers ──

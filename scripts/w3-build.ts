@@ -71,7 +71,8 @@ if (args.has('--watch')) {
     console.warn(`viewer: the public pipeline could not load here (${(e as Error).message.split('\n')[0]}); copied the release build's (engine/build/viewer)`);
   }
   // the public inspector, as the public site serves it (installViewer's `inspector: true` copy): its script and
-  // what it loads from beside itself on first use. The dev page only: the single file has no files beside it.
+  // what it loads from beside itself on first use (the multi-file release has the same files in a folder of its own:
+  // scripts/lib/multifile.ts; the single file has none).
   const INSPECTOR = join(PUB, 'src/inspector');
   if (existsSync(join(INSPECTOR, 'inspector.js'))) cpSync(INSPECTOR, join(VIEWER, 'inspector'), { recursive: true, filter: (s) => !s.endsWith('README.md') });
   else console.warn(`inspector: ${INSPECTOR} not found; the advanced Inspector is not available on this page`);

@@ -1,9 +1,10 @@
 // THE PAGE'S SERVICES: what every editor mounted on a page shares, made once by the page's host
 // (main.js for the standalone page, a test harness for two editors): the modules (`rtx:<name>`: the module's
 // entry or app/stubs.js), the document store, the refs module, the backends (one engine worker per page),
-// notes (the viewer's kind and the compile wrapper), the View options and the inspector (outside a release only:
-// null in a release, its module never imported). Each editor gets them through app/mount.ts's `services`; the Settings
-// panel the View options and the notes (settings/panel.ts providePreferences).
+// notes (the viewer's kind and the compile wrapper), the View options and the inspector (where the page has its files:
+// inspector/index.ts panelFiles(); null elsewhere, and in the single file, whose build has a stub for its module). Each
+// editor gets them through app/mount.ts's `services`; the Settings panel the View options and the notes
+// (settings/panel.ts providePreferences).
 //
 //   await pageReady()                                  the viewer is on the page, the companion package loaded
 //   const s = await createPageServices({ params, route?, store? })
@@ -90,12 +91,11 @@ export async function createPageServices({ params, route = () => null, store: st
   try { view = await installView(); } catch (e) { view = featureFailed('view', e); }
   // the Settings panel's preferences: the View options and the notes (their types: settings/panel.ts)
   providePreferences({ view, notes } as unknown as Preferences);
-  // the inspector (a developer tool): imported outside a release only, so a release has none of it (its module
-  // installs a setting, a view, a key listener and a style element when it is evaluated)
+  // the inspector (an advanced tool): where the page has the public panel's files (the dev page, the multi-file
+  // release); its module is what the page knows of it until it is opened (it loads the rest then). The single file's
+  // build puts a stub in its place (scripts/lib/app-bundle.ts): no inspector there
   let inspector: InspectorService | null = null;
-  if (!isRelease()) {
-    try { inspector = (await import('../inspector/index.ts')).inspector; } catch (e) { inspector = featureFailed('inspector', e); }
-  }
+  try { const m = (await import('../inspector/index.ts')).inspector; inspector = m?.available() ? m : null; } catch (e) { inspector = featureFailed('inspector', e); }
 
   const services: EditorServices = {
     store, ids, refs, makeRefs, backends, backend, io, notes, view, inspector, numberingState: refsMod.numberingState ?? null,

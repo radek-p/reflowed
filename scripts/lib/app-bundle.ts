@@ -5,10 +5,13 @@
 //   resolveModules({ allowStubs })  `rtx:<name>` → the module's entry, or app/stubs.js only when
 //                                    allowStubs (dev); a release refuses a stub (a stub store is a
 //                                    memory store, nothing would persist) and throws MissingModuleError
-//   appBuildOptions({ minify, outfile?, allowStubs, sourcemap?, split? }) → { options, which }   esbuild options
+//   appBuildOptions({ minify, outfile?, allowStubs, sourcemap?, split?, inspector? }) → { options, which }   esbuild options
 //                                    split: an outdir: ES module parts (the multi-file release, scripts/lib/multifile.ts):
 //                                    the entry app-<hash>.js, the dynamic imports and shared code as chunks of their own;
 //                                    not written (the build names them by esbuild's hash and writes them itself)
+//                                    inspector: false: a build without the inspector (the single file: no files beside it
+//                                    for its panel): app/src/inspector/index.ts is a stub, `export const inspector = null`,
+//                                    so none of its code (nor its hosting part's) is in the bundle
 //   ENTRIES                          the module table
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -50,7 +53,9 @@ export function resolveModules(o: { allowStubs: boolean; src?: string }) {
   return { which, resolved };
 }
 
-export function appBuildOptions(o: { minify: boolean; allowStubs: boolean; outfile?: string; sourcemap?: boolean; keepNames?: boolean; src?: string; pub?: string; split?: string }) {
+/** the inspector's module (what app/services.ts imports), replaced by a stub in a build without it */
+const INSPECTOR = /(^|\/)inspector\/index\.ts$/;
+export function appBuildOptions(o: { minify: boolean; allowStubs: boolean; outfile?: string; sourcemap?: boolean; keepNames?: boolean; src?: string; pub?: string; split?: string; inspector?: boolean }) {
   const src = o.src ?? SRC;
   const { which, resolved } = resolveModules({ allowStubs: o.allowStubs, src });
   const plugin = {
@@ -63,8 +68,10 @@ export function appBuildOptions(o: { minify: boolean; allowStubs: boolean; outfi
         if (!r) return { errors: [{ text: `unknown module ${a.path}` }] };
         return r.path ? { path: r.path } : { path: name, namespace: 'rtx' };
       });
+      if (o.inspector === false) b.onResolve({ filter: INSPECTOR }, () => ({ path: 'no-inspector', namespace: 'rtx' }));
       b.onLoad({ filter: /.*/, namespace: 'rtx' }, (a: any) => {
         if (a.path === 'modules') return { contents: `export default ${JSON.stringify(which)};`, loader: 'js' };
+        if (a.path === 'no-inspector') return { contents: 'export const inspector = null;', loader: 'js' };
         return { contents: resolved[a.path].parts!.map((q) => `export * from ${JSON.stringify(q)};`).join('\n'), loader: 'js', resolveDir: src };
       });
       b.onResolve({ filter: /^reflowtex\/companion$/ }, () => ({ path: join(o.pub ?? PUB, 'src/companion/companion.js') }));

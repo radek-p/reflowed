@@ -17,7 +17,11 @@
 //      results are shown with: the seed cache, the worker and its TeX files' pack (the fonts are made from it); the app's status line shows them from the
 //      same store once the app says its UI is on screen (bootHandoff().shown()); the overlay fades out.
 //      __rtxEditor's createWorker(), initArgs() (the TeX files' pack), engineArgs() (the wasm's and the format's packs:
-//      only typesetting waits for them) and seedCache wait for the files they need.
+//      only typesetting waits for them) and seedCache wait for the files they need;
+//   4. what the app asks for when a feature is used (group 'demand'), never before: the public inspector's folder,
+//      whose URL is
+//      __rtxEditor.inspector (null when the release has none: inspector/index.ts panelFiles()). The status store is not
+//      told of them (nothing waits for them at the start).
 // The engine's wasm is compiled from bytes in the worker, so the server's MIME types do not matter.
 import { fetchAsync, treeBase, type Tree } from './tree.ts';
 import { manifestIndex, moduleName, type Manifest, type ManifestFile, type StartPart } from './manifest.ts';
@@ -26,6 +30,8 @@ import { filesStatus, percent, type BootHandoff } from './status.ts';
 
 type Editor = {
   version: string; build: string; backends: unknown[];
+  /** the public inspector's folder (a URL ending in /), or null */
+  inspector: string | null;
   seedCache: Promise<unknown>;
   createWorker(): Promise<Worker>;
   initArgs(): Promise<{ packs: Uint8Array[] }>;
@@ -117,7 +123,7 @@ const gunzip = (b: Uint8Array) => new Response(new Blob([b as BlobPart]).stream(
 async function gunzipJson(b: Uint8Array): Promise<unknown> { return JSON.parse(await gunzip(b).text()); }
 
 async function start() {
-  status.expect('release', all.map((f) => ({ name: f.id, group: f.group, total: f.bytes })));
+  status.expect('release', all.filter((f) => f.group !== 'demand').map((f) => ({ name: f.id, group: f.group, total: f.bytes })));
   const essential = all.filter((f) => f.group === 'essential');
   const gotP = Promise.all(essential.map((f) => load(f.id)));
   // the rest from now on, asked for right after the essential files (low priority: they come first) and not waited for;
@@ -162,8 +168,10 @@ async function start() {
   map.type = 'importmap';
   map.textContent = JSON.stringify({ imports });
   document.head.append(map);
+  const panel = fileOf('inspector:inspector.js');
   G.__rtxEditor = {
     version: manifest!.version, build: manifest!.build, backends: [],
+    inspector: panel ? new URL(panel.path.replace(/[^/]*$/, ''), release.base).href : null,
     seedCache: cache ? load(cache.id).then(gunzipJson).catch(() => null) : Promise.resolve(null),
     createWorker() {
       workerUrl ??= load(worker.id).then((b) => URL.createObjectURL(new Blob([b as BlobPart], { type: 'text/javascript' })));

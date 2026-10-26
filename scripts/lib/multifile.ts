@@ -8,6 +8,7 @@
 //   zstdCached(raw, cacheDir)                     zstd -19 of raw, kept by its hash (a pack that did not change is not
 //                                                 compressed again: three packs at -19 take a minute)
 //   LAZY                                          the app's parts loaded only when used (dynamic import entries)
+//   inspectorFiles(dir)                           the public inspector's built files (MultiParts.inspector)
 //   webManifest(icons, colour)                    the web app manifest's text (app.webmanifest)
 //
 // ADD TO HOME SCREEN (mobile-chrome): app.webmanifest beside index.html (index.html links it), its URLs
@@ -18,7 +19,7 @@
 // origin: its start_url cannot be the page's), only the head's meta tags (apple-mobile-web-app-capable and the rest).
 //
 // Every file but index.html, manifest.json and app.webmanifest is named by its content (name-<hash>.ext: cached for good, a new
-// release never meets an old copy). What loads when (loading/manifest.ts groups; loading/page-loader.ts):
+// release never meets an old copy), or is in a folder named by its content (inspector-<hash>/). What loads when (loading/manifest.ts groups; loading/page-loader.ts):
 //   essential  index.html's loader fetches these before the UI, with the overlay's 0 → 100 %: one file, the start
 //              file app/start-<hash>.bin (one request, gzip -9 here,
 //              unpacked by the loader whatever the server does), a pack (loading/pack.ts) of the two style sheets, the
@@ -30,9 +31,15 @@
 //              the engine's packs (the wasm, the format, the TeX files: three files, so a release that changes one does
 //              not make a reader fetch the others again), the seed cache, the licence texts, the app's lazy parts
 //              (prefetched, so a first use does not wait)
+//   demand     fetched only when the app asks for them, never before: the public inspector's files (the advanced
+//              Inspector, opened: inspector/index.ts), in a folder named by its content, inspector-<hash>/ (its files
+//              import each other by their own names); the loader tells the app where that folder is
+//              (__rtxEditor.inspector). (No app part is fetched on demand only: a browser keeps a module that failed to
+//              load as failed for the page's life, so a feature opened offline could not be opened again once online;
+//              the inspector's own code is in the start: about 11 KB, 4 KB gzipped)
 // Paths are relative (index.html's directory), and nothing depends on the server's MIME types or Content-Length.
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import * as zlib from 'node:zlib';
 import { moduleName, type FileType, type Group, type Manifest, type ManifestFile, type StartPart } from '../../loading/manifest.ts';
@@ -50,9 +57,24 @@ export function webManifest(icons: readonly { src: string; size: number; purpose
 }
 
 /** dynamic-import entries the app needs only when a feature is used (their own chunks; anything else it imports is
- *  essential): the SVG figure editor (svgfig/index.js opens it), the Ipe figures (the backend asks for them), the
- *  inspector (app/services.ts, outside a release only: a release never fetches it) */
-export const LAZY = ['app/src/svgfig/editor.js', 'app/src/figures/index.js', 'app/src/inspector/index.ts'];
+ *  essential): the SVG figure editor (svgfig/index.js opens it), the Ipe figures (the backend asks for them) */
+export const LAZY = ['app/src/svgfig/editor.js', 'app/src/figures/index.js'];
+
+/** the public inspector's built files in its folder (reflowtex src/inspector: inspector.js, inspector.css, agent.js,
+ *  panel/, vendor/; not its sources, src/, nor its README), by their paths in the folder; none when it is not built */
+export function inspectorFiles(dir: string): { path: string; bytes: Uint8Array }[] {
+  if (!existsSync(join(dir, 'inspector.js'))) return [];
+  const out: { path: string; bytes: Uint8Array }[] = [];
+  const walk = (d: string) => {
+    for (const n of readdirSync(d).sort()) {
+      const f = join(d, n), rel = relative(dir, f).split(sep).join('/');
+      if (statSync(f).isDirectory()) { if (rel !== 'src') walk(f); }
+      else if (/\.(js|css)$/.test(n)) out.push({ path: rel, bytes: readFileSync(f) });
+    }
+  };
+  walk(dir);
+  return out;
+}
 
 export interface AppOutput { path: string; text: string; entry: boolean; imports: { path: string; kind: string }[]; entryPoint?: string }
 export interface MultiParts {
@@ -72,6 +94,8 @@ export interface MultiParts {
   licencesJson: string;
   /** the boot loader (loading/page-loader.ts) built as one IIFE */
   loader: string;
+  /** the public inspector's files (inspectorFiles), in its folder; none: the release has no inspector */
+  inspector?: { path: string; bytes: Uint8Array }[];
 }
 
 const hash = (b: Uint8Array | string) => createHash('sha256').update(b).digest('hex').slice(0, 10);
@@ -178,6 +202,16 @@ export function writeMultiFile(dir: string, p: MultiParts): Promise<{ files: Man
   if (p.seedCacheGz) add('seed-cache', 'seed/results', '.bin', p.seedCacheGz, 'rest', 'seedcache');
   add('licences', 'licences', '.txt', p.licences, 'rest', 'licences');
   add('licences-index', 'licences', '.json', p.licencesJson, 'rest', 'licences-index');
+  // the public inspector: its folder as it is, named by its files' content
+  if (p.inspector?.length) {
+    const h = createHash('sha256');
+    for (const f of p.inspector) h.update(f.path).update('\0').update(f.bytes).update('\0');
+    const folder = `inspector-${h.digest('hex').slice(0, 10)}`;
+    for (const f of p.inspector) {
+      put(`${folder}/${f.path}`, f.bytes);
+      files.push({ id: `inspector:${f.path}`, path: `${folder}/${f.path}`, bytes: f.bytes.length, group: 'demand', type: 'inspector' });
+    }
+  }
 
   const manifest: Manifest = { version: p.version, build: p.build, stamp: p.stamp, files };
   let html = p.html;

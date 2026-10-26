@@ -10,7 +10,9 @@
 // blocks, its outlines); focusing the other moves it, picking a pane in its bar pins it; the shortcut, the main menu's row
 // and its tab's close button close it (everything goes); moved to the left it is hosted there, comes back there, and a
 // width the user gives its column is kept; the advanced switch off closes it.
-// Results: test-results/inspector/results.json.
+// Flush: the public panel fills its side panel edge to edge (no radius, border, padding or margin of its own, none of
+// the side panel's around it; below the pane bar when there is one), in light and dark, split, and on a phone.
+// Results: test-results/inspector/results.json (and screenshots beside it).
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -67,6 +69,32 @@ const state = () => page.evaluate(() => {
     loaded: !!w.reflowtex?.inspector, paints: w.reflowtex.inspect.paints, widths,
     on: w.editorAPI.inspector().on.peek(), target: w.editorAPI.inspector().target.peek() };
 });
+/** the public panel's outer box (its .rtx in the shadow root) against its side panel's box (the workbench's panel
+ *  element: its border box, so none of its padding either) and the pane bar's bottom when there is one */
+const flushOf = (p: any = page) => p.evaluate(() => {
+  const host = [...document.querySelectorAll('[data-rtx-ui]')].find((e) => (e as any).shadowRoot) as HTMLElement | undefined;
+  const rtx = host?.shadowRoot?.querySelector('.rtx') as HTMLElement | null | undefined;
+  const panel = host?.closest('[data-panel-view="inspector"]') as HTMLElement | null | undefined;
+  if (!rtx || !panel) return null;
+  const a = rtx.getBoundingClientRect(), b = panel.getBoundingClientRect(), cs = getComputedStyle(rtx);
+  const bar = panel.querySelector('.rtx-insp-bar');
+  const top = bar ? bar.getBoundingClientRect().bottom : b.top;
+  const four = (k: string) => ['Top', 'Right', 'Bottom', 'Left'].map((s) => (cs as any)[k.replace('*', s)]).join(' ');
+  return { d: [a.left - b.left, b.right - a.right, a.top - top, b.bottom - a.bottom].map((v) => Math.round(v * 10) / 10), bar: !!bar,
+    radius: ['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft'].map((s) => (cs as any)[`border${s}Radius`]).join(' '),
+    border: four('border*Width'), padding: four('padding*'), margin: four('margin*'), shadow: cs.boxShadow, dark: rtx.classList.contains('dark'),
+    line: cs.getPropertyValue('--line').trim(), w: Math.round(a.width), h: Math.round(a.height) };
+});
+const zero = (v: string) => v.split(' ').every((x) => parseFloat(x) === 0);
+const flushOk = (f: Awaited<ReturnType<typeof flushOf>>) => !!f && f.d.every((v: number) => Math.abs(v) <= 1) && zero(f.radius) && zero(f.border) && zero(f.padding) && zero(f.margin) && f.shadow === 'none' && f.w > 0 && f.h > 0;
+/** the editor's theme (the View options'), and the public panel following it (its poll reads the page's ground) */
+async function theme(name: 'light' | 'dark') {
+  await page.evaluate((th: string) => (window as any).editorAPI.view().set({ theme: th }), name);
+  await page.waitForFunction((th: string) => document.documentElement.classList.contains('dark') === (th === 'dark'), name);
+  await page.waitForFunction((th: string) => { const host = [...document.querySelectorAll('[data-rtx-ui]')].find((e) => (e as any).shadowRoot) as any;
+    return host?.shadowRoot?.querySelector('.rtx')?.classList.contains('dark') === (th === 'dark'); }, name);
+  await frames();
+}
 /** the side column's width is a third of the window (the inspector's default), within a few px */
 const third = (s: { width: number | null; vw: number }) => s.width != null && Math.abs(s.width - s.vw / 3) <= 4;
 /** gone: no public panel on the page, nothing outlined, no bar, not docked in either column */
@@ -89,8 +117,9 @@ const marksWhere = () => page.evaluate(async () => {
   await new Promise((r) => requestAnimationFrame(() => r(null)));
   const rect = (p: string) => document.querySelector(`[data-pane="${p}"]`)!.getBoundingClientRect();
   const A = rect((window as any).P.a), B = rect((window as any).P.b);
-  // (in a pane's column: a label may sit above a block at the pane's top, over the top bar)
-  const hit = (r: DOMRect, q: DOMRect) => r.width > 0 && r.left < q.right && r.right > q.left;
+  // (in a pane's column, by where a mark starts: a label may sit above a block at the pane's top, over the top bar, and
+  // a long one, a block's text quoted, may run on past a narrow pane's right edge)
+  const hit = (r: DOMRect, q: DOMRect) => r.width > 0 && r.left >= q.left - 1 && r.left < q.right;
   const marks = [...document.querySelectorAll('[data-rtx-inspector] *')].map((d) => d.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
   const out = { n: marks.length, inA: marks.filter((r) => hit(r, A)).length, inB: marks.filter((r) => hit(r, B)).length,
     rects: marks.map((r) => [r.left, r.top, r.width, r.height].map(Math.round)), A: [A.left, A.top, A.right, A.bottom].map(Math.round) };
@@ -190,6 +219,13 @@ let s0 = await state();
   const m = await marksWhere();
   check('its outlines (a block hovered) lie in pane A; pane B has no inspector marks', m.n > 0 && m.inA === m.n && m.inB === 0, m);
   await page.screenshot({ path: join(OUT, '01-pane-a.png') });
+  const f = await flushOf();
+  check('flush (light, split): the public panel fills its side panel below the pane bar, edge to edge (±1 px), no radius, border, padding, margin or shadow of its own', flushOk(f) && f!.bar, f);
+  await theme('dark');
+  const fd = await flushOf();
+  check('... the same in the dark theme, the panel dark too, its separators the kit\'s', flushOk(fd) && fd!.dark && !!fd!.line && fd!.line !== '#e3e3e3', fd);
+  await page.screenshot({ path: join(OUT, '01-pane-a-dark.png') });
+  await theme('light');
   s0 = await state();
 }
 // a block of pane A, from its block menu: the tree shows that block
@@ -343,6 +379,8 @@ let s0 = await state();
   const g = await p2.evaluate(() => { const a = document.querySelector('aside[data-side="right"]') as HTMLElement | null;
     return { on: (window as any).editorAPI.inspector().on.peek(), overlay: !!a?.classList.contains('wb-side--overlay'), w: a ? Math.round(a.getBoundingClientRect().width) : null, vw: document.documentElement.clientWidth }; });
   check('on a phone (390 px) it opens over the documents, the whole width', g.on && g.overlay && g.w === g.vw, g);
+  const pf = await flushOf(p2);
+  check('... flush there too (one pane: no pane bar): edge to edge in its side panel, no radius, border, padding or margin', flushOk(pf) && !pf!.bar, pf);
   await p2.screenshot({ path: join(OUT, '03-phone.png') });
   await phone.close();
 }
