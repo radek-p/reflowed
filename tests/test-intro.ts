@@ -5,7 +5,8 @@
 //     (tests/qa/lib/intro-check.ts, which the release's acceptance runs too);
 //   - its labels are numbered and its cross-references resolve (no unknown label or citation in refsState);
 //   - the References panel lists its bibliography (refs.bib / refs.bbl): both entries;
-//   - an edit and its undo.
+//   - an edit and its undo;
+//   - microtype is in force: the typeset fonts carry protrusion codes.
 // Waits on editorAPI.whenIdle(), never on fixed times.
 //
 //   node tests/test-intro.ts dev [http://localhost:8150/] | file [dist/reflowtex-editor.html]
@@ -44,6 +45,15 @@ t.check('an edit typesets', edited.source.endsWith('An added sentence.') && edit
 await page.evaluate(async () => { const api = (window as any).editorAPI; api.undo(); await api.whenIdle(); });
 const back = await page.evaluate((id: string) => (window as any).editorAPI.blocks().find((x: any) => x.id === id), blk.id);
 t.check('… and its undo gives the source back', back.source === blk.source && back.state === 'ok');
+// microtype is in force (the intro loads it): its fonts carry protrusion codes, so punctuation hangs at the line ends
+const protrusion = await page.evaluate(() => {
+  const ins = (window as any).reflowtex?.inspect;
+  if (!ins?.blocks) return { inspect: false, blocks: 0, withCodes: 0 };
+  const els = ins.blocks().filter((b: Element) => b.matches('[data-nodelist-b64]'));
+  const withCodes = els.filter((el: Element) => (ins.state(el)?.doc?.fonts ?? []).some((f: any) => (f.codes ?? []).some((c: any) => (c.rp ?? 0) > 0))).length;
+  return { inspect: true, blocks: els.length, withCodes };
+});
+t.check('microtype in force: the typeset blocks\' fonts carry protrusion codes (punctuation hangs)', protrusion.inspect && protrusion.withCodes > 0, protrusion);
 t.check('no page errors', !errors.length, errors);
 await ctx.close();
 t.done();
