@@ -5,7 +5,8 @@
 //     engine-api capture in the engine, patch 0005 attributes)--> input.rtxc.jsonl
 //     --engine-api convert.ts--> output.json (+ sourcemap, spacing)
 //     --the public pipeline's transform (classic fonts given their faces) and encoder on ../encode's
-//       shims--> nodelist (base64; with the block's warnings, for the viewer's log)
+//       shims--> nodelist (base64; with the block's warnings – a font with no face, a character TeX could not set
+//       (missing-chars.ts) – for the viewer's log)
 //   and the fonts, incrementally: a font is patched again only when a block
 //   brings a glyph it did not have (per-font requirement sets: the public FileNeeds).
 //
@@ -43,6 +44,7 @@ import { attachAssetPictures, type AssetEntry } from './assets.ts';
 import { pdfToSvg } from './pdf-svg.ts';   // PDF pictures without a rendition
 import { mapLines } from './doc-fonts.ts';
 import { dropCaptureKeys } from './capture-keys.ts';
+import { missingChars } from './missing-chars.ts';
 import { chain, mapProvider, type ResourceProvider } from '../../loading/provider.ts';
 import { httpProvider, texRequires, xhrGetSync, type HttpProvider } from '../../loading/http.ts';
 import { readPack } from '../../loading/pack.ts';
@@ -406,6 +408,7 @@ async function typeset(source: string, context: string, key: string): Promise<Re
   const t2 = performance.now();
   try {
     const data = readSerializerOutput(c.json);
+    data.missing_chars = missingChars(log);    // the characters TeX could not set (its log): the encoder's warnings
     attachAssetPictures(data, assets, c.tikz);
     const dir = `/work/${key}`;
     vfs.mkdirp(dir);

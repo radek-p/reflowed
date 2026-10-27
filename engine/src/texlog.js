@@ -11,6 +11,8 @@
 //     context   for an error, TeX's l.<n> line: the text up to where TeX
 //               stopped (src/texlog.js errorColumns uses it)
 //
+//   unwrap(lines) -> lines   TeX's hard-wrapped lines joined back (missing-chars.ts too)
+//
 //   errorRange(problem, sourceLine) -> [startColumn, endColumn] (1-based,
 //     end exclusive), the token TeX stopped after, or null.
 
@@ -18,7 +20,7 @@ const WRAP = 79;   // TeX's max_print_line: a log line this long continues on th
 
 /** Joins TeX's hard-wrapped lines back (a line exactly WRAP characters long
  *  continues on the next one). */
-function unwrap(lines) {
+export function unwrap(lines) {
   const out = [];
   for (let i = 0; i < lines.length; i++) {
     let l = lines[i];
