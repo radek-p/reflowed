@@ -5,7 +5,8 @@
 // editing session paints its own surface: edit/session.js show()); mount(id, r, key) delivers a result to every
 // view: the first pane's view is mounted from the result, the others are views of it (the viewer's
 // host.mount(el, { of, view })), and all swap in one task, so the panes never show two different results of a
-// block. A pane opened later gets views of what is shown (deliver / ensureViews).
+// block. A pane opened later gets views of what is shown (deliver / ensureViews). Each mount tells the page's viewer
+// log which result the view shows (doc/viewer-log.ts bind): the Problems panel lists its records by result.
 //
 //   const blocks = createBlocks(host)
 //   host: { blocks() (the document's, in order), ui, panes, edits, nest, view() (ctx.view), perf, counters, cache, blockById, kindOf, viewKey, viewResult,
@@ -30,6 +31,7 @@ import { bump } from '../app/page-state.ts';
 import { previewOf, showPreview } from './paint.ts';
 import { gapBetween } from '../../../engine/web/spacing.ts';
 import { PX_PER_PT } from '../view/settings.js';
+import { viewerLog } from '../doc/viewer-log.ts';
 
 /** what two neighbouring blocks put between their renders themselves: .blk's 1 px and .blk-render's 4 px padding, below
  *  the one and above the other (app.css; it was taken as 8, the renders' only) */
@@ -250,6 +252,7 @@ export function createBlocks(host) {
     let first, rest;
     try {
       first = await viewer().mount(els[0], fitOpts(vs[0]));
+      viewerLog()?.bind(first.key, key);                  // what the viewer logged of this view is this result's (doc/viewer-log.ts)
       if (editing) { try { first.setDisplayFade?.(false); } catch { /* an older viewer */ } }   // shown whole while edited
     } catch (e) {
       console.warn('mount failed', e);

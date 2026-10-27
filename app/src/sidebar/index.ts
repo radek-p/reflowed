@@ -7,7 +7,8 @@
 // doc.settings { line }); a TODO opens its note chip (note.open { todo }: its place when it has none).
 // Classes and attributes are the ones app.css and the tests know:
 //   Problems  .pb-copyall, section.pb-group.pb-<kind>, button.pb-head[aria-expanded]
-//             (.pb-title, .count), ul.pb-list, div.pb-row[data-kind][data-block]
+//             (.pb-title, .count), ul.pb-list, div.pb-row[data-kind][data-block][data-level] (data-level: a
+//             'preview' problem's, the viewer's record's level)
 //             [role=button][tabindex=0] (.pb-msg, .pb-where), .pb-copy, sb-empty ok
 //   TODOs     .td-chips > button.td-chip(.on)[aria-pressed] (.dot, .count),
 //             ul.td-list > li > button.td-row[data-block] (.dot, .td-text > .td-author, .td-msg, .pb-where)
@@ -40,7 +41,7 @@ function ProblemRow({ p, where, open, copyOne, action }: { p: Diagnostic; where:
   const onKey = (e: KeyboardEvent) => { const t = e.currentTarget as HTMLElement; if (e.target === t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); t.click(); } };
   const onClick = (e: MouseEvent) => { if (!selecting(e.currentTarget)) open(p); };
   return html`<li>
-    <div class="pb-row" data-kind=${p.kind} data-block=${p.blockId ?? ''} role="button" tabindex="0" onKeyDown=${onKey} onClick=${onClick}>
+    <div class="pb-row" data-kind=${p.kind} data-block=${p.blockId ?? ''} data-level=${p.level ?? null} role="button" tabindex="0" onKeyDown=${onKey} onClick=${onClick}>
       <span class="pb-msg">${p.message}</span>${p.blockId ? html`<span class="pb-where">${where}</span>` : null}
     </div>
     ${copyOne ? html`<${CopyButton} class="err-copy pb-copy" title="Copy a report of this error (message, line, source, TeX log)" text=${() => copyOne(p)} />` : null}
@@ -48,9 +49,10 @@ function ProblemRow({ p, where, open, copyOne, action }: { p: Diagnostic; where:
   </li>`;
 }
 
-/** a problem's place: its key (or offset) in the block, else its line, else the block; a preamble problem: the settings */
+/** a problem's place: its key (or offset) in the block, else its line, else the block; a preamble problem (an error
+ *  of no block): the settings; the page's (what the viewer logged of no block) has none */
 function openProblem(host: PanelHost, p: Diagnostic) {
-  if (!p.blockId) { host.commands.call('doc.settings', { line: p.line ?? null }); return; }
+  if (!p.blockId) { if (p.kind === 'error') host.commands.call('doc.settings', { line: p.line ?? null }); return; }
   const src = host.blocks().find((b) => b.id === p.blockId)?.source ?? '';
   let range: { from: number; to: number } | null = null;
   if (p.offset != null) {

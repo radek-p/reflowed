@@ -94,8 +94,10 @@ async function inBrowser(kind: 'chromium' | 'firefox' | 'webkit', full: boolean)
         errors: blocks.filter((b: any) => b.errors?.length).map((b: any) => `${b.id}: ${b.errors[0]?.message}`).slice(0, 6), missing,
         compiled: bes.map((b: any, i: number) => b.stats().compiled - before[i]).reduce((a: number, b: number) => a + b, 0),
         stats: bes.map((b: any) => b.stats()),
-        // the viewer's "Some fonts could not be downloaded … stand-in font" notice
-        fontWarning: [...document.querySelectorAll('div, p')].map((e) => e.textContent ?? '').find((t) => /could not be downloaded/.test(t) && t.length < 600) ?? null };
+        // the viewer's record of fonts that could not be loaded (font-load-failed), and its notice bar (the editor
+        // turns it off: doc/viewer-log.ts)
+        fontWarning: (((window as any).reflowtex?.host?.log?.records() ?? []) as any[]).find((x) => x.code === 'font-load-failed')?.message
+          ?? (document.querySelector('.latex-notice') ? `a notice on the page: ${document.querySelector('.latex-notice')!.textContent}` : null) };
     }, s.id);
     r[s.name] = o;
     console.log(`  ${s.name}: open → idle ${o.ms} ms; ${JSON.stringify(o.states)}; compiled ${o.compiled}; ${JSON.stringify(o.stats)}`);
@@ -104,7 +106,7 @@ async function inBrowser(kind: 'chromium' | 'firefox' | 'webkit', full: boolean)
     check(`${kind}: ${s.name} — no block error`, o.errors.length === 0, o.errors.join(' | '));
     check(`${kind}: ${s.name} — no missing-file error`, o.missing.length === 0, o.missing.join(' | '));
     if (cacheOk) check(`${kind}: ${s.name} — opens with 0 compiles`, o.compiled === 0, JSON.stringify(o.stats));
-    check(`${kind}: ${s.name} — every font loads (no stand-in font notice)`, !o.fontWarning, o.fontWarning ?? '');
+    check(`${kind}: ${s.name} — every font loads (no font-load-failed record, no notice on the page)`, !o.fontWarning, o.fontWarning ?? '');
   }
   // (\\leqslant, fonts per family and the live edit: scripts/build.ts's acceptance step, Chromium, blocking)
   if (full) {

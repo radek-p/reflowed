@@ -1,7 +1,7 @@
 // The side column on the workbench (was the editor's own sidebar): the brand in the window bar, the left column's
 // hide button and Ctrl/⌘B, its panel tabs Outline / Problems / TODOs / Refs with their counts, the word count in its
-// status line, and the page's "+ Add a block": in headless Chromium on the dev app (the engine). Waits on DOM state
-// and the app's idle.
+// status line, the page's "+ Add a block", and what the viewer logs (simulated records) in the Problems panel and
+// never as a notice on the page: in headless Chromium on the dev app (the engine). Waits on DOM state and the app's idle.
 //
 //   node tests/test-sidebar.ts [http://localhost:8175/]
 import { createRequire } from 'node:module';
@@ -213,7 +213,39 @@ const leftOpen = () => page.evaluate(() => !(window as any).editorAPI.workbench(
   await page.evaluate(() => (window as any).editorAPI.view().set({ theme: 'light' }));
 }
 
-check('no console errors or page errors', problems.length === 0, problems.slice(0, 5).join(' | '));
+// ── what the viewer logs (its page log, host.log): in the Problems panel, by block, and never on the page ──────────
+// (doc/viewer-log.ts: warnings and errors; a block's records go with its result; the viewer's notice bar is off.)
+// The records are simulated through host.log.report: a missing character in a block, a font that failed to load.
+{
+  await page.click('[data-side="left"] [data-ptab="problems"]');
+  await idle();
+  const target = await page.evaluate(() => {
+    const E = (window as any).editorAPI, host = (window as any).reflowtex.host;
+    const b = E.blocks().find((x: any) => x.kind === 'paragraph' && x.mounted && document.querySelector(`.blk[data-id="${x.id}"] .latex-block`));
+    const view = host.block(document.querySelector(`.blk[data-id="${b.id}"] .latex-block`));
+    host.log.report('warning', 'missing-char', 'There is no ł (U+0142) in font cmr10 (simulated)', { font: 'cmr10' }, { block: view.key });
+    host.log.report('info', 'block-transformed', 'an info record (simulated)', {}, { block: view.key });
+    host.log.report('error', 'font-load-failed', 'Some fonts could not be downloaded (cmr10) (simulated).', { fonts: 'cmr10' });
+    return { id: b.id, source: b.source };
+  });
+  const rows = () => page.evaluate(() => [...document.querySelectorAll('[data-panel-view="problems"] .pb-row[data-kind="preview"]')]
+    .map((r: any) => ({ block: r.dataset.block, level: r.dataset.level, msg: r.querySelector('.pb-msg')?.textContent ?? '' })));
+  await page.waitForFunction(() => document.querySelectorAll('[data-panel-view="problems"] .pb-row[data-kind="preview"]').length >= 2);
+  const got = await rows();
+  const tone = await page.evaluate(() => document.querySelector('[data-ptab="problems"] .wb-ptab-badge')?.getAttribute('data-tone'));
+  check('viewer log: a block\'s record in Problems with its block and level, the page\'s with none, no info record, the tab marked as errors',
+    got.some((r) => r.block === target.id && r.level === 'warning' && /no ł/.test(r.msg)) && got.some((r) => r.block === '' && r.level === 'error' && /could not be downloaded/.test(r.msg))
+    && !got.some((r) => /info record/.test(r.msg)) && tone === 'danger', { got, tone });
+  check('viewer log: no notice of the viewer\'s on the page', !(await page.evaluate(() => !!document.querySelector('.latex-notice'))));
+  await api('setSource', target.id, `${target.source} More.`);       // another result: the block's record goes with the old one
+  await idle();
+  await page.waitForFunction((id: string) => !document.querySelector(`[data-panel-view="problems"] .pb-row[data-kind="preview"][data-block="${id}"]`), target.id);
+  check('viewer log: the block\'s record gone once it shows another result; the page\'s stays', (await rows()).some((r) => r.block === ''), await rows());
+  await api('setSource', target.id, target.source);
+  await idle();
+}
+
+check('no console errors or page errors', problems.filter((p) => !p.includes('(simulated)')).length === 0, problems.slice(0, 5).join(' | '));
 await browser.close();
 writeFileSync(join(OUT, 'results.json'), JSON.stringify({ at: new Date().toISOString(), results }, null, 2));
 const failed = results.filter((r) => !r.ok);

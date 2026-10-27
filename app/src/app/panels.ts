@@ -1,6 +1,7 @@
 // A document's side panels' data and what the source editor asks of references (one per document editor: app/app.js).
 //   Outline   headings in order, numbered (refs' numbers, else counted: \appendix switches to letters)
-//   Problems  errors, undefined references, unknown citations, duplicate and unused labels
+//   Problems  errors, what the viewer logged (in the preview: doc/viewer-log.ts), undefined references, unknown
+//             citations, duplicate and unused labels
 //   TODOs \todo and the preamble's macros on it, by author
 //   the word count under them (and at the foot of its panes' end space: docview/end-space.ts)
 //   labelOptions / citeOptions (completion), hoverCard, marksFor
@@ -22,6 +23,7 @@ import { showWordCount } from '../chrome/sidebar-chrome.ts';             // the 
 import { html, render } from '../design/ui/core.js';                  // the hover card
 import { outlineOf, diagnosticsOf, todosOf, labelsOf, bibOf, PROBLEM_GROUPS,
   type Block, type BibEntry, type Diagnostic, type OutlineItem, type PanelSource, type Problem, type RefsState, type Todo } from '../doc/panels.ts';
+import { viewerLog } from '../doc/viewer-log.ts';                 // the viewer's log as problems (one per page)
 import type { EditorRoot } from './editor-root.ts';
 import type { Commands, PanelHost, PreambleHost } from './panel-host.ts';
 import type { PreambleError, WordCount } from './page-state.ts';
@@ -60,6 +62,8 @@ export interface PanelsContext {
   extraBib?: (() => Record<string, BibEntry> | null) | null;
   problemAction?: ((p: Diagnostic) => HTMLElement | null) | null;
   problemReport?: ((blockId: string | null, tex: Problem & { severity?: string }) => string) | null;
+  /** the page's viewer log (doc/viewer-log.ts) kept something new: the editor's refresh (refresh() soon) */
+  previewChanged?: (() => void) | null;
   files?: PanelHost['files'];
 }
 
@@ -72,13 +76,16 @@ export function createPanels(c: PanelsContext) {
   // anywhere, in any column, draws what its badge counts); which panel is shown is its container's. setTab(name) asks
   // the container to show that panel (slots.show).
   const setTab = (name: string) => { if (view(name)) slots.show(name); };
+  const unPreview = c.previewChanged ? viewerLog()?.subscribe(c.previewChanged) ?? null : null;
 
   const doc = () => c.doc;
   const state = (): RefsState => { try { return refs.refsState(); } catch { return { labels: {}, refs: [], cites: [], bib: {}, numbers: {}, duplicates: [] }; } };
   const source = (): PanelSource => {
     const d = doc();
     return { blocks: d?.blocks ?? [], preamble: d?.preamble.source ?? '', refs: state(), thmSet: c.thmSet(), preambleProblems: c.preambleProblems(),
-      resultOf: (b) => c.cache.get(c.ck(b)), extraBib: c.extraBib?.() ?? null };
+      resultOf: (b) => c.cache.get(c.ck(b)), extraBib: c.extraBib?.() ?? null,
+      // what the viewer logged of each block's result (by its compile key) and of the page
+      previewOf: (b: Block) => viewerLog()?.problemsOf(c.ck(b)) ?? [], pagePreview: viewerLog()?.pageProblems() ?? [] };
   };
   // the outline memoised: it was made again from every source on each scroll frame (the pane
   // bar's section in view: 10 ms at 600 blocks). Kept while every block is the same object with the same kind and
@@ -156,7 +163,7 @@ export function createPanels(c: PanelsContext) {
     const b = p.blockId && d ? d.blocks[c.indexOf(p.blockId)] : null;
     const r = b ? c.cache.get(c.ck(b)) : null;
     const tex = p.kind === 'error' ? (b ? r?.errors : c.preambleProblems())?.find((e) => e.line === p.line && (e.message === p.message || p.message.endsWith(e.message))) : null;
-    return c.problemReport?.(p.blockId ?? null, tex ?? { severity: 'error', message: p.message, line: p.line }) ?? p.message;
+    return c.problemReport?.(p.blockId ?? null, tex ?? { severity: p.level ?? 'error', message: p.message, line: p.line }) ?? p.message;
   }
 
   // ── Word count ─────────────────────────────────────────────────────────────
@@ -181,7 +188,7 @@ export function createPanels(c: PanelsContext) {
     preSource.value = doc()!.preamble.source;
     bibInfo.value = c.bibInfo();
     // the tabs' counts: the views' badges (chrome/sidebar-chrome.ts draws them)
-    slots.badge('problems').value = nProb ? { n: nProb, tone: probs.some((x) => x.kind === 'error') ? 'danger' : undefined } : null;
+    slots.badge('problems').value = nProb ? { n: nProb, tone: probs.some((x) => x.kind === 'error' || x.level === 'error') ? 'danger' : undefined } : null;
     slots.badge('todos').value = td.length ? { n: td.length } : null;
     lists.outline.value = outline();
     lists.problems.value = probs;
@@ -267,6 +274,7 @@ export function createPanels(c: PanelsContext) {
   function flushPreamble() { if (draft != null) preamble?.apply(draft); }
   /** the listeners this module added; the container stops showing its host */
   function dispose() {
+    unPreview?.();
     if (root.state.panels.peek() === host) root.state.panels.value = null;
   }
   return { host, refresh, outline, outlineRuns: () => outlineRuns, diagnostics, todos, labelOptions, citeOptions, hoverCard: card, marksFor, setTab, locator: (id: string) => locator(id),   // the Files panel's "where"

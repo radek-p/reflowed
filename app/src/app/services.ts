@@ -6,7 +6,8 @@
 // editor gets them through app/mount.ts's `services`; the Settings panel the View options and the notes
 // (settings/panel.ts providePreferences).
 //
-//   await pageReady()                                  the viewer is on the page, the companion package loaded
+//   await pageReady()                                  the viewer is on the page (its log the editor's: doc/viewer-log.ts),
+//                                                      the companion package loaded
 //   const s = await createPageServices({ params, route?, store? })
 //     params  the page's options (app/release-mode.js pageParams): ?stubs=, ?backend=, ?store=memory, ?engine
 //     route   the route the engine names in its messages (the standalone page's)
@@ -24,6 +25,7 @@ import { featureFailed, isRelease } from './release-mode.js';
 import { devSeedCache } from './dev-seed.js';
 import { installNotes } from '../notes/index.js';
 import { installView } from '../view/index.js';
+import { installViewerLog, type ViewerHostLog } from '../doc/viewer-log.ts';
 import { providePreferences, type Preferences } from '../settings/panel.ts';
 import { provideEngines, engine } from '../settings/engine.ts';
 import type { EditorServices, InspectorService, NotesService, ViewService } from './mount.ts';
@@ -43,8 +45,11 @@ interface RefsModule { refs?: object; createRefs?(): object; recallsOf?: unknown
 
 /** the viewer is on the page (its host), and the companion package draws its kinds in the blocks mounted after it */
 export async function pageReady(): Promise<void> {
-  const w = window as Window & { reflowtex?: { host?: unknown } };
+  const w = window as Window & { reflowtex?: { host?: { log?: ViewerHostLog } } };
   if (!w.reflowtex?.host) await new Promise<void>((r) => document.addEventListener('reflowtex:host', () => r(), { once: true }));
+  // the viewer's log as the author's problems, its notice bar off (doc/viewer-log.ts)
+  const log = w.reflowtex?.host?.log;
+  if (log) installViewerLog(log);
   try { await import('reflowtex/companion'); } catch (e) { featureFailed('companion', e); }
 }
 

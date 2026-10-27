@@ -653,6 +653,7 @@ export function createDocEditor(ctx) {
     counts: () => countDoc(), noteColour: ctx.notes?.colour,
     extraBib: ctx.bibpane?.extraBib ? () => ctx.bibpane.extraBib(S.doc) : null, problemAction: ctx.bibpane?.problemAction,
     problemReport,                                                      // Copy / Copy all
+    previewChanged: () => changed(),                                    // the viewer logged something: the panels soon
   });
   // the Files panel: the export's own list (io/files.ts), after the pending writes; a click goes to the first use
   // one Files panel per page: the current document's (main.js installs it once, through filesHost)

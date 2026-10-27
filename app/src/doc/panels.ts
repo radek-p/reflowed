@@ -5,13 +5,15 @@
 //
 //   outlineOf(src)          [{ id, level, number, title, special?, appendix }]: the headings in order, numbered by the
 //                           refs' numbers when known, else counted here (\appendix switches to letters)
-//   diagnosticsOf(src)      [{ kind, blockId, message, line?, offset?, key? }]: preamble and TeX errors, undefined
-//                           references, unknown citations, duplicate and unused labels
+//   diagnosticsOf(src)      [{ kind, blockId, message, line?, offset?, key?, level? }]: preamble and TeX errors, what the
+//                           viewer logged of the blocks' results and of the page (doc/viewer-log.ts: 'preview', with its
+//                           level), undefined references, unknown citations, duplicate and unused labels
 //   todosOf(src)            [{ …a \todo, blockId }]: \todo and the preamble's own todo macros, in document order
 //   labelsOf(src) · bibOf(src)   the labels (the refs' when they have any, else scanned) and the bibliography
 //   sectionBlocks(blocks, items, it)   the ids of a section's blocks: its heading's to the next of its level or higher
 //   PROBLEM_GROUPS          the Problems list's groups, in order
 import { scanHeadings, scanLabels, scanTodos, todoMacros } from '../tex/texscan.js';
+import type { ViewerProblem } from './viewer-log.ts';
 
 export interface Block { id: string; kind: string; source: string }
 export interface Label { name: string; blockId: string; offset?: number; number?: string; refname?: string; counter?: string; title?: string }
@@ -37,19 +39,23 @@ export interface PanelSource {
   preambleProblems?: Problem[];
   /** a block's TeX result, when it has one */
   resultOf?: (b: Block) => { status?: string; errors?: Problem[] } | null | undefined;
+  /** what the viewer logged of a block's result, and of the page (doc/viewer-log.ts) */
+  previewOf?: (b: Block) => ViewerProblem[];
+  pagePreview?: ViewerProblem[];
   /** entries the References pane adds (a .bib, a bibtex .bbl's \bibitem's) */
   extraBib?: Record<string, BibEntry> | null;
 }
 /** kind: a part or a chapter (the crumb names it: "Go to chapter: 2 …"); a section has none */
 export interface OutlineItem { id: string; level: number; number: string; title: string; appendix: boolean; special?: boolean; kind?: 'Part' | 'Chapter' }
-export type ProblemKind = 'error' | 'undefined-ref' | 'unknown-cite' | 'duplicate-label' | 'unused-label';
-export interface Diagnostic { kind: ProblemKind; blockId: string | null; message: string; line?: number; offset?: number; key?: string }
+export type ProblemKind = 'error' | 'preview' | 'undefined-ref' | 'unknown-cite' | 'duplicate-label' | 'unused-label';
+/** level: a 'preview' problem's (the viewer's record's) */
+export interface Diagnostic { kind: ProblemKind; blockId: string | null; message: string; line?: number; offset?: number; key?: string; level?: 'warning' | 'error' }
 export interface Todo { blockId: string; cmd: string; offset: number; length: number; author: string; text: string; inline: boolean }
 
 const ALPH = (n: number) => (n >= 1 && n <= 26 ? String.fromCharCode(64 + n) : String(n));
 
 export const PROBLEM_GROUPS: [ProblemKind, string][] = [
-  ['error', 'Errors'], ['undefined-ref', 'Undefined references'], ['unknown-cite', 'Unknown citations'],
+  ['error', 'Errors'], ['preview', 'In the preview'], ['undefined-ref', 'Undefined references'], ['unknown-cite', 'Unknown citations'],
   ['duplicate-label', 'Duplicate labels'], ['unused-label', 'Unused labels'],
 ];
 
@@ -101,7 +107,9 @@ export function diagnosticsOf(s: PanelSource): Diagnostic[] {
   for (const b of s.blocks) {
     const r = s.resultOf?.(b);
     if (r?.status === 'error') for (const p of r.errors ?? []) out.push({ kind: 'error', blockId: b.id, message: p.message, line: p.line });
+    for (const p of s.previewOf?.(b) ?? []) out.push({ kind: 'preview', blockId: b.id, message: p.message, level: p.level });
   }
+  for (const p of s.pagePreview ?? []) out.push({ kind: 'preview', blockId: null, message: p.message, level: p.level });
   const labels = labelsOf(s);
   const used = new Set<string>();
   for (const r of st.refs ?? []) {
