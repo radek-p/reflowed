@@ -245,9 +245,13 @@ await idle();
   await page.reload();
   await page.waitForFunction(() => (window as any).editorAPI?.whenIdle && (window as any).editorAPI.route?.().name === 'doc');
   await idle();
-  const after = await page.evaluate(({ id, png }: { id: string; png: string }) => {
+  const after = await page.evaluate(async ({ id, png }: { id: string; png: string }) => {
     const E = (window as any).editorAPI;
     const el = document.querySelector(`main.rtx-pane .blk[data-id="${id}"]`);
+    // the viewer draws a block when it comes into view (as tests/qa/lib/intro-check.ts looks at the pictures)
+    el?.scrollIntoView({ block: 'center' });
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await E.whenIdle();
     return { stats: E.backendObject()?.stats?.() ?? null, shows: !!el && el.innerHTML.includes(png.slice(0, 40)), errors: E.blocks().find((b: any) => b.id === id)?.errors ?? null };
   }, { id: who.id!, png: PNG });
   check('a figure a macro places, replaced in place: its block typesets again (its stored result is stale) and shows the new file',
