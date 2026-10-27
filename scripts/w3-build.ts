@@ -62,7 +62,8 @@ if (args.has('--watch')) {
   const VIEWER = join(LIB, 'viewer'), RELEASED = join(HERE, 'engine/build/viewer');
   try {
     const site = await import(join(PUB, 'src/pipeline/site.ts'));
-    site.installViewer(VIEWER, { inspector: false, log: () => {} });
+    const { Log } = await import(join(PUB, 'src/shared/log.ts'));   // a log with no sinks: the bundles' build lines unprinted
+    site.installViewer(VIEWER, { inspector: false, log: new Log('pipeline') });
     writeFileSync(join(VIEWER, 'schema.b64'), site.schemaBase64());
   } catch (e) {
     if (!existsSync(join(RELEASED, 'latex-viewer.js')) || !existsSync(join(RELEASED, 'schema.b64'))) throw e;

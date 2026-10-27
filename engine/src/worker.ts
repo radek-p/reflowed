@@ -4,9 +4,10 @@
 //   block LaTeX --warm Tectonic (Asyncify snapshot after \begin{document},
 //     engine-api capture in the engine, patch 0005 attributes)--> input.rtxc.jsonl
 //     --engine-api convert.ts--> output.json (+ sourcemap, spacing)
-//     --the public encoder on ../../encode-browser's shims--> nodelist (base64)
+//     --the public pipeline's transform (classic fonts given their faces) and encoder on ../encode's
+//       shims--> nodelist (base64; with the block's warnings, for the viewer's log)
 //   and the fonts, incrementally: a font is patched again only when a block
-//   brings a glyph it did not have (per-font requirement sets).
+//   brings a glyph it did not have (per-font requirement sets: the public FileNeeds).
 //
 // Messages: { id, cmd, args } -> { id, result } | { id, error }
 //   init        { pack: base64 | packBytes: Uint8Array | packs: Uint8Array[] } | { base: dev server origin }
@@ -41,6 +42,7 @@ import { resampler, joinContext } from './fidelity/resample.ts';
 import { attachAssetPictures, type AssetEntry } from './assets.ts';
 import { pdfToSvg } from './pdf-svg.ts';   // PDF pictures without a rendition
 import { mapLines } from './doc-fonts.ts';
+import { dropCaptureKeys } from './capture-keys.ts';
 import { chain, mapProvider, type ResourceProvider } from '../../loading/provider.ts';
 import { httpProvider, texRequires, xhrGetSync, type HttpProvider } from '../../loading/http.ts';
 import { readPack } from '../../loading/pack.ts';
@@ -53,8 +55,10 @@ import { setKpsewhich } from '../encode/src/shims/child_process.ts';
 import { Pipeline } from '@pub/src/pipeline/pipeline.ts';
 import { readSerializerOutput } from '@pub/src/pipeline/nodes.ts';
 import { encodeDocument } from '@pub/src/pipeline/encode.ts';
-import { Fonts, glyphRequirements } from '@pub/src/pipeline/fonts/fonts.ts';
+import { Fonts, fontNeeds, fontWarnings, type FileNeeds } from '@pub/src/pipeline/fonts/fonts.ts';
 import { setDocumentMapLines } from '@pub/src/pipeline/fonts/type1.ts';
+import { Log, type LogRecord } from '@pub/src/shared/log.ts';
+import type { FileFace } from '@pub/src/shared/font-face.ts';
 import protoText from '@pub/src/schema/latex.proto';
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -318,7 +322,12 @@ async function setAssets({ assets: list, replace }: { assets: AssetEntry[]; repl
 }
 
 // ── One block ────────────────────────────────────────────────────────────────
-type FontReqs = Record<string, [number, number | null][]>;
+/** What a block needs of one font file (the public fonts.ts FileNeeds, as a result carries it: plain data, for
+ *  structured clone and JSON): the TeX name the file stands for and its face (a type1 or bitmap face of a result
+ *  restored from a cache is converted again by that name), every code point a glyph reaches it by with the glyph
+ *  index TeX set (null: not known), whether a \\webtext slot sets text in it. */
+interface FileReq { name: string; face: FileFace; reached: [number, number | null][]; slot: boolean }
+type FontReqs = Record<string, FileReq>;
 interface Result {
   key: string; status: 'ok' | 'error'; errors: Problem[]; warnings: Problem[]; nodelist: string | null;
   spacing?: unknown; sourcemap?: unknown; capture: { engine: 'tectonic'; build: string; id: string; anchors?: string[]; links?: string[] }; displays?: unknown;
@@ -331,8 +340,9 @@ interface Result {
 }
 
 let pipe: Pipeline;
+/** the pipeline's build lines (the 'log' command): its records' messages, the last few hundred */
 const pipeLog: string[] = [];
-const plog = (s: string) => { pipeLog.push(s); if (pipeLog.length > 400) pipeLog.splice(0, 200); };
+const plog = new Log('pipeline', [(r: LogRecord) => { pipeLog.push(r.message); if (pipeLog.length > 400) pipeLog.splice(0, 200); }]);
 const results = new Map<string, Result>();
 let runs = 0;
 
@@ -400,10 +410,14 @@ async function typeset(source: string, context: string, key: string): Promise<Re
     const dir = `/work/${key}`;
     vfs.mkdirp(dir);
     await pipe.transform(data, dir, { block: key, docTag: key.slice(-8) });
-    const bytes = encodeDocument(data);
+    dropCaptureKeys(data);                     // the capture's own keys (capture-keys.ts): the wire has no field for them
+    // the block's warnings travel with it, as the public pipeline's blocks carry theirs (pipeline.ts encodeBlock):
+    // those of the transforms, and one per font with no face it sets glyphs in. The viewer adds them to the page's
+    // log, which the editor lists (app/doc/viewer-log.ts)
+    const bytes = encodeDocument({ ...data, warnings: [...(data.warnings ?? []), ...fontWarnings(data)] });
     vfs.remove(dir, true);
     res.nodelist = bytesToBase64(bytes);
-    res.fontReqs = reqsOf(glyphRequirements([data]));
+    res.fontReqs = reqsOf(fontNeeds([data]).files);
   } catch (e) {
     res.errors.push({ severity: 'error', message: `encoder: ${(e as Error).message}`, line: null });
     res.ms = performance.now() - t0;
@@ -424,20 +438,29 @@ function reason(trap: string): string {
 }
 
 // ── Fonts, incrementally ─────────────────────────────────────────────────────
-const reqAll = new Map<string, Map<number, number | null>>();
-const served = new Map<string, string>();          // original -> served (newest)
+// Every font file the blocks drew from (by its original name: the public fonts.ts FileNeeds), merged over every
+// block of the worker's life; served: original -> served (newest).
+const reqAll = new Map<string, FileNeeds>();
+const served = new Map<string, string>();
 const sentFiles = new Set<string>();
-const reqsOf = (r: Map<string, Map<number, number | null>>): FontReqs =>
-  Object.fromEntries([...r].map(([f, m]) => [f, [...m]]));
+const reqsOf = (files: Map<string, FileNeeds>): FontReqs =>
+  Object.fromEntries([...files].map(([f, n]) => [f, { name: n.name, face: n.face, reached: [...n.reached], slot: n.slot }]));
 
 const dirty = new Set<string>();
+/** Merge one result's requirements; the fonts that gained a code point (or are new) are dirty. A requirement of
+ *  another shape (a result of an older build) is passed over: its font is made from the results that have one. */
+function mergeReqs(r: FontReqs | null | undefined, mark: boolean): void {
+  for (const [file, q] of Object.entries(r ?? {})) {
+    if (!q || typeof q !== 'object' || !Array.isArray(q.reached) || !q.face || typeof q.name !== 'string') continue;
+    let n = reqAll.get(file);
+    if (!n) { n = { name: q.name, face: q.face, reached: new Map(), slot: false }; reqAll.set(file, n); if (mark) dirty.add(file); }
+    if (q.slot && !n.slot) n.slot = true;
+    for (const [cp, gi] of q.reached) if (!n.reached.has(cp) || (n.reached.get(cp) == null && gi != null)) { n.reached.set(cp, gi); if (mark) dirty.add(file); }
+  }
+}
 /** Merge requirements; re-patch (flush) only the fonts that gained a code point. */
 function updateFonts(list: FontReqs[], flush = true): { fonts: Record<string, string>; fontFiles: Record<string, Uint8Array>; patched: string[] } {
-  for (const r of list) for (const [file, entries] of Object.entries(r ?? {})) {
-    let m = reqAll.get(file);
-    if (!m) { m = new Map(); reqAll.set(file, m); dirty.add(file); }
-    for (const [cp, gi] of entries) if (!m.has(cp) || (m.get(cp) == null && gi != null)) { m.set(cp, gi); dirty.add(file); }
-  }
+  for (const r of list) mergeReqs(r, true);
   if (!flush) return { fonts: {}, fontFiles: {}, patched: [] };
   const patched = [...dirty];
   if (dirty.size) {
@@ -445,7 +468,7 @@ function updateFonts(list: FontReqs[], flush = true): { fonts: Record<string, st
     // whole: a font is patched once, with every glyph's private-use entry, so its file and name are the same for
     // every document (and a later block never makes the page swap its face for a re-patched one)
     try { fonts.patch(new Map([...dirty].map((f) => [f, reqAll.get(f)!])), plog, { whole: true }); }
-    catch (e) { plog(`fonts: ${(e as Error).message}`); }
+    catch (e) { plog.error('font-patch-failed', `fonts: ${(e as Error).message}`); }
     for (const [o, s] of fonts.served) served.set(o, s);
     dirty.clear();
   }
@@ -467,11 +490,7 @@ function dumpFonts() {
 }
 /** Start from dumped fonts: later blocks patch a font again only for glyphs it lacks. */
 function loadFonts({ reqs, served: sv, files: fl }: { reqs: FontReqs; served: Record<string, string>; files: Record<string, Uint8Array> }) {
-  for (const [file, entries] of Object.entries(reqs ?? {})) {
-    let m = reqAll.get(file);
-    if (!m) { m = new Map(); reqAll.set(file, m); }
-    for (const [cp, gi] of entries) if (!m.has(cp) || (m.get(cp) == null && gi != null)) m.set(cp, gi);
-  }
+  mergeReqs(reqs, false);
   vfs.mkdirp('/fonts');
   for (const [name, bytes] of Object.entries(fl ?? {})) vfs.write(`/fonts/${name}`, bytes);
   for (const [o, s2] of Object.entries(sv ?? {})) served.set(o, s2);

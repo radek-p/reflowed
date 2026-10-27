@@ -5,7 +5,8 @@
 //   node scripts/build.ts [--no-seed-cache] [--engine=node|browser] [--no-seed] [--no-multi]
 //   (--no-multi: the single file only)
 //   (every build precompiles the default documents, reusing the recorded results
-//    that still match: see "Precompiling" below; exits 1 if one of their blocks fails;
+//    that still match: see "Precompiling" below; exits 1 if one of their blocks fails, or a font of theirs has
+//    no face (tests/qa/lib/faces-check.ts);
 //    --no-seed-cache: a quick build with nothing baked in)
 //
 // In the page:
@@ -163,7 +164,8 @@ console.log(`pack: ${entries.length - 2} TeX files ${mb(texBytes)}${missing.leng
 
 // ── Viewer, schema ───────────────────────────────────────────────────────────
 const site = await import(join(PUB, 'src/pipeline/site.ts'));
-site.installViewer(join(BUILD, 'viewer'), { inspector: false, log: () => {} });
+const { Log } = await import(join(PUB, 'src/shared/log.ts'));   // a log with no sinks: the bundles' build lines unprinted
+site.installViewer(join(BUILD, 'viewer'), { inspector: false, log: new Log('pipeline') });
 const viewerJs = readFileSync(join(BUILD, 'viewer/latex-viewer.js'), 'utf8');
 const protobufJs = readFileSync(join(BUILD, 'viewer/protobuf.min.js'), 'utf8');
 const schemaB64: string = site.schemaBase64();
@@ -540,6 +542,14 @@ else {
   // the new cache: what the documents asked for (stale entries fall out), unless a page died before finishing
   const complete = !pageErrors.some((e) => /crashed|Timeout|Target/.test(e));
   const results = complete ? fresh : { ...(old?.results ?? {}), ...fresh };
+  // every font of the documents' blocks has its face (the public pipeline's record), none drawn as boxes
+  {
+    const { faceProblems } = await import('../tests/qa/lib/faces-check.ts');
+    const { messageType } = await import(join(PUB, 'src/pipeline/schema.ts'));
+    const f = faceProblems(results, messageType('Document'));
+    console.log(`  faces: ${Object.entries(f.kinds).map(([k, n]) => `${k} ${n}`).join(', ') || 'no fonts'}${f.problems.length ? `; ${f.problems.length} problem(s)` : ''}`);
+    for (const p of f.problems.slice(0, 20)) bad.push(`faces: ${p}`);
+  }
   const cache: SeedCache = { build: worker.build, recorded: new Date().toISOString(), docs: seedNames, results, ...(fonts ? { fonts } : {}) };
   const gzc = gzipSync(Buffer.from(JSON.stringify(cache)), { level: 9 });
   writeFileSync(seedCachePath, gzc);            // an errored block's result too (not transient ones): the build fails on it anyway
@@ -734,7 +744,11 @@ async function acceptance(baked: boolean): Promise<string[]> {
       const compiled = bes.map((b: any, i: number) => b.stats().compiled - before[i]).reduce((a: number, b: number) => a + b, 0);
       const bs = api.blocks();
       const errors = bs.filter((b: any) => b.errors?.length).map((b: any) => `${b.id}: ${b.errors[0]?.message}`);
-      const warn = [...document.querySelectorAll('div, p')].map((e) => e.textContent ?? '').find((t) => /could not be downloaded/.test(t) && t.length < 600) ?? null;
+      // what the viewer logged that an author is shown (its errors and warnings: doc/viewer-log.ts), and its notice
+      // bar, which the editor turns off: neither may be there
+      const logged = ((window as any).reflowtex?.host?.log?.records() ?? []).filter((x: any) => x.level === 'error' || x.level === 'warning');
+      const notice = document.querySelector('.latex-notice');
+      const warn = notice ? `a notice on the page: ${notice.textContent}` : logged.length ? logged.slice(0, 3).map((x: any) => `${x.code}: ${x.message}`).join(' | ') : null;
       // one sample of text per font family, over every block: the viewer draws a block
       // when it comes into view, so the document is scrolled through, block by block
       const sample = new Map<string, string>();
@@ -780,7 +794,7 @@ async function acceptance(baked: boolean): Promise<string[]> {
     console.log(`  acceptance ${n}: ${r.fams.length} font families, ${bad.length} not drawn by their own font; compiled ${r.compiled}; ${r.errors.length} block errors`);
     if (baked && r.compiled) problems.push(`${n}: ${r.compiled} blocks compiled on open (not baked in)`);
     for (const e of r.errors) problems.push(`${n}: block error ${e.slice(0, 200)}`);
-    if (r.warn) problems.push(`${n}: the viewer's notice: ${r.warn.slice(0, 200)}`);
+    if (r.warn) problems.push(`${n}: the viewer logged: ${r.warn.slice(0, 300)}`);
     if (r.fontErr.length) problems.push(`${n}: ${r.fontErr.length} fonts failed to load: ${r.fontErr.slice(0, 6).join(', ')}`);
     for (const f of bad) problems.push(`${n}: font ${f.fam} (${f.status}) does not draw "${f.s}" (${!f.own ? 'a fallback font draws it' : 'no ink'})`);
     for (const f of r.fams) {

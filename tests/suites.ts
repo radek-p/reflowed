@@ -64,6 +64,7 @@ export const SUITES: Suite[] = [
   S('refnav-host', 'unit', 3, () => node('tests/test-refnav-host.ts'), FAST),   // reference navigation (refnav/listen.ts) on a page with only the viewer, and in a frame: one gesture table, recorded hooks
   S('pdf-svg', 'unit', 2, () => node('engine/tests/pdf-svg.test.ts'), FAST),   // PDF pictures as SVG
   S('file-deps', 'unit', 1, () => node('engine/tests/file-deps.test.ts'), FAST),   // a stored result used only while the files its runs read are as they were
+  S('faces', 'unit', 1, () => node('engine/tests/faces.test.ts'), FAST),   // every font's face from the capture to the wire (convert.ts, the public encoder), the capture's own keys off (src/capture-keys.ts)
   S('keys', 'unit', 2, () => node('tests/test-keys.ts'), { ...FAST, cold: true, note: 'result keys: the compile path' }),   // result keys memoised, byte-identical
   S('motion-units', 'unit', 2, () => node('tests/test-motion-units.ts'), FAST),   // the popover's placement, toSourceOffset's memo
   S('view-units', 'unit', 2, () => node('tests/test-view-units.ts'), FAST),   // diff.js, copy-errors.js
@@ -186,7 +187,7 @@ export const seeded = (s: Suite) => s.group === 'dev' && !s.cold && s.name !== '
  *  The suites added since (chrome, files, inspector, widths, select) are guessed. */
 export const EST_SECONDS: Record<string, number> = {
   typecheck: 1, select: 1, browsers: 1, 'static-server': 1, 'engine-stamp': 1, 'engine-build-id': 1, 'seed-title-form': 1, 'intro-versions': 1, 'site-intro': 1, 'w15-units': 1, 'in-view': 1, 'drag-rules': 1, 'end-meta': 1, 'arch-units': 1, 'doc-units': 1, 'commands-units': 1, kit: 3,
-  'pdf-svg': 1, 'file-deps': 1, 'loading-units': 1, resources: 40, 'resources-setting': 25, 'resources-origin': 90, 'workbench-units': 2, workbench: 120, keys: 1, 'motion-units': 1, 'view-units': 1, minify: 1, tex: 1, 'tex-lex': 1, 'tex-calls': 1,
+  'pdf-svg': 1, 'file-deps': 1, faces: 1, 'loading-units': 1, resources: 40, 'resources-setting': 25, 'resources-origin': 90, 'workbench-units': 2, workbench: 120, keys: 1, 'motion-units': 1, 'view-units': 1, minify: 1, tex: 1, 'tex-lex': 1, 'tex-calls': 1,
   provenance: 1, brand: 1, 'w4-units': 1, 'cite-units': 1, 'cite-engine': 38, 'bundle-cache': 3, 'engine-node': 90,
   'app-bundle': 1, 'dev-seed': 12, 'webkit-open': 11, 'fmt-early': 60, 'fewer-requests': 30, 'fewer-requests-release': 40, 'fmt-early-release': 180, 'fixture-cache': 20, recovery: 18, 'fonts-dump': 2, 'editor-frame': 3, 'refnav-host': 6, 'page-fonts': 25, 'live-preview': 30, 'colour-maps': 15, home: 2, 'offered-kinds': 15, 'reset-dev': 1, 'home-samples-dev': 29, w10: 37, w3: 27, 'e2e-dev': 140,
   panes: 82, 'block-drag': 240, 'two-editors': 60, follow: 40, 'popover-keys': 40, 'kept-docs': 1, motion: 142, widths: 240, notes: 19, settings: 18, view: 7, files: 10, chrome: 60,
@@ -210,7 +211,7 @@ export const EST_SAMPLED_SECONDS: Record<string, number> = { 'caret-bounds': 150
 export const WIDE = ['panes', 'e2e-dev', 'w3', 'recovery', 'keys', 'meta-dev', 'cite-card-dev', 'far-dev',
   'notes', 'w10', 'selection-dev', 'caret-dev', 'motion', 'widths', 'chrome', 'two-editors', 'integrate'];
 const STORE = ['home', 'reset-dev', 'home-samples-dev', 'recovery', 'quota-dev', 'readonly-dev', 'older-core-dev', 'replay-dev', 'cache', 'follow', 'doc-units'];
-const ENGINE_CORE = ['engine-node', 'engine-stamp', 'engine-build-id', 'cite-engine', 'nested-seed', 'e2e-dev', 'caret-dev', 'keys'];
+const ENGINE_CORE = ['faces', 'engine-node', 'engine-stamp', 'engine-build-id', 'cite-engine', 'nested-seed', 'e2e-dev', 'caret-dev', 'keys'];
 const RELEASE = ['public-bundles', 'build-chromium', 'release-mode', 'minify', 'provenance', 'home-samples-file', 'e2e-file', 'smoke-firefox-webkit', 'multifile', 'fmt-early-release', 'fewer-requests-release'];
 const EDIT = ['caret-dev', 'caret-bounds', 'selection-dev', 'caret-math-dev', 'popover-hold', 'popover-keys', 'follow', 'motion', 'ios-zoom', 'mobile-fit'];
 const UI = ['kit', 'sheets', 'settings', 'view', 'boot', 'sidebar', 'chrome', 'doc-header', 'inspector', 'files', 'mobile-fit', 'mobile-chrome'];
@@ -254,7 +255,7 @@ export const RULES: Rule[] = [
   { why: 'the TeX resource server', paths: ['app/src/settings/resources.ts', 'app/src/settings/resource-choice.ts', 'tests/test-resources*.ts'], suites: ['resources', 'resources-origin', 'resources-setting'] },
   { why: 'the engine in the page', paths: ['engine/web/**'], suites: ['dev-seed', 'keys', 'file-deps', 'recovery', 'cache', 'fonts-flicker', 'page-fonts', 'e2e-dev', 'app-bundle', 'build-chromium', 'panes', 'multifile'] }, 
   { why: 'the engine', paths: ['engine/{src,api,server,encode,tex,slots,pictures,licences,scripts}/**', 'engine/reflow-tectonic.json', 'scripts/fetch-engine.ts', 'engine/package.json', 'engine/package-lock.json', 'engine/*.txt', 'engine/working-set-tiers.json'], suites: ENGINE_CORE },
-  { why: 'engine tests', paths: ['engine/tests/**'], suites: ['pdf-svg', 'file-deps', 'recovery', 'fonts-dump'] },
+  { why: 'engine tests', paths: ['engine/tests/**'], suites: ['pdf-svg', 'file-deps', 'faces', 'recovery', 'fonts-dump'] },
   { why: "the editor's TeX files", paths: ['tex/**'], suites: [...ENGINE_CORE, 'meta-dev'] },
   { why: 'the release build', paths: ['scripts/build.ts', 'scripts/minify*', 'scripts/licences.ts', 'scripts/node-engine.ts', 'scripts/engine-stamp.ts', 'scripts/fetch-engine.ts', 'scripts/node24.sh', 'scripts/lib/**', 'scripts/lock-reflowtex.ts', 'reflowtex.lock.json'], suites: RELEASE },
   { why: 'the dev bundle', paths: ['scripts/w3-*', 'scripts/typecheck.ts'], suites: ['typecheck', 'app-bundle', 'w3', 'build-chromium', 'public-bundles'] },

@@ -135,7 +135,8 @@ function comparePara(t: J, l: J, fm: FontMap): ParaReport {
 }
 
 export function compareOutputs(T: J, L: J): CaseReport {
-  const key = (f: J) => `${f.filename === 'unknown' ? f.name : f.filename}@${f.size_sp}`;
+  // a font by its file (a Tectonic capture's face, LuaTeX's file name: only a font loaded from one has it), else its TeX name
+  const key = (f: J) => `${f.face?.file ?? f.filename ?? f.name}@${f.size_sp}`;
   const lByKey = new Map(Object.entries(L.fonts).map(([id, f]: [string, any]) => [key(f), Number(id)]));
   const unmatched = Object.values(T.fonts).map((f: any) => key(f)).filter(k => !lByKey.has(k));
   const fm: FontMap = (id) => lByKey.get(key(T.fonts[id] ?? {}));

@@ -3,8 +3,8 @@
 // src/pipeline/bundles.ts ensureBundles() builds a bundle when it is missing or was built from other sources.
 //
 //   publicRepo()                          REFLOWTEX, else /reflowtex, else the nearest ancestor
-//   await ensurePublicBundles(pub, only?) the companion (and the inspector) built when missing or stale, with the public
-//                                         helper; a checkout without node_modules of its own builds with the app's esbuild
+//   await ensurePublicBundles(pub, only?, log?) the companion (and the inspector) built when missing or stale, with the
+//                                         public helper (its build lines, the public log's records, to `log`); a checkout without node_modules of its own builds with the app's esbuild
 //                                         and packages (scripts/lib/public-esbuild.ts). An older checkout that commits
 //                                         its bundles (no helper) is used as it is.
 import { existsSync } from 'node:fs';
@@ -41,6 +41,9 @@ export async function ensurePublicBundles(pub: string, only: Name[] = ['companio
   const helper = join(pub, 'src/pipeline/bundles.ts');
   if (!existsSync(helper)) return [];                     // an older checkout: its bundles are committed
   if (!existsSync(join(pub, 'node_modules/esbuild'))) hookEsbuild();
-  const m = await import(pathToFileURL(helper).href) as { ensureBundles(o: { only: Name[]; log(s: string): void }): Name[] };
-  return m.ensureBundles({ only, log });
+  // the helper reports through the public log (src/shared/log.ts): each record's line goes to `log`
+  const m = await import(pathToFileURL(helper).href) as { ensureBundles(o: { only: Name[]; log: unknown }): Name[] };
+  const { Log } = await import(pathToFileURL(join(pub, 'src/shared/log.ts')).href) as
+    { Log: new (source: 'pipeline', sinks: ((r: { message: string }) => void)[]) => unknown };
+  return m.ensureBundles({ only, log: new Log('pipeline', [(r) => log(r.message)]) });
 }

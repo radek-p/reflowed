@@ -1,6 +1,9 @@
 // The engine's capture stream (<job>.rtxc.jsonl, written by the patched
 // Tectonic) → reflowtex's output.json, in the shape
-// src/extract/serializer.lua writes from LuaTeX. No Node APIs: the inputs are
+// src/extract/serializer.lua writes from LuaTeX, but for the fonts: each
+// carries its face (CapturedFace), as the pipeline writes output.json back
+// (src/pipeline/nodes.ts reads either), so the virtual-font step that follows
+// (rtx/pipeline/fonts/vf.ts) can work on it. No Node APIs: the inputs are
 // the stream's text and a readFile over the engine's file system (the font
 // files it loaded), so this runs next to the wasm engine in a browser too.
 import { readOtf, type Otf } from './fonts.ts';
@@ -29,8 +32,13 @@ interface FontRec {
   file?: string; index?: number; upem?: number; native?: boolean;
   g: number[][];
 }
+/** A font's face as the capture knows it, in the pipeline's terms (reflowtex src/pipeline/nodes.ts: a TexFontFace,
+ *  or ClassicFace): an OpenType file XeTeX loaded, or a classic font TeX knew from its metrics (TFM) alone, whose
+ *  face the pipeline's transform decides (Type 1 outlines, METAFONT's bitmaps, or boxes; a virtual font's,
+ *  rtx/pipeline/fonts/vf.ts). */
+export type CapturedFace = { kind: 'opentype'; file: string } | { kind: 'tfm' };
 interface Font {
-  rec: FontRec; otf?: Otf; filename: string; psName: string;
+  rec: FontRec; otf?: Otf; face: CapturedFace; psName: string;
   metrics: Map<number, { w: number; h: number; d: number; adv?: number; lp: number; rp: number }>;
 }
 
@@ -46,8 +54,9 @@ export function convert(inp: ConvertInputs): J {
   for (const r of recs) if (r.t === 'font') {
     const rec = r as FontRec;
     const metrics = new Map<number, any>();
-    let otf: Otf | undefined, filename = 'unknown', psName = rec.name;
+    let otf: Otf | undefined, face: CapturedFace = { kind: 'tfm' }, psName = rec.name;
     if (rec.native && rec.file) {
+      let filename = '';
       const base = rec.file.replace(/^.*\//, '');
       for (const cand of /\.[a-z]+$/i.test(base) ? [base] : [base, `${base}.otf`, `${base}.ttf`]) {
         const data = inp.readFile(cand);
@@ -55,16 +64,17 @@ export function convert(inp: ConvertInputs): J {
       }
       if (otf) psName = otf.psName;
       else { filename = /\.[a-z]+$/i.test(base) ? base : `${base}.otf`; psName = base; }
+      face = { kind: 'opentype', file: filename };
       for (const [g, w, h, d, adv, lp, rp] of rec.g) metrics.set(g, { w, h, d, adv, lp, rp });
     } else {
       for (const [c, w, h, d, , lp, rp] of rec.g) metrics.set(c, { w, h, d, lp, rp });
     }
-    fonts.set(rec.id, { rec, otf, filename, psName, metrics });
+    fonts.set(rec.id, { rec, otf, face, psName, metrics });
   }
   const usedFonts: Record<string, J> = {};
   const noteFont = (f: Font) => {
     if (usedFonts[f.rec.id]) return;
-    usedFonts[f.rec.id] = { name: f.rec.native ? f.psName : f.rec.name, size_sp: f.rec.size, filename: f.filename, quad: f.rec.params[5] };
+    usedFonts[f.rec.id] = { name: f.rec.native ? f.psName : f.rec.name, size_sp: f.rec.size, face: f.face, quad: f.rec.params[5] };
   };
   const fontOf = (id: number): Font => {
     const f = fonts.get(id);

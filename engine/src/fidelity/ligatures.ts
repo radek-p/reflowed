@@ -77,8 +77,8 @@ export function splitPrivateLigatures(output: J, stream: string, readFile: (n: s
   const fonts: Record<string, J> = output.fonts instanceof Map ? Object.fromEntries(output.fonts) : (output.fonts ?? {});
   const letters = (g: J, text: string): J[] | null => {
     const info = fonts[String(g.font)];
-    if (!info?.filename) return null;
-    const otf = otfOf(info.filename, readFile);
+    if (info?.face?.kind !== 'opentype') return null;      // (convert.ts CapturedFace: only an OpenType font has a file)
+    const otf = otfOf(info.face.file, readFile);
     if (!otf) return null;
     const size = info.size_sp as number, r = (u: number) => Math.round(u * size / otf.unitsPerEm);
     const cps = [...text].map((c) => c.codePointAt(0)!);

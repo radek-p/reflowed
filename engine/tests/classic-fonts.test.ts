@@ -105,8 +105,8 @@ function filesFor(preamble: string, source: string): { name: string; bytes: Uint
   tex.runBlock(blockFile(source).text);
   const out = capture(tex, (n) => fetchSync(0, n)).output;
   const names = new Set(used);
-  for (const f of Object.values(out.fonts as Record<string, { name: string; filename: string }>)) {
-    if (f.filename !== 'unknown') continue;
+  for (const f of Object.values(out.fonts as Record<string, { name: string; face: { kind: string } }>)) {
+    if (f.face.kind !== 'tfm') continue;                  // a classic font (the converter's CapturedFace)
     for (const n of fontMap.get(f.name) ?? []) if (n && fetchSync(0, n)) names.add(n);
   }
   return [...names].map((name) => ({ name, bytes: fetchSync(0, name)! }));

@@ -40,7 +40,8 @@ for (const f of ['scripts/build.ts', 'scripts/w3-build.ts', 'app/src/perf/splice
   const { PUB } = await import('../scripts/lib/app-bundle.ts');
   const site = await import(join(PUB, 'src/pipeline/site.ts'));
   const fresh = mkdtempSync(join(tmpdir(), 'rtx-viewer-'));
-  site.installViewer(fresh, { inspector: false, log: () => {} });
+  const { Log } = await import(join(PUB, 'src/shared/log.ts'));   // a log with no sinks: the bundles' build lines unprinted
+  site.installViewer(fresh, { inspector: false, log: new Log('pipeline') });
   const same = (f: string) => { try { return readFileSync(join(fresh, f)).equals(readFileSync(join(EDITOR, 'app/lib/viewer', f))); } catch { return false; } };
   check('dev viewer = the public repo\'s viewer (latex-viewer.js, protobuf.min.js; run scripts/w3-build.ts)', same('latex-viewer.js') && same('protobuf.min.js'));
   check('dev schema = the public repo\'s', readFileSync(join(EDITOR, 'app/lib/viewer/schema.b64'), 'utf8') === site.schemaBase64());

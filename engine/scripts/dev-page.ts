@@ -12,7 +12,8 @@ const OUT = join(HERE, 'build/devpage');
 const PUB = process.env.REFLOWTEX ?? '/reflowtex';
 mkdirSync(OUT, { recursive: true });
 const site = await import(join(PUB, 'src/pipeline/site.ts'));
-site.installViewer(join(OUT, 'viewer'), { inspector: false, log: () => {} });
+const { Log } = await import(join(PUB, 'src/shared/log.ts'));   // a log with no sinks: the bundles' build lines unprinted
+site.installViewer(join(OUT, 'viewer'), { inspector: false, log: new Log('pipeline') });
 writeFileSync(join(OUT, 'index.html'), `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>editor engine</title><link rel="icon" href="data:,">
 <div id="latex-schema" data-schema-b64="${site.schemaBase64()}" hidden></div>
