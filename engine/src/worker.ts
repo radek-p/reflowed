@@ -416,7 +416,7 @@ async function typeset(source: string, context: string, key: string): Promise<Re
     dropCaptureKeys(data);                     // the capture's own keys (capture-keys.ts): the wire has no field for them
     // the block's warnings travel with it, as the public pipeline's blocks carry theirs (pipeline.ts encodeBlock):
     // those of the transforms, and one per font with no face it sets glyphs in. The viewer adds them to the page's
-    // log, which the editor lists (app/doc/viewer-log.ts)
+    // log, which the editor lists (app/src/doc/viewer-log.ts)
     const bytes = encodeDocument({ ...data, warnings: [...(data.warnings ?? []), ...fontWarnings(data)] });
     vfs.remove(dir, true);
     res.nodelist = bytesToBase64(bytes);
