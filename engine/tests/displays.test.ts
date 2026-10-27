@@ -31,6 +31,7 @@ const esbuild = (await import('esbuild')).default ?? await import('esbuild');
 const vout = new URL('../build/viewer-display.mjs', import.meta.url).pathname;
 await esbuild.build({ entryPoints: [join(publicRepo(), 'src/viewer/src/engine/layout/display.ts')], bundle: true, format: 'esm', platform: 'neutral', outfile: vout, logLevel: 'error' });
 const { affineDisplayItem, placeEquationNumber, layoutDisplaySegment } = await import(vout);
+const { stripUnsupportedNodes } = await import(join(publicRepo(), 'src/pipeline/transforms.ts'));
 
 let fail = 0;
 const check = (what: string, ok: boolean, detail = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}${ok ? '' : '  ' + detail}`); if (!ok) fail++; };
@@ -87,6 +88,9 @@ function run(src: string, ctx = '', samples = true) {
   const rs = samples ? resampler(e, (pre) => blockFile(src, joinContext(ctx, pre)).text, () => null) : undefined;
   const c = (capture as any)(e, () => null, 'input', { resample: rs });
   const stats = rs ? modelDisplays(c.output, rs) : c.displays;
+  // what the viewer gets: the nodes the wire carries (the public pipeline's transform strips the rest, a whatsit say,
+  // before encoding; the viewer's display code names every type it is given)
+  stripUnsupportedNodes(c.output);
   return { ...c, stats };
 }
 const displays = (out: any) => (out.content as any[]).filter((it) => it.kind === 'display');
