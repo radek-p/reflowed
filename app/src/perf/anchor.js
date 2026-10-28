@@ -226,8 +226,15 @@ export function createAnchorKeeper(o) {
       syncQueued = true;
       queueMicrotask(() => { syncQueued = false; hold(true); wake(); });
     },
-    /** the app scrolled to make up for a change of the page (appScroll's hold): the anchor stays, held from here */
-    adjusted() { expected = sY(); wake(); },
+    /** the app scrolled to make up for a change of the page (appScroll's hold): the anchor stays, held from here. A
+     *  block's place moves by the correction (held where it was, the next hold scrolled the correction back: the
+     *  stacked popover moved with its preview whenever a result landed while the reader pressed no key); a line the
+     *  keeper holds across a width change stays where it is held */
+    adjusted() {
+      if (anchor && !anchor.line && Number.isFinite(expected)) anchor.y -= sY() - expected;
+      expected = sY();
+      wake();
+    },
     /** the app scrolled on the user's behalf without an input event of its own (e.g. a reveal from a timer) */
     moved() { lastUserScroll = now(); anchor = null; reading = null; moves++; wake(); },
     /** the app changes the pane's width now, answering a press that was not on the text (the sidebar button,

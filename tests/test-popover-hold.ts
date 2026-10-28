@@ -6,6 +6,9 @@
 // The long test document (the intro repeated) on the engine (live results land as typed), a paragraph opened in the middle of the pane, each pane:
 //   grow    74 keystrokes at its end (the preview grows by a line or more)
 //   shrink  then 140 Backspaces (what was typed and some of the paragraph: the preview shrinks below where it was)
+//   still   then, the reader's keys over (the anchor keeper holds again: perf/anchor.js ACTIVE_MS), a sentence inserted
+//           without a key (execCommand): its result lands while no key is pressed, and the popover holds all the same
+//           (the keeper took the popover's correction for a change of the page and scrolled it back)
 // every frame from the first key to idle after the last: the popover's top (≤ 1 px over the whole run), the preview's
 // top and height; the preview's top moves one way per phase (up while it grows, down while it shrinks: any step
 // Waits on whenIdle() and frames; the keys are typed with a 40 ms delay (a typist's pace, so results land between).
@@ -81,6 +84,15 @@ for (const p of ['a', 'b']) {
   // the preview's top goes up while it grows and down while it shrinks; no step back
   const back = { grow: oneWay(grow.map((v) => v[2]), -1), shrink: oneWay(shrink.map((v) => v[2]), 1) };
   check(`[${p}] no shake: the preview's top moves one way per phase (steps back ≤ 1 px)`, back.grow <= 1 && back.shrink <= 1, back);
+  // still: no key pressed for 30 frames (over the keeper's 250 ms), then a sentence comes without a key event
+  await frames(30);
+  await rec(sel);
+  await page.evaluate(() => document.execCommand('insertText', false, ' A sentence that comes without a key, long enough to take the paragraph to another line.'));
+  await idle(); await frames(30);
+  const hs: any[] = await page.evaluate(() => { (window as any).__on = false; return (window as any).__h; });
+  const grewStill = (hs.at(-1)?.[3] ?? 0) - (hs[0]?.[3] ?? 0);
+  check(`[${p}] a result landing while no key is pressed: the preview grew (${Math.round(grewStill)} px) and the popover kept its place (within 1 px)`,
+    grewStill > 10 && span(hs, 1) <= 1, { popover: span(hs, 1), grewStill, frames: hs.length });
   await page.keyboard.press('Escape'); await idle();
 }
 check('no page errors', errors.length === 0, errors);
