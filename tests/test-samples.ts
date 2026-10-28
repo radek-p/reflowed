@@ -5,7 +5,8 @@
 //     Versions), an edited one "Open the new version" (a new document that is the sample from now on; the copy kept
 //     as "… (edited)") or Keep mine; an edited copy is never lost, across reloads;
 //   - "Reset local data…" in the footer: its dialog lists what goes, "Export all first" downloads every document,
-//     Reset forgets the origin's data and the page opens as a fresh profile does;
+//     Reset forgets ReflowEd's data (another page's database and keys on the origin stay) and the page opens as a
+//     fresh profile does;
 //   - keyboard (Tab to the badge, Enter, Escape, focus back), screen-reader labels, light and dark (contrast ≥ 4.5).
 // Waits on the app's events and idle, never on fixed times. Screenshots in test-results/samples/.
 //
@@ -199,8 +200,10 @@ await reload();
 t.check('… and does not come back after a reload (this version)', (await rowState(nd.id))?.update === null && (await sig()).docs.length === N + 1);
 
 // ── Reset local data ──
+// another page of the origin keeps a database and keys (they stay: store/wipe.js), ReflowEd one more key in each storage (they go)
+const OTHER = { dbs: ['test-samples-extra'], ls: ['test-samples'], ss: ['test-samples'] };
 await page.evaluate(() => new Promise((ok) => { const r = indexedDB.open('test-samples-extra', 1); r.onupgradeneeded = () => r.result.createObjectStore('x'); r.onsuccess = () => { r.result.close(); ok(null); }; }));
-await page.evaluate(() => { localStorage.setItem('test-samples', '1'); sessionStorage.setItem('test-samples', '1'); });
+await page.evaluate(() => { localStorage.setItem('test-samples', '1'); sessionStorage.setItem('test-samples', '1'); localStorage.setItem('rtx-editor.test-samples', '1'); sessionStorage.setItem('rtx-editor.test-samples', '1'); });
 await page.focus('#reset-local');
 await page.keyboard.press('Enter');
 await dialogUp('rtx-reset-local');
@@ -233,9 +236,12 @@ await page.click('#rtx-reset-local [data-action=reset]');
 await page.waitForFunction(() => !(window as any).__before && (window as any).editorAPI?.route?.().name === 'home' && document.querySelector('.rh-row[data-doc-id]'));
 await homeIdle();
 const after = await sig();
-t.check('Reset: the page reloads and opens as a fresh profile does (the same documents, databases and storage keys; no badge)',
-  JSON.stringify(after) === JSON.stringify(fresh) && await page.locator('.rh-update').count() === 0, { fresh, after });
-t.check('… the edited copy, the extra database and the stored keys are gone', !after.docs.some((d) => d.includes('(edited)')) && !after.dbs.includes('test-samples-extra') && !after.ls.includes('test-samples') && !after.ss.includes('test-samples'));
+const ours = { docs: after.docs, dbs: after.dbs.filter((n) => !OTHER.dbs.includes(n!)), ls: after.ls.filter((k) => !OTHER.ls.includes(k)), ss: after.ss.filter((k) => !OTHER.ss.includes(k)) };
+t.check('Reset: the page reloads and opens as a fresh profile does (the same documents, and of ReflowEd\'s the same databases and storage keys; no badge)',
+  JSON.stringify(ours) === JSON.stringify(fresh) && await page.locator('.rh-update').count() === 0, { fresh, after });
+t.check('… the edited copy and ReflowEd\'s stored keys are gone; another page\'s database and keys on the origin stay',
+  !after.docs.some((d) => d.includes('(edited)')) && !after.ls.includes('rtx-editor.test-samples') && !after.ss.includes('rtx-editor.test-samples')
+  && OTHER.dbs.every((n) => after.dbs.includes(n)) && OTHER.ls.every((k) => after.ls.includes(k)) && OTHER.ss.every((k) => after.ss.includes(k)), after);
 t.check('… and the theme preference with them (light again)', !(await page.evaluate(() => document.documentElement.classList.contains('dark') || document.documentElement.dataset.theme === 'dark')));
 t.check('no page errors', !errors.length, errors);
 await ctx.close();

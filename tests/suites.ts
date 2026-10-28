@@ -56,6 +56,7 @@ export const SUITES: Suite[] = [
   S('end-meta', 'unit', 1, () => node('app/src/docview/end-meta.test.ts'), FAST),   // the end space's foot as text: title, words, blocks, the day of the last edit (docview/end-meta.ts)
   S('arch-units', 'unit', 2, () => node('tests/test-arch-units.ts'), FAST),   // the refactor's ratchets
   S('doc-units', 'unit', 2, () => node('tests/test-doc-units.ts'), FAST),     // (6–8) app/src/doc/ on a Memory store
+  S('wipe', 'unit', 1, () => node('app/src/store/wipe.test.ts'), FAST),   // Reset local data: ReflowEd's databases and keys by their naming rules, every other page's kept; every one the code names follows the rules
   S('loading-units', 'unit', 1, () => node('loading/loading.test.ts'), FAST),   // loading/: both trees' indexes, the fetch front ends, the status store   // the TeX resource server: ls-R, the provider chain, the HTTP provider
   S('kept-docs', 'unit', 1, () => node('tests/test-kept-docs.ts'), FAST),   // engine/web/kept-docs.js: released documents' states, the last 2
   S('commands-units', 'unit', 2, () => node('tests/test-commands-units.ts'), FAST),   // the registry, the shortcuts' rows, the commands on a DocSession
@@ -211,7 +212,7 @@ export const EST_SAMPLED_SECONDS: Record<string, number> = { 'caret-bounds': 150
 /** app.js and main.js, the core the refactor moves: the wide set */
 export const WIDE = ['panes', 'e2e-dev', 'w3', 'recovery', 'keys', 'meta-dev', 'cite-card-dev', 'far-dev',
   'notes', 'w10', 'selection-dev', 'caret-dev', 'motion', 'widths', 'chrome', 'two-editors', 'integrate'];
-const STORE = ['home', 'reset-dev', 'home-samples-dev', 'recovery', 'quota-dev', 'readonly-dev', 'older-core-dev', 'replay-dev', 'cache', 'follow', 'doc-units'];
+const STORE = ['wipe', 'home', 'reset-dev', 'home-samples-dev', 'recovery', 'quota-dev', 'readonly-dev', 'older-core-dev', 'replay-dev', 'cache', 'follow', 'doc-units'];
 const ENGINE_CORE = ['faces', 'missing-chars', 'engine-node', 'engine-stamp', 'engine-build-id', 'cite-engine', 'nested-seed', 'e2e-dev', 'caret-dev', 'keys'];
 const RELEASE = ['public-bundles', 'build-chromium', 'release-mode', 'minify', 'provenance', 'home-samples-file', 'e2e-file', 'smoke-firefox-webkit', 'multifile', 'fmt-early-release', 'fewer-requests-release'];
 const EDIT = ['caret-dev', 'caret-bounds', 'selection-dev', 'caret-math-dev', 'popover-hold', 'popover-keys', 'follow', 'motion', 'ios-zoom', 'mobile-fit'];
@@ -267,6 +268,7 @@ export const RULES: Rule[] = [
   { why: 'the component gallery (dev only)', paths: ['app/gallery.html', 'app/src/gallery/**', 'tests/test-gallery.ts'], suites: ['gallery'] },
   { why: 'the test harness', paths: ['tests/qa/lib/**', 'tests/integration/serve.ts'], suites: ['browsers'] },    // derived below: its users, sampled
   { why: 'the workbench: its own suites (workbench/README.md), and the editor on it', paths: ['workbench/**'], suites: ['workbench-units', 'workbench', 'typecheck', 'integrate', 'mobile-fit'] },
+  { why: 'every storage key and database a source names is one Reset forgets (app/src/store/wipe.test.ts scans the source)', paths: ['app/src/**/*.js', 'app/src/**/*.ts', 'engine/web/**', 'engine/src/**', 'loading/**'], suites: ['wipe'] },
   { why: 'every icon name a source writes is in the one registry (workbench/tests/icons.test.ts scans app/src)', paths: ['app/src/**/*.js', 'app/src/**/*.ts'], suites: ['workbench-units'] },
   { why: 'the standalone page on the workbench', paths: ['app/src/wb/**'], suites: ['integrate', 'typecheck', 'home', 'chrome', 'mobile-fit'] },
   { why: 'test-integrate\'s sections (one file each)', paths: ['tests/integrate/**'], suites: ['integrate'] },

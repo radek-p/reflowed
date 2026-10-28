@@ -101,7 +101,7 @@ const RESET_PAGE = `<!doctype html><meta charset="utf-8"><title>Reset local data
 <body style="font:15px/1.5 system-ui,sans-serif;max-width:32em;margin:15vh auto;padding:0 16px">
 <h1 style="font-size:20px">Reset local data</h1>
 <p>Forget every document, version, setting and cached result the app keeps in this browser
-(its IndexedDB databases and localStorage keys; nothing else of this origin). The app then opens as on a first visit.</p>
+(its IndexedDB databases and storage keys; nothing else of this origin). The app then opens as on a first visit.</p>
 <p><button id="go" style="font:inherit;padding:6px 14px">Reset</button> <a href="/">Cancel</a></p>
 <p id="out" role="status"></p>
 <script type="module">
