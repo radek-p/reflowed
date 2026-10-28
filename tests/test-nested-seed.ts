@@ -91,11 +91,12 @@ const linesNow = (id: string) => page.evaluate((i: string) => {
   }
   return out;
 }, id);
-/** a block's lines, all of it drawn: a viewport taller than the block */
+/** a block's lines, all of it drawn: a viewport taller than the block, the block in view (the pane scrolls, not
+ *  the window; the viewer draws a block when it comes into view) */
 async function linesOf(id: string) {
   const h: number = await page.evaluate((i: string) => document.querySelector(`.blk[data-id="${i}"]`)?.getBoundingClientRect().height ?? 0, id);
   await page.setViewportSize({ width: 1280, height: Math.max(900, Math.ceil(h + 300)) });
-  await page.evaluate((i: string) => { const el = document.querySelector(`.blk[data-id="${i}"]`)!; window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 100); }, id);
+  await page.evaluate((i: string) => document.querySelector(`.blk[data-id="${i}"]`)!.scrollIntoView({ block: 'center' }), id);
   await frames(); await idle(); await page.evaluate(() => (window as any).reflowtex?.inspect?.idle?.()); await frames();
   const l = (await linesNow(id)) ?? [];
   await page.setViewportSize({ width: 1280, height: 900 });
