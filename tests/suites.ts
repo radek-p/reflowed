@@ -189,7 +189,7 @@ export const seeded = (s: Suite) => s.group === 'dev' && !s.cold && s.name !== '
  *  The suites added since (chrome, files, inspector, widths, select) are guessed. */
 export const EST_SECONDS: Record<string, number> = {
   typecheck: 1, select: 1, browsers: 1, 'static-server': 1, 'engine-stamp': 1, 'engine-build-id': 1, 'seed-title-form': 1, 'intro-versions': 1, 'site-intro': 1, 'w15-units': 1, 'in-view': 1, 'drag-rules': 1, 'end-meta': 1, 'arch-units': 1, 'doc-units': 1, 'commands-units': 1, kit: 3,
-  'pdf-svg': 1, 'file-deps': 1, faces: 1, 'missing-chars': 1, 'loading-units': 1, resources: 40, 'resources-setting': 25, 'resources-origin': 90, 'workbench-units': 2, workbench: 120, keys: 1, 'motion-units': 1, 'view-units': 1, minify: 1, tex: 1, 'tex-lex': 1, 'tex-calls': 1,
+  'pdf-svg': 1, 'file-deps': 1, wipe: 1, faces: 1, 'missing-chars': 1, 'loading-units': 1, resources: 40, 'resources-setting': 25, 'resources-origin': 90, 'workbench-units': 2, workbench: 120, keys: 1, 'motion-units': 1, 'view-units': 1, minify: 1, tex: 1, 'tex-lex': 1, 'tex-calls': 1,
   provenance: 1, brand: 1, 'w4-units': 1, 'cite-units': 1, 'cite-engine': 38, 'bundle-cache': 3, 'engine-node': 90,
   'app-bundle': 1, 'dev-seed': 12, 'webkit-open': 11, 'fmt-early': 60, 'fewer-requests': 30, 'fewer-requests-release': 40, 'fmt-early-release': 180, 'fixture-cache': 20, recovery: 18, 'fonts-dump': 2, 'editor-frame': 3, 'refnav-host': 6, 'page-fonts': 25, 'live-preview': 30, 'colour-maps': 15, home: 2, 'offered-kinds': 15, 'reset-dev': 1, 'home-samples-dev': 29, w10: 37, w3: 27, 'e2e-dev': 140,
   panes: 82, 'block-drag': 240, 'two-editors': 60, follow: 40, 'popover-keys': 40, 'kept-docs': 1, motion: 142, widths: 240, notes: 19, settings: 18, view: 7, files: 10, chrome: 60,
