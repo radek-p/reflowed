@@ -9,9 +9,9 @@
 //   2. no font failed, and a font's face was replaced at most once (a font is patched whole, once: one that needed
 //      no patch at first may gain its private-use entries later; backend stats);
 //   3. at the end every font face is loaded and the page's text is drawn by its own fonts;
-//   4. (the reported case) the abstract, once drawn in its final form, is never redrawn, hidden or swapped for
-//      another drawing while the later blocks typeset (sampled every frame: its drawing's element, opacity,
-//      visibility, height and number of text nodes).
+//   4. (the reported case, then the former sample paper's abstract) the blocks on the first screen, once drawn in
+//      their final form, are never redrawn, hidden or swapped for another drawing while the later blocks typeset
+//      (sampled every frame: each drawing's element, opacity, visibility, height and number of text nodes).
 //
 //   node tests/test-fonts.ts [dist/reflowtex-editor.html] [--browser chromium]
 import { createRequire } from 'node:module';
@@ -55,27 +55,30 @@ await ctx.addInitScript(() => {
     };
     document.fonts.addEventListener('loading', sample);
     document.fonts.addEventListener('loadingdone', (e: any) => { w.__fontLog.loads += e.fontfaces?.length ?? 0; sample(); });
-    // the abstract's drawing, every frame
-    // (a container's paragraphs, each on its own)
-    w.__abstract = {} as Record<string, string[]>;
-    let absIds: string[] | null = null, n = 0;
-    const abstract = () => {
-      if (!absIds) {
-        const bs = w.editorAPI?.blocks?.() ?? [], a = bs.find((b: any) => b.kind === 'abstract');
-        if (!a) return;
-        absIds = a.container ? bs.filter((b: any) => b.parentId === a.id).map((b: any) => b.id) : [a.id];
+    // the drawings of the blocks on the first screen, every frame (a container's paragraphs, each on its own)
+    w.__first = {} as Record<string, string[]>;
+    let firstIds: string[] | null = null, n = 0;
+    const firstScreen = () => {
+      if (!firstIds) {
+        const bs = w.editorAPI?.blocks?.() ?? [];
+        const onScreen = bs.filter((b: any) => !b.container).filter((b: any) => {
+          const r = document.querySelector(`.blk[data-id="${b.id}"]`)?.getBoundingClientRect();
+          return !!r && r.height > 0 && r.bottom > 0 && r.top < innerHeight;
+        });
+        if (!onScreen.length) return;
+        firstIds = onScreen.map((b: any) => b.id);
       }
-      for (const id of absIds!) {
+      for (const id of firstIds!) {
         const r = document.querySelector(`.blk[data-id="${id}"] .blk-render`);
         const el = r && [...r.querySelectorAll(':scope > .latex-block')].find((e: any) => !e.classList.contains('incoming')) as any;
         if (!el) continue;
         el.__k ??= ++n;
-        const cs = getComputedStyle(el), log = (w.__abstract[id] ??= []);
+        const cs = getComputedStyle(el), log = (w.__first[id] ??= []);
         const state = `drawing ${el.__k}, opacity ${cs.opacity}, ${cs.visibility}, ${Math.round(el.getBoundingClientRect().height)} px, ${el.querySelectorAll('text, tspan').length} text nodes`;
         if (log[log.length - 1] !== state) log.push(state);
       }
     };
-    const tick = () => { sample(); abstract(); requestAnimationFrame(tick); };
+    const tick = () => { sample(); firstScreen(); requestAnimationFrame(tick); };
     requestAnimationFrame(tick);
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hook); else hook();
@@ -90,17 +93,17 @@ await page.evaluate(() => (window as any).editorAPI.whenIdle());
 const r: any = await page.evaluate(() => {
   const w = window as any, be = w.editorAPI.backendObject?.();
   const faces = [...document.fonts];
-  return { abstract: w.__abstract, blankings: w.__fontLog.blankings, loads: w.__fontLog.loads, families: w.__fontLog.loaded.size, stats: be?.stats?.(),
+  return { first: w.__first, blankings: w.__fontLog.blankings, loads: w.__fontLog.loads, families: w.__fontLog.loaded.size, stats: be?.stats?.(),
     notLoaded: faces.filter((f) => f.status !== 'loaded' && f.status !== 'unloaded').map((f) => `${f.family}:${f.status}`), errors: faces.filter((f) => f.status === 'error').length };
 });
 check('no family already on screen goes blank while later blocks typeset (a face of it starting to load)', r.blankings.length === 0, r.blankings.length ? `${r.blankings.length}: ${[...new Set(r.blankings)].slice(0, 8).join(', ')}` : `${r.loads} face loads, ${r.families} families`);
 check('no font failed; a font\'s face replaced at most once (patched whole, once)', (r.stats?.fontFailures ?? 0) === 0 && (r.stats?.fontSwapsPerFont ?? 0) <= 1, r.stats);
 check('at the end no face is loading or failed', r.notLoaded.length === 0 && r.errors === 0, r);
-// from the first frame in its final form on, the abstract's drawing does not change
+// from the first frame in its final form on, the first screen's drawings do not change
 {
-  const logs = Object.entries(r.abstract ?? {}) as [string, string[]][];
+  const logs = Object.entries(r.first ?? {}) as [string, string[]][];
   const bad = logs.filter(([, st]) => { const last = st[st.length - 1]; return st.indexOf(last) !== st.length - 1 || !/opacity 1, visible/.test(last); });
-  check(`the abstract (${logs.length} paragraphs), once drawn in its final form, is not redrawn, hidden or swapped while the later blocks typeset (every frame)`,
+  check(`the blocks on the first screen (${logs.length}), once drawn in their final form, are not redrawn, hidden or swapped while the later blocks typeset (every frame)`,
     logs.length > 0 && bad.length === 0, bad.length ? bad.slice(0, 2).map(([id, st]) => `${id.slice(-6)}: ${st.join(' → ')}`).join(' | ') : logs.map(([id, st]) => `${id.slice(-6)}: ${st.length > 1 ? st.join(" → ") : st.length + " state"}`).join(', '));
 }
 await ctx.close();
