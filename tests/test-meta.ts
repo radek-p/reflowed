@@ -106,6 +106,9 @@ t.check('email: a malformed address is flagged', await page.isVisible('.mf-autho
 await page.fill('.mf-author:nth-child(2) [data-field="email"] input', 'ada@example.org');
 await page.fill('[data-field="title"] textarea', 'On Merging Functors & Graphs');
 await previewOk();
+// the viewer draws a block when it comes into view: the preview is below the sheet's fold now (three authors, open fields)
+await page.locator('.mf-preview').scrollIntoViewIfNeeded();
+await page.evaluate(async () => { await (window as any).reflowtex?.inspect?.idle?.(); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); });
 const pv = await page.locator('.mf-preview').innerText();
 t.check('the live preview follows the edits (title with &, Ada)', /Functors & Graphs/.test(pv) && /Ada Lovelace/.test(pv), pv.slice(0, 300));
 
