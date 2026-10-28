@@ -135,6 +135,12 @@ async function menu(page: any, label: RegExp) {
   await page.click('[data-ptab="app-settings"] [data-action="close-panel"]');
   await page.waitForFunction(() => !document.querySelector('[data-panel-view="app-settings"]'));
 }
+/** a block brought into view (the viewer draws a block's lines, and so its chips, when they come into view) */
+const inView = async (page: any, id: string) => {
+  await page.evaluate((i: string) => document.querySelector(`.blk[data-id="${i}"]`)?.scrollIntoView({ block: 'center' }), id);
+  await idle(page);
+  await page.evaluate(async () => { await (window as any).reflowtex?.inspect?.idle?.(); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); });
+};
 /** the main menu's actions, its Document submenu's with them (no notes items there) */
 const menuActions = async (page: any) => {
   await page.click('#btn-main-menu');
@@ -148,9 +154,11 @@ const menuActions = async (page: any) => {
 const { page } = await newPage('?backend=lua&store=memory&seed=sample#/doc/sample');
 {
   check('backend: the LuaLaTeX dev backend', (await api(page, 'backend')) === 'lua');
+  // the viewer draws a block (its chips with it) when it comes into view: each note's block is looked at in view
   const todos = await api(page, 'todos');
-  const all = await page.locator('.rtx-note-chip').count();
-  check('sample: one chip per \\todo note', all === todos.length && all === 2, `${all} chips, ${todos.length} todos`);
+  let all = 0;
+  for (const bid of [...new Set(todos.map((t: any) => t.blockId as string))]) { await inView(page, bid); all += (await chipsIn(page, bid)).length; }
+  check('sample: one chip per \\todo note (each block in view)', all === todos.length && all === 2, `${all} chips, ${todos.length} todos`);
   const szId = await idOf(page, '\\editor{say why size matters}');
   const nkId = await idOf(page, '\\referee{check the naturality square}');
   const sz = (await chipsIn(page, szId))[0], nk = (await chipsIn(page, nkId))[0];

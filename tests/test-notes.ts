@@ -130,7 +130,21 @@ const menuActions = async (page: any) => {
   await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   return a;
 };
-const visibleChips = (page: any) => page.evaluate(() => [...document.querySelectorAll('[data-part="page"] .rtx-note-chip')].filter((c) => c.getBoundingClientRect().width > 0).length);
+/** a block brought into view (the viewer draws a block's lines, and so its chips, when they come into view) */
+const inView = async (page: any, id: string) => {
+  await page.evaluate((i: string) => document.querySelector(`[data-part="page"] .blk[data-id="${i}"]`)?.scrollIntoView({ block: 'center' }), id);
+  await idle(page);
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+};
+/** the chips that show in these blocks, each block in view */
+const visibleChips = async (page: any, ids: string[]) => {
+  let n = 0;
+  for (const id of ids) {
+    await inView(page, id);
+    n += await page.evaluate((i: string) => [...document.querySelectorAll(`[data-part="page"] .blk[data-id="${i}"] .rtx-note-chip`)].filter((c) => c.getBoundingClientRect().width > 0).length, id);
+  }
+  return n;
+};
 
 const { ctx, page } = await newPage('?seed=sample&store=memory#/doc/sample');
 check('backend: W1\'s engine, with web features (the notes wrapper is on it)', (await api(page, 'backend')) !== 'v1' && (await notesApi(page, 'keySalt', { webFeatures: true })) !== '', await api(page, 'backend'));
@@ -139,9 +153,13 @@ check('backend: W1\'s engine, with web features (the notes wrapper is on it)', (
 const szId = await idOf(page, '\\editor{say why size matters}');
 const nkId = await idOf(page, '\\referee{check the naturality square}');
 {
+  // the viewer draws a block (its chips with it) when it comes into view: each note's block is looked at in view
   const todos = await api(page, 'todos');
-  const all = await page.locator('[data-part="page"] .rtx-note-chip').count();
-  check('sample: one chip per \\todo note', all === todos.length && all === 2, `${all} chips, ${todos.length} todos`);
+  let all = 0;
+  for (const bid of [...new Set(todos.map((t: any) => t.blockId as string))]) { await inView(page, bid); all += (await chipsIn(page, bid)).length; }
+  check('sample: one chip per \\todo note (each block in view)', all === todos.length && all === 2, `${all} chips, ${todos.length} todos`);
+  await page.evaluate(() => document.querySelector('[data-part="page"]')!.scrollTo(0, 0));
+  await idle(page);
   const sz = (await chipsIn(page, szId))[0], nk = (await chipsIn(page, nkId))[0];
   check('chip in its block, right after the word it follows ("way.")', !!sz && sz.before === '.' && sz.gap! >= -0.5 && sz.gap! < 8, sz);
   check('chip right after "(1)." in the proof', !!nk && nk.before === '.' && nk.gap! >= -0.5 && nk.gap! < 8, nk);
@@ -262,7 +280,8 @@ in the text; Alex's notes\todo[author=Alex Author]{first} have one colour.`);
   const hBefore = await page.evaluate((i: string) => document.querySelector(`[data-part="page"] .blk[data-id="${i}"]`)!.getBoundingClientRect().height, mathId);
   await menu(page, /Hide notes/);
   await idle(page);
-  const hidden = await visibleChips(page);
+  const noted = [szId, nkId, mathId, adaId];      // the blocks with notes (6: 1, 1, 3, 1)
+  const hidden = await visibleChips(page, noted);
   check('menu: Hide notes -> no chip shows', hidden === 0 && (await notesApi(page, 'settings')).hidden === true, `${hidden} visible`);
   await shot(page, '08-notes-hidden');
   // ── 4a. the TODOs panel with notes hidden: a row opens the source (no chip to open)
@@ -274,7 +293,7 @@ in the text; Alex's notes\todo[author=Alex Author]{first} have one colour.`);
   await idle(page);
   await menu(page, /Show notes/);
   await idle(page);
-  const shown = await visibleChips(page);
+  const shown = await visibleChips(page, noted);
   const hAfter = await page.evaluate((i: string) => document.querySelector(`[data-part="page"] .blk[data-id="${i}"]`)!.getBoundingClientRect().height, mathId);
   check('... Show notes: back, the block as before', shown >= 6 && Math.abs(hAfter - hBefore) < 0.5, `${shown} chips; height ${hBefore} -> ${hAfter}`);
 }
@@ -288,6 +307,7 @@ in the text; Alex's notes\todo[author=Alex Author]{first} have one colour.`);
     rows.map((r: any) => `${r.who}: ${r.msg}`).join(' | '));
   check('TODOs panel: todonotes\' author= is the author there too', todos.filter((t: any) => t.author === 'Alex Author').length === 2);
   const colourOf = (who: string) => rows.find((r: any) => r.who === who)?.bg ?? '';
+  await inView(page, mathId);
   const chipAA = (await chipsIn(page, mathId))[2]?.bg ?? '';
   const rgb = (hex: string) => { const n = parseInt(hex.slice(1), 16); return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`; };
   check('TODOs panel dots in the chips\' colours (Editor\'s blue!40, Alex\'s hash colour)', /153,\s*153,\s*255/.test(colourOf('Editor')) && colourOf('Alex Author').replace(/\s/g, '').includes(rgb(chipAA).replace(/\s/g, '')),
@@ -309,6 +329,22 @@ in the text; Alex's notes\todo[author=Alex Author]{first} have one colour.`);
   const n1 = await page.locator('[data-panel-view="todos"] .td-row').count();
   check('TODOs panel: a note added in the source appears in the panel and as a chip', n1 === n0 + 1 && (await chipsIn(page, nkId)).length === 2, `${n0} -> ${n1}`);
   await api(page, 'setSource', nkId, src);
+  await idle(page);
+  // a note in a block not drawn yet (far below, never in view): its row brings the block into view and opens its chip
+  const farId: string = await api(page, 'insert', (await api(page, 'blocks')).length, 'paragraph', 'The last words.\\referee{a note far below}');
+  await api(page, 'leave');
+  await idle(page);
+  await page.evaluate(() => document.querySelector('[data-part="page"]')!.scrollTo(0, 0));
+  await idle(page);
+  check('a block far below the view: not drawn, no chip yet', (await chipsIn(page, farId)).length === 0);
+  await page.locator('[data-panel-view="todos"] .td-row').filter({ hasText: 'a note far below' }).first().click();
+  await page.waitForFunction(() => !!document.querySelector('.rtx-note-pop') || !!(window as any).editorAPI.caret()).catch(() => {});
+  const pf = await pop(page), far = await notesApi(page, 'isOpen');
+  const farBox = await page.evaluate((i: string) => { const c = document.querySelector(`[data-part="page"] .blk[data-id="${i}"] .rtx-note-chip`); return c ? { y: c.getBoundingClientRect().top } : null; }, farId);
+  check('TODOs panel: a note in a block not drawn yet: the block comes into view and its chip opens (not its source)', pf?.who === 'Referee' && far?.blockId === farId && !(await api(page, 'caret'))
+    && !!farBox && farBox.y > 0 && farBox.y < 900, { far, caret: await api(page, 'caret'), farBox });
+  await page.keyboard.press('Escape');
+  await api(page, 'remove', farId);
   await idle(page);
 }
 

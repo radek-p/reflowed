@@ -531,7 +531,7 @@ export function createDocEditor(ctx) {
       settings: (line) => openSettings(line), versions: () => files.openVersions(), resetSeed: () => files.resetSeed(), importTex: () => files.importTex(),
       exportTex: () => files.exportTex(), exportZip: (o) => files.exportZip(o), exportPdf: (o) => files.exportPdf(o), toggleSplit: () => (ctx.shell.toggleSplit ? ctx.shell.toggleSplit() : panes.toggle()),   /* the host splits (a tab beside) */
       gotoDefinition: (k) => gotoDefinition(k), setPreamble: (s) => meta.putPreamble(s), recompileAll: () => { if (S.doc) meta.onPreamble(); },
-      scrollTo: (id, pane, o) => scrollToBlock(id, pane, o), reveal: (id, range, o) => revealBlock(id, range, o), openNote: (t) => ctx.notes?.openNote(t, root) || revealBlock(t.blockId, { from: t.offset, to: t.offset + t.length }),   // the panels' commands
+      scrollTo: (id, pane, o) => scrollToBlock(id, pane, o), reveal: (id, range, o) => revealBlock(id, range, o), openNote: (t) => { const source = () => revealBlock(t.blockId, { from: t.offset, to: t.offset + t.length }); return ctx.notes?.openNote(t, root, source) || source(); },   // the panels' commands
       can: { resetSeed: () => !!(S.doc && ctx.io?.isSeedDoc?.(S.doc.id)), importTex: () => !!ctx.io?.openImportTex,
         exportZip: () => !!ctx.modulesReal?.io, exportPdf: () => typeof backend.pdf === 'function' },
     },

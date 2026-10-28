@@ -57,6 +57,7 @@ export function installNotes({ backends = [], params = new URLSearchParams(locat
   const known = new WeakSet();             // the envs already in envs
   const chips = new Map();                 // instance id -> [chip button]
   let open = null;                         // { instance, chip }: the popover shown (layer.current has the rest)
+  let waiting = null;                      // { id, miss }: a note asked open whose block was not drawn yet (openNote)
   const openKey = signal(null);            // the open chip's key (its aria-expanded, .open)
   let chipSeq = 0;
   const chipKeys = new WeakMap();          // chip element -> its key
@@ -139,6 +140,7 @@ export function installNotes({ backends = [], params = new URLSearchParams(locat
       const list = chips.get(instance.id) ?? [];
       list.push(b);
       chips.set(instance.id, list);
+      if (waiting?.id === instance.id) { const w = waiting; waiting = null; requestAnimationFrame(() => { if (b.isConnected) openAt(instance, b); else w.miss(); }); }
       return () => {
         render(null, box);
         box.remove();
@@ -160,6 +162,7 @@ export function installNotes({ backends = [], params = new URLSearchParams(locat
     openAt(instance, chip);
   }
   function openAt(instance, chip) {
+    waiting = null;
     close({ focus: false });
     const info = noteOf(instance);
     const off = !info.note || !info.blockId;
@@ -179,6 +182,7 @@ export function installNotes({ backends = [], params = new URLSearchParams(locat
     });
   }
   function close({ focus = true } = {}) {
+    waiting = null;
     if (!open) return;
     layer.hide({ focus });
   }
@@ -230,8 +234,12 @@ export function installNotes({ backends = [], params = new URLSearchParams(locat
     for (const host of hosts?.all() ?? []) host.recompileAll();   // every open document's blocks
   }
 
-  // ── The TODO panel: open a note's chip (false: no chip, the panel falls back) ─
-  function openNote(t, editor) {
+  // ── The TODO panel: open a note's chip (false: no such note drawn, the panel falls back) ─
+  // The viewer draws a block's lines (and so its chips) when they come into view: a note in a block not drawn yet
+  // has its instance but no chip. Its block is brought into view, and the chip opens once drawn; `miss` (the panel's
+  // fallback) when the viewer has nothing more to draw and it still is not.
+  function openNote(t, editor, miss = () => {}) {
+    waiting = null;
     if (settings.hidden || !t?.blockId || !editor) return false;
     // the block in the focused pane when it shows it (one document in two panes), else wherever it is shown, in
     // the editor whose TODO list asks (its container, app/editor-root.ts)
@@ -246,10 +254,19 @@ export function installNotes({ backends = [], params = new URLSearchParams(locat
     const list = notesIn(b.source, todoMacros(host.preamble()), { comments: settings.comments && wants(backendOf(host)) });
     const k = list.findIndex((n) => n.offset === t.offset);
     const inst = k >= 0 && blk.instances({ kind: KIND }).find((i, j) => (i.attrs?.n ? Number(i.attrs.n) - 1 : j) === k);
-    const chip = inst && chips.get(inst.id)?.[0];
-    if (!chip) return false;
-    chip.scrollIntoView({ block: 'center', behavior: 'auto' });
-    openAt(inst, chip);
+    if (!inst) return false;
+    const chip = chips.get(inst.id)?.[0];
+    if (chip) {
+      chip.scrollIntoView({ block: 'center', behavior: 'auto' });
+      openAt(inst, chip);
+      return true;
+    }
+    const w = { id: inst.id, miss };
+    waiting = w;
+    el.scrollIntoView({ block: 'center', behavior: 'auto' });
+    // (an IntersectionObserver paints it: its callback has run two frames after the viewer is idle)
+    const frame = () => new Promise((r) => requestAnimationFrame(r));
+    Promise.resolve(window.reflowtex?.host?.idle?.()).then(frame).then(frame).then(() => { if (waiting === w) { waiting = null; w.miss(); } });
     return true;
   }
 
