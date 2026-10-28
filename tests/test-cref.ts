@@ -61,21 +61,23 @@ const ids: string[] = await page.evaluate(() => (window as any).editorAPI.blocks
 check('every block typeset', (await page.evaluate(() => (window as any).editorAPI.blocks().every((b: any) => b.state === 'ok'))), await page.evaluate(() => (window as any).editorAPI.blocks().map((b: any) => b.state)));
 
 /** a block's lines as drawn: the SVG text it shows (TeX's glyphs and the words a slot's text became, as
- *  the page holds them after every rewrite), per line its text and each drawn piece's box (screen px) */
+ *  the page holds them after every rewrite), per line its text and each drawn piece's box (screen px).
+ *  A piece is on a line when most of its box is in the line's: a maths script (the prime of a tag, in a
+ *  smaller font and raised) is on its line, the line below (a baselineskip down) is not. A glyph that is
+ *  no character (a private-use code: the prime of cmsy) is read as the code it is drawn by. */
 const linesOf = (bid: string) => page.evaluate((i: string) => {
   const el = [...document.querySelectorAll(`.blk[data-id="${i}"] .blk-render > .latex-block`)].find((e) => !e.classList.contains('incoming'))!;
-  const rows = new Map<string, { y: number; parts: { t: string; l: number; r: number }[] }>();
+  const rows: { top: number; bottom: number; parts: { t: string; l: number; r: number }[] }[] = [];
   for (const t of el.querySelectorAll('svg tspan')) {
     const txt = t.textContent ?? '';
     if (!txt) continue;
     const r = t.getBoundingClientRect();
     if (!r.width && !/\s/.test(txt)) continue;
-    const key = `${(t.closest('svg') as any)?.dataset?.seg ?? ''}:${Math.round((r.top + r.bottom) / 2 / 4)}`;
-    const yb = Math.round(r.bottom);
-    const row = [...rows.values()].find((w) => Math.abs(w.y - yb) <= 4) ?? (rows.set(key + rows.size, { y: yb, parts: [] }), [...rows.values()].pop()!);
+    const onLine = (w: { top: number; bottom: number }) => Math.min(w.bottom, r.bottom) - Math.max(w.top, r.top) > Math.min(w.bottom - w.top, r.height) / 2;
+    const row = rows.find(onLine) ?? (rows.push({ top: r.top, bottom: r.bottom, parts: [] }), rows[rows.length - 1]);
     row.parts.push({ t: txt, l: r.left, r: r.right });
   }
-  return [...rows.values()].sort((p, q) => p.y - q.y).map((w) => {
+  return rows.sort((p, q) => p.bottom - q.bottom).map((w) => {
     const ps = w.parts.sort((p, q) => p.l - q.l);
     let text = '';
     ps.forEach((p, k) => { if (k && p.l - ps[k - 1].r > 2.5 && !/\s$/.test(text)) text += ' '; text += p.t; });
